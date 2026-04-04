@@ -2,6 +2,21 @@
 
 All notable changes to the MOAT specification are documented in this file.
 
+## [0.2.1] — 2026-04-03
+
+Readability improvements based on reviewer feedback.
+
+### Changed
+
+- Reordered sections: meta.yaml format (Section 5) now precedes conformance (Section 6)
+- Simplified Document Status paragraph — removed implementation details about test vector generation
+- Removed all references to specific software implementations
+- Replaced branded examples with generic ones in prose and TV-MH4 (recomputed meta_hash)
+
+### Added
+
+- Rationale block in Section 5.1 explaining why identity and descriptive metadata are combined in a single sidecar
+
 ## [0.2.0] — 2026-04-03
 
 Source binding, delegated publishing, and naming. Renamed from ACP (Agent Content Provenance) to MOAT (Metadata for Origin, Authorship, and Trust). Domain separator updated from `ACP-V1:` to `MOAT-V1:`.

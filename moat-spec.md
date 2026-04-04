@@ -1,6 +1,6 @@
 # Metadata for Origin, Authorship, and Trust (MOAT) Specification
 
-**Version:** 0.2.0 (Draft)
+**Version:** 0.2.1 (Draft)
 **Status:** Draft
 **Date:** 2026-04-03
 **Editor:** Holden Hewett

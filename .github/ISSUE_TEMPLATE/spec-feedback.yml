@@ -1,0 +1,30 @@
+name: Specification Feedback
+description: Feedback, questions, or suggestions about the MOAT specification
+labels: ["feedback"]
+body:
+  - type: input
+    id: section
+    attributes:
+      label: Section
+      description: Which section of the spec does this relate to?
+      placeholder: "e.g., Section 7.3 (Content Hash Algorithm)"
+    validations:
+      required: false
+  - type: dropdown
+    id: type
+    attributes:
+      label: Feedback Type
+      options:
+        - Clarification needed
+        - Potential issue
+        - Suggestion
+        - Question
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe your feedback in detail
+    validations:
+      required: true

@@ -1,0 +1,30 @@
+name: Security Concern
+description: Report a potential security issue in the specification design
+labels: ["security"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **For vulnerabilities that could be actively exploited, please email security@moatspec.org instead of opening a public issue.**
+  - type: input
+    id: section
+    attributes:
+      label: Section
+      description: Which section of the spec is affected?
+      placeholder: "e.g., Section 9.1 (Signing Input)"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the security concern and its potential impact
+    validations:
+      required: true
+  - type: textarea
+    id: attack
+    attributes:
+      label: Attack Scenario
+      description: How could this be exploited?
+    validations:
+      required: false
