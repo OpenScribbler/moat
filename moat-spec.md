@@ -1,8 +1,8 @@
 # Metadata for Origin, Authorship, and Trust (MOAT) Specification
 
-**Version:** 0.2.1 (Draft)
+**Version:** 0.3.0 (Draft)
 **Status:** Draft
-**Date:** 2026-04-03
+**Date:** 2026-04-04
 **Editor:** Holden Hewett
 **License:** Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 **Repository:** https://github.com/OpenScribbler/moat
@@ -248,23 +248,25 @@ This field is a self-reported claim — there is no mechanism for consumers to i
 
 "Differs" is determined by comparing the Source Repository URI from Fulcio OID `1.3.6.1.4.1.57264.1.12` against `source_repo`. If the repository owner in the certificate matches the expected owner of `source_repo`, this is direct publishing and `publisher_identity` MUST be absent. If the repository owner is a platform namespace (e.g., `acme-platform/community-skills/*`), `publisher_identity` is REQUIRED. See Section 9.2 step 7 for verifier obligations.
 
-#### 5.3.16 repository_owner_id (RECOMMENDED)
+#### 5.3.16 repository_owner_id (CONDITIONAL)
 
 String. The numeric, immutable platform identifier for the repository owner (e.g., GitHub's numeric user/org ID). Default: absent.
 
-This field protects against account resurrection attacks: if a username is deleted and re-registered, the numeric ID changes, making the impersonation detectable. Not all platforms provide stable numeric identifiers. When available, the value SHOULD be extracted from the Fulcio certificate's OID `1.3.6.1.4.1.57264.1.17` (Source Repository Owner Identifier).
+This field is REQUIRED when `signature.method` is `sigstore`. It MUST be absent when no signature is present or when `signature.method` is `ssh` (SSH keys have no equivalent platform identifier).
 
-Registries that enforce identity stability SHOULD check this field when present.
+This field protects against account resurrection attacks: if a username is deleted and re-registered, the numeric ID changes, making the impersonation detectable. The value MUST be extracted from the Fulcio certificate's OID `1.3.6.1.4.1.57264.1.17` (Source Repository Owner Identifier). Consumers MUST verify this field against the signing certificate during Sigstore verification (Section 9.2 step 6).
+
+Registries that enforce identity stability MUST check this field when present.
 
 #### 5.3.17 sigstore_trust_root (OPTIONAL)
 
-String. A reference to the TUF root used for Sigstore signing. Default: absent. Used in registry manifests and content bundles to enable consumers to verify content signed against any Sigstore instance.
+String. A discovery hint referencing the TUF root used for Sigstore signing. Default: absent. Used in registry manifests and content bundles to enable consumers to locate the correct trust root for verification.
 
-The public-good Sigstore instance (`tuf-repo-cdn.sigstore.dev`) is the RECOMMENDED default for open registries and community content. Enterprise deployments running private Sigstore instances use this field to advertise their TUF root. Consumers configure which trust roots to accept based on their own policy.
+This field is a discovery hint, not a trust assertion. Consumers MUST NOT use `sigstore_trust_root` as the sole basis for trust. Consumers MUST verify the referenced trust root against their own pre-configured policy before using it for verification. The public-good Sigstore instance (`tuf-repo-cdn.sigstore.dev`) is the RECOMMENDED default trust root; all other trust roots require explicit consumer configuration.
 
-> **Note (Informative):** No Sigstore federation mechanism exists — each deployment is an independent trust domain with its own TUF root. Trust roots are distributed out-of-band. This field defines the advertisement mechanism; consumer policy governs which roots to accept.
+> **Warning:** Because `sigstore_trust_root` is excluded from `meta_hash` computation (Section 8.1), it is not integrity-protected. An attacker controlling a distribution point can substitute `sigstore_trust_root` with a reference to their own Sigstore instance, re-sign the content with their own Fulcio certificate, and update all signature fields — all without invalidating `meta_hash` or `content_hash`. This enables a full identity substitution attack if the consumer blindly trusts the referenced trust root (see Section 11.20).
 
-> **Note (Informative):** Because `sigstore_trust_root` is excluded from `meta_hash` computation (Section 8.1), it is not integrity-protected. A relay or CDN could substitute the value without invalidating the content's hashes or signature. Consumers MUST validate the trust root against their own policy before using it for verification.
+> **Note (Informative):** No Sigstore federation mechanism exists — each deployment is an independent trust domain with its own TUF root. Trust roots are distributed out-of-band. This field defines the discovery mechanism; consumer policy governs which roots to accept.
 
 ### 5.4 Distribution Scope Requirements
 
@@ -272,7 +274,7 @@ The public-good Sigstore instance (`tuf-repo-cdn.sigstore.dev`) is the RECOMMEND
 |-------|----------------|
 | Local (personal use) | `meta_version`, `type`, `name`, `version`, `content_hash`, `meta_hash` |
 | Team (shared internally) | Above + `authors` |
-| Public (published to registry) | Above + `source_repo`, `published_at`. `signature` RECOMMENDED. `publisher_identity` REQUIRED when signing identity ≠ source_repo owner. `repository_owner_id` RECOMMENDED. `sigstore_trust_root` OPTIONAL (RECOMMENDED for non-public-good Sigstore instances). |
+| Public (published to registry) | Above + `source_repo`, `published_at`. `signature` RECOMMENDED. `publisher_identity` REQUIRED when signing identity ≠ source_repo owner. `repository_owner_id` REQUIRED when `signature.method` is `sigstore` (Section 5.3.16). `sigstore_trust_root` OPTIONAL (RECOMMENDED for non-public-good Sigstore instances). |
 
 > **Note (Informative):** Promoting content to a wider scope (e.g., local → team) may require adding fields such as `authors`. Adding fields changes the `meta_hash`. Publishers promoting content SHOULD add the required fields, recompute `meta_hash`, and increment `version`. Any installations that stored the previous `meta_hash` will need to re-verify against the new version.
 
@@ -360,7 +362,7 @@ Computes the SHA-256 digest of a single file's raw bytes. This is used in Sectio
 
 ### 7.3 Directory Tree (Content Hash Algorithm)
 
-1. **Enumerate files.** Walk the content directory recursively. Exclude empty directories. Exclude the `meta.yaml` sidecar at the root of the content directory (nested `meta.yaml` files in subdirectories are included). Exclude version control system directories (`.git/`, `.svn/`, `_svn/`, `.hg/`, `CVS/`). Resolve symlinks whose fully resolved absolute target path is a descendant of the content directory's absolute path — use the resolved content under the symlink's path. Relative symlinks using `..` that resolve back inside the content directory are valid. Symlinks to directories MUST be recursively enumerated as if the directory contents existed at the symlink's path. Transitive symlink chains (A → B → C) MUST be fully resolved to the final target. Exclude symlinks with external targets (resolved target outside the content directory). Implementations MUST detect symlink cycles and reject the content as unpublishable.
+1. **Enumerate files.** Walk the content directory recursively. Implementations MUST enumerate only regular files and symlinks to regular files. Special files — including FIFOs (named pipes), device files, sockets, and block devices — MUST be excluded or cause rejection of the content as unpublishable. Opening a FIFO blocks indefinitely (POSIX behavior); device files and sockets present similar hazards. Implementations SHOULD verify that no file in the content directory has a hard link count greater than 1 with links outside the content directory. Hard links are undetectable via `readlink()`, share inodes, and enable post-verification content mutation from outside the content directory — a threat distinct from symlink TOCTOU because mutation can occur at any time, not only during a race window (see Section 11.21). Exclude empty directories. Exclude the `meta.yaml` sidecar at the root of the content directory (nested `meta.yaml` files in subdirectories are included). Exclude version control system directories (`.git/`, `.svn/`, `_svn/`, `.hg/`, `CVS/`). Resolve symlinks whose fully resolved absolute target path is a descendant of the content directory's absolute path — use the resolved content under the symlink's path. Relative symlinks using `..` that resolve back inside the content directory are valid. Symlinks to directories MUST be recursively enumerated as if the directory contents existed at the symlink's path. Transitive symlink chains (A → B → C) MUST be fully resolved to the final target. Exclude symlinks with external targets (resolved target outside the content directory). Implementations MUST detect symlink cycles and reject the content as unpublishable.
 
 2. **Compute relative paths.** Each path MUST be relative to the content directory. Implementations MUST use forward slashes (`/`) as the path separator. Paths MUST NOT begin with `./` or end with `/`.
 
@@ -430,7 +432,7 @@ Each `meta_version` defines an explicit allowlist of fields included in `meta_ha
 | `name` | Yes | |
 | `published_at` | Per scope | |
 | `publisher_identity` | Conditional | REQUIRED when signing identity ≠ source_repo owner (Section 5.3.15) |
-| `repository_owner_id` | No | RECOMMENDED (Section 5.3.16) |
+| `repository_owner_id` | Conditional | REQUIRED when `signature.method` is `sigstore` (Section 5.3.16) |
 | `source_commit` | No | |
 | `source_repo` | Per scope | |
 | `type` | Yes | |
@@ -474,10 +476,14 @@ YAML parsers handle implicit typing differently — booleans, timestamps, intege
 
 **Additional YAML parsing requirements:**
 
-- YAML boolean coercion MUST NOT be applied to any field. Values like `yes`, `no`, `on`, `off` MUST be treated as strings if they appear in any field.
+- Implementations SHOULD use a YAML 1.2 compliant parser. Regardless of parser version, the following coercion rules are normative and MUST be enforced even when using a YAML 1.1 parser (via schema configuration, tag resolution overrides, or post-parse validation):
+- YAML boolean coercion MUST NOT be applied to any field. The values `yes`, `no`, `on`, `off`, `y`, `n`, `true`, `false` (in any combination of case) MUST be treated as strings when they appear in any MOAT field specified as `string` in the table above. YAML 1.1 parsers (including PyYAML) interpret these as booleans by default — implementations using such parsers MUST override this behavior.
+- YAML timestamp coercion MUST NOT be applied to any field. Unquoted values matching date or datetime patterns (e.g., `2026-04-01 14:32:00+00:00`) MUST be preserved as their original string representation, not parsed into language-native datetime objects. Implementations that detect a non-string type for `published_at` or other string fields MUST raise a specific error rather than silently coercing. Different languages produce different string representations of datetime objects (`datetime.__str__()` in Python vs `Date.toISOString()` in JavaScript vs Go format strings), causing silent `meta_hash` divergence.
 - Integer fields (`meta_version`, `version`, `signature.log_index`) MUST be cast to 64-bit integers before JCS serialization. If a YAML parser returns a float (e.g., `version: 3.0`), implementations SHOULD reject the value with an error rather than silently coercing to integer — the publisher's YAML is malformed and should be corrected.
-- YAML anchors and aliases MUST be fully resolved before serialization.
+- YAML merge keys (`<<`) MUST NOT be used in `meta.yaml`. Implementations MUST either disable merge key resolution or reject `meta.yaml` files containing merge keys. Merge keys (a YAML 1.1 feature) inject fields from anchored mappings in ways that are not visually obvious during review, and are resolved differently by YAML 1.1 and 1.2 parsers.
+- YAML anchors and aliases MUST be fully resolved before serialization. Implementations SHOULD set alias expansion limits (e.g., maximum resolved node count) to prevent exponential expansion attacks (billion laughs). A `meta.yaml` file that exceeds a reasonable expansion threshold SHOULD be rejected.
 - Multi-line YAML strings (folded or literal block scalars) MUST be resolved to their final string value, with trailing newlines preserved as-is.
+- Multi-document YAML (files containing `---` document separators after the first document) SHOULD be rejected. A `meta.yaml` file MUST contain exactly one YAML document.
 - Absent optional fields MUST be omitted from the JSON object — they MUST NOT be serialized as `null`. An omitted field and a field set to `null` produce different JCS output and different `meta_hash` values.
 
 ## 9. Signature
@@ -498,7 +504,7 @@ Where:
 - `<meta_hash_value>` is the full `meta_hash` string as it appears in `meta.yaml`, including the `sha256:` prefix.
 - There is NO trailing newline after the `meta_hash` value.
 
-> **Note (Informative):** The `MOAT-V1:` prefix is a domain separator that prevents cross-protocol signature replay. Without it, a signature from another protocol using the same `hash\nhash` format could be misinterpreted as a MOAT signature. The prefix is versioned to allow future signing format changes without ambiguity. Domain separators are standard practice in cryptographic protocols including TLS, SSH, and DKIM.
+> **Note (Informative):** The `MOAT-V1:` prefix is a domain separator that prevents cross-protocol signature replay. Without it, a signature from another protocol using the same `hash\nhash` format could be misinterpreted as a MOAT signature. The prefix is versioned to allow future signing format changes without ambiguity. Domain separators are standard practice in cryptographic protocols including TLS, SSH, and DKIM. Future `meta_version` specifications that change the signing input format MUST use an incompatible prefix (e.g., `MOAT-V2:`) to prevent cross-version signature confusion.
 
 ### 9.2 Sigstore Method
 
@@ -511,14 +517,14 @@ Where:
 Verification:
 1. Recompute both hashes per Sections 7 and 8.
 2. Construct the signing input per Section 9.1.
-3. Fetch the certificate from Rekor by `log_index`.
+3. **Fetch and verify the Rekor entry.** Fetch the transparency log entry from Rekor by `log_index`. Consumers MUST verify that the fetched entry's contents match the MOAT artifact: the entry's `data.hash.value` MUST equal the SHA-256 digest of the signing input constructed in step 2, the entry's `signature.content` MUST match `signature.value` from `meta.yaml`, and the entry's `signature.publicKey.content` MUST match the certificate used for verification. Verifying only the Rekor entry's log signature (proving it came from Rekor) is insufficient — the entry's contents must independently match the artifact being verified. Failure to perform this comparison enables entry substitution attacks where any valid Rekor entry is accepted regardless of its relationship to the artifact (ref: CVE-2026-22703, GHSA-whqx-f9j3-ch6m). Consumers MUST verify the inclusion proof for the fetched entry. Inclusion proofs are available in both online responses (returned by the Rekor API) and offline bundles (stapled in Sigstore protobuf bundles), so this requirement does not impose additional network calls beyond what is already needed. Trusting Rekor responses without verifying inclusion proofs is vulnerable to a compromised or spoofed Rekor instance.
 4. Verify the signature against the certificate. Fulcio certificates are ephemeral (typically valid for minutes). Implementations MUST verify the certificate's validity against the Rekor log entry timestamp — not the current wall-clock time. A certificate that was valid when the Rekor entry was created is valid for MOAT verification regardless of current time.
 5. Verify that the OIDC identity in the certificate is authorized for this content. Consumers SHOULD perform identity verification — accepting signatures from any OIDC identity without checking authorization is a security vulnerability (see Section 11.9). The matching algorithm (exact string match, prefix matching, regular expression, or policy-based lookup) is an implementation decision. Strict consumers MUST document their identity verification algorithm.
-6. **Verify `source_repo` binding.** Extract the Source Repository URI from the Fulcio signing certificate's OID extension `1.3.6.1.4.1.57264.1.12`. Strip the `https://` scheme prefix. This value MUST exactly equal the `source_repo` field value using exact string equality. Substring matching and `contains()` checks are explicitly prohibited — see Section 11.9 for exploitation details. Strict consumers MUST fail verification if `source_repo` is absent or if the values do not match. Permissive consumers SHOULD surface a distinct warning. In both cases, the cryptographic signature validity (step 4) and the source binding check (this step) are separate outcomes and MUST be reported separately. When OID `1.3.6.1.4.1.57264.1.12` is absent from the Fulcio certificate (e.g., custom OIDC issuers that do not populate Sigstore OID extensions), source binding cannot be performed. Strict consumers MUST fail verification. Permissive consumers SHOULD surface a distinct warning that source binding was not verified due to missing certificate metadata.
-7. **Check `publisher_identity`.** If `publisher_identity` is present in `meta.yaml`, verifiers MUST surface this to the user or audit log — this content was published by a platform on behalf of the author, not by the author directly. Verifiers MUST NOT present delegated and direct publishing identically. When `publisher_identity` is absent, verifiers MAY assume direct publishing but MUST NOT treat the absence as proof of direct publishing — the field may have been omitted in error or stripped by a relay.
-8. **Check `sigstore_trust_root`.** When `sigstore_trust_root` is present in `meta.yaml`, consumers SHOULD use the referenced TUF root for verification instead of assuming the public-good Sigstore instance. The `sigstore_trust_root` field is not included in `meta_hash` (Section 8.1) and is not integrity-protected — consumers MUST NOT blindly trust the field value. Consumer policy governs which trust roots are accepted.
+6. **Verify `source_repo` binding and `repository_owner_id`.** Extract the Source Repository URI from the Fulcio signing certificate's OID extension `1.3.6.1.4.1.57264.1.12`. Strip the `https://` scheme prefix. This value MUST exactly equal the `source_repo` field value using exact string equality. Substring matching and `contains()` checks are explicitly prohibited — see Section 11.9 for exploitation details. Additionally, when `repository_owner_id` is present (REQUIRED for Sigstore-signed content per Section 5.3.16), extract the Source Repository Owner Identifier from OID `1.3.6.1.4.1.57264.1.17` and verify that it exactly equals the `repository_owner_id` field value. This check detects account resurrection attacks where a username is re-registered with a different numeric identifier. Strict consumers MUST fail verification if `source_repo` is absent, if the values do not match, or if `repository_owner_id` is absent. Permissive consumers SHOULD surface distinct warnings for each missing or mismatched field. In all cases, the cryptographic signature validity (step 4) and the source binding checks (this step) are separate outcomes and MUST be reported separately. When OID `1.3.6.1.4.1.57264.1.12` is absent from the Fulcio certificate (e.g., custom OIDC issuers that do not populate Sigstore OID extensions), source binding cannot be performed. Strict consumers MUST fail verification. Permissive consumers SHOULD surface a distinct warning that source binding was not verified due to missing certificate metadata.
+7. **Check `publisher_identity`.** If `publisher_identity` is present in `meta.yaml`, verifiers MUST surface this to the user or audit log alongside the verified signing identity from the certificate — this content was published by a platform on behalf of the author, not by the author directly. Verifiers MUST NOT present `publisher_identity` as a verified identity. Verifiers MUST NOT present delegated and direct publishing identically. Displaying both the self-reported `publisher_identity` and the certificate-verified signing identity enables users to judge consistency. When `publisher_identity` is absent, verifiers MAY assume direct publishing but MUST NOT treat the absence as proof of direct publishing — the field may have been omitted in error or stripped by a relay.
+8. **Check `sigstore_trust_root`.** When `sigstore_trust_root` is present in `meta.yaml`, consumers MAY use the referenced TUF root as a discovery hint for locating the correct trust root. Consumers MUST NOT use `sigstore_trust_root` as the sole basis for trust. Consumers MUST verify the referenced trust root against their own pre-configured policy before using it for verification. The public-good Sigstore instance is the RECOMMENDED default trust root; all other trust roots require explicit consumer configuration. The `sigstore_trust_root` field is not included in `meta_hash` (Section 8.1) and is not integrity-protected — an attacker controlling a distribution point can substitute this value to redirect verification to a malicious Sigstore instance (see Section 11.20).
 
-> **Note (Informative):** On first publish, `source_repo` is self-asserted — there is no prior state to validate against. This is an inherent property of decentralized systems without a central pre-registration authority. Verifiers MUST treat the first-publish `source_repo` binding as an unvalidated claim until the signer has an established publish history. Subsequent publishes from the same signing identity and `source_repo` reinforce the binding. A change in signing identity for the same `source_repo` is a red flag that consumers SHOULD surface prominently. Registries SHOULD implement their own first-publish authorization policies (see Section 11.19).
+> **Note (Informative):** On first publish, `source_repo` is self-asserted — there is no prior state to validate against. This is an inherent property of decentralized systems without a central pre-registration authority. Verifiers MUST treat the first-publish `source_repo` binding as an unvalidated claim until the signer has an established publish history. Subsequent publishes from the same signing identity and `source_repo` reinforce the binding. A change in signing identity for the same `source_repo` is a red flag that consumers MUST surface prominently. Registries SHOULD implement challenge-response authorization for first-publish claims (see Section 11.19).
 
 Sigstore [SIGSTORE] signing is supported by any OIDC-compliant CI/CD platform, including GitHub Actions, GitLab CI/CD, CircleCI, and Buildkite. Custom OIDC issuers are supported via Fulcio configuration. See Appendix D for provider-specific certificate extension values.
 
@@ -538,6 +544,8 @@ Verification:
 - When `signature` is present, consumers MUST verify it.
 - Verification failure MUST result in rejection. There is no override mechanism.
 - When `signature` is absent, consumers MUST rely on hash verification only. Consumers SHOULD distinguish unsigned content from signed content in user-facing displays.
+
+> **Warning:** A valid signature proves that the `content_hash` and `meta_hash` values were signed by a specific identity — it does not prove that the content currently on disk matches those values. Consumers MUST recompute both hashes from the filesystem (Sections 7 and 8) and compare them against the values in `meta.yaml` as part of every verification. Skipping hash recomputation — for example, by verifying the signature against the `meta_hash` in `meta.yaml` without confirming the hashes reflect actual content — leaves the consumer vulnerable to content substitution where valid metadata is paired with different files.
 
 ## 10. Derived-From (Lineage)
 
@@ -641,7 +649,7 @@ Several `meta.yaml` fields are self-reported claims (Section 11.3) that can be e
 
 - **`generated_by` spoofing.** An attacker claims `generated_by: claude-code/4.0` on hand-written malicious content. The field is informational — it records a claim about tool involvement, but MOAT does not verify that the claimed tool actually generated the content. When a signature is present, the claim is bound to the signer's identity, not to the claimed tool.
 
-- **Content-type mismatch.** An attacker publishes `type: rule` but the content is executable hook code. The `type` field classifies content for organization purposes; MOAT does not validate that the `type` field accurately describes the content's behavior. Provenance attests to integrity, not behavioral classification.
+- **Content-type mismatch.** An attacker publishes `type: rule` but the content is executable hook code. The `type` field classifies content for organization purposes; MOAT does not validate that the `type` field accurately describes the content's behavior. Provenance attests to integrity, not behavioral classification. Consumers MUST NOT use the `type` field for access control or trust decisions without independent content analysis — the field is simultaneously integrity-protected (included in `meta_hash`) and completely unvalidated against actual content behavior.
 
 - **False lineage.** An attacker claims `derived_from` a trusted skill, including the real `source_hash` (obtainable by hashing the source's publicly available content). The `source_hash` verifies, making the false derivation claim more convincing. No mechanism exists for upstream authors to deny derivation claims.
 
@@ -653,9 +661,9 @@ All of these attacks work against unsigned content. When a signature is present,
 
 Section 11.4 describes full sidecar removal. Additional downgrade vectors exist:
 
-- **Signature stripping.** An attacker removes the `signature` field from `meta.yaml` without modifying other fields. Because `signature` is excluded from `meta_hash` computation (Section 8.1), removing it leaves `meta_hash` intact — no recomputation is needed. The content silently downgrades from signed to unsigned with all hashes still verifying. Strict consumers (Section 6.2.2) can defend against this when their policy requires signatures.
+- **Signature stripping.** An attacker removes the `signature` field from `meta.yaml` without modifying other fields. Because `signature` is excluded from `meta_hash` computation (Section 8.1), removing it leaves `meta_hash` intact — no recomputation is needed. The content silently downgrades from signed to unsigned with all hashes still verifying. This is analogous to SSL stripping (Marlinspike, 2009): an active MITM downgrades HTTPS to HTTP transparently, and users without HSTS-equivalent protections never see the difference. MOAT has no equivalent of HSTS — no publisher-asserted signal that content was intended to be signed. Strict consumers (Section 6.2.2) can defend against this when their policy requires signatures.
 
-- **No publisher-asserted signature requirement.** There is no mechanism for a publisher to assert "this content MUST be signed" in a way that consumers are required to enforce. A sidecar field (e.g., `enforce_signature: true`) would not solve this — an attacker stripping the signature can recompute `meta_hash` with the field removed or set to `false`, and permissive consumers have no obligation to honor it. Signature enforcement belongs in consumer policy configuration, not the sidecar. Strict consumers with explicit signature requirements provide the strongest defense.
+- **No publisher-asserted signature requirement.** There is no mechanism for a publisher to assert "this content MUST be signed" in a way that consumers are required to enforce. A sidecar field (e.g., `enforce_signature: true`) would not solve this — an attacker stripping the signature can recompute `meta_hash` with the field removed or set to `false`, and permissive consumers have no obligation to honor it. Signature enforcement belongs in consumer policy configuration, not the sidecar. Strict consumers with explicit signature requirements provide the strongest defense. Registries SHOULD maintain per-publisher signing expectations — analogous to HSTS preload lists — to enable detection of unexpected signature absence.
 
 ### 11.12 Namespace and Version Attacks
 
@@ -677,7 +685,7 @@ Section 11.4 describes full sidecar removal. Additional downgrade vectors exist:
 
 Content verified at install time is read from disk at runtime. An attacker with filesystem access can modify content after verification passes. MOAT's integrity guarantees apply at verification time — they do not extend to runtime unless the consumer re-verifies before each use.
 
-Symlink targets are also subject to TOCTOU: between checking that a symlink target is internal (Section 7.3 step 1) and reading the target's content (step 4), an attacker with filesystem access can swap the symlink target to an external file. Mitigation is implementation-specific (read-only mounts, runtime re-verification, atomic read-and-verify) and outside MOAT's scope.
+Symlink targets are also subject to TOCTOU: between checking that a symlink target is internal (Section 7.3 step 1) and reading the target's content (step 4), an attacker with filesystem access can swap the symlink target to an external file (ref: CVE-2024-23651 BuildKit, CVE-2024-21626 runC). Implementations SHOULD use fd-based verification to close this race: open the file with `O_NOFOLLOW`/`O_PATH`, verify the target via `/proc/self/fd/N` or `fstat`, and read through the same file descriptor. This eliminates the window between check and use.
 
 ### 11.15 Algorithm Migration
 
@@ -691,7 +699,7 @@ Section 11.5 notes that SHA-256 compromise would require a new `meta_version`. A
 
 - **Deprecation and yanking.** MOAT does not define a field for marking a version as unsafe or deprecated. This is deliberately deferred to registries, which control distribution and have the operational authority to remove or flag content. MOAT records provenance, not lifecycle state.
 
-- **Rekor verification.** Sigstore consumers that fetch transparency log entries by `log_index` (Section 9.2) SHOULD verify inclusion proofs. Inclusion proofs are returned as part of the Rekor transparency log response and cryptographically demonstrate that an entry exists in the log's Merkle tree. Trusting Rekor responses without verifying inclusion proofs is vulnerable to a compromised or spoofed Rekor instance. See [REKOR] for verification API details.
+- **Rekor verification.** Sigstore consumers that fetch transparency log entries by `log_index` (Section 9.2 step 3) MUST verify inclusion proofs. Inclusion proofs are returned as part of the Rekor transparency log response (online) or stapled in Sigstore protobuf bundles (offline), and cryptographically demonstrate that an entry exists in the log's Merkle tree. Consumers MUST also verify that the fetched entry's contents (artifact digest, signature, and public key) match the MOAT artifact — verifying only the log entry signature is insufficient (Section 9.2 step 3). See [REKOR] for verification API details.
 
 - **Offline verification.** Sigstore verification requires network access for Rekor and Fulcio interactions. For air-gapped environments, SSH signing (Section 9.3) provides an offline-capable alternative that requires no network access.
 
@@ -709,6 +717,8 @@ The `source_repo` binding (Section 9.2 step 6) closes the gap between "signature
 
 - **Provider OIDC compromise.** A systemic risk affecting all Sigstore-based verification, not specific to MOAT. The Rekor transparency log provides partial detection capability via anomaly visibility at scale.
 
+- **Verification pipeline composition.** MOAT's Sigstore verification procedure (Section 9.2) has multiple independent checks (hash recomputation, Rekor entry verification, signature verification, identity verification, source binding). Sigstore client libraries have had verification bypass bugs where individual check return values are discarded (ref: CVE-2026-22703 cosign, CVE-2026-31830 sigstore-ruby). Implementations SHOULD use a fail-closed verification pipeline where any unchecked step causes overall failure. Publisher tooling SHOULD validate all metadata fields before signing — not just compute hashes — to prevent metadata laundering via social engineering (e.g., automated CI signing attacker-chosen metadata).
+
 - **Self-hosted instance OIDC trust.** Self-hosted git instances (GitLab CE, Gitea) at arbitrary domains present an ambiguous trust signal. A valid OIDC token from `git.alicecorp.com` does not indicate the security posture of the instance. Consumer policy governs for self-hosted instances — known providers (GitHub, GitLab SaaS) are trusted by default. Custom hosts require explicit consumer configuration via `sigstore_trust_root` (Section 5.3.17). The enterprise path is a self-hosted Fulcio instance with an internal CA.
 
 ### 11.18 Version Rollback and Source Binding
@@ -717,20 +727,84 @@ Source binding (Section 9.2 step 6) makes version rollback attacks *more* convin
 
 Rekor timestamps attest *signing time*, not currency. A valid timestamp proves when content was signed, not whether a newer version exists. Source binding does not imply the content is the most recent valid version.
 
-Registries are encouraged to maintain a latest-version manifest per content package, enabling consumers to detect when they are being served stale content. This is a registry-layer responsibility — the trust anchor binds identity to source, not content to time. Consumers that require freshness guarantees are encouraged to query the registry's latest-version endpoint and compare against the Rekor timestamp of the content they received. The format and signing requirements for such manifests are outside the scope of this specification.
+Registries SHOULD maintain a signed latest-version manifest per content package, enabling consumers to detect when they are being served stale content. This is a registry-layer responsibility — the trust anchor binds identity to source, not content to time. Consumers that require freshness guarantees SHOULD query the registry's latest-version endpoint and compare against the Rekor timestamp of the content they received. The format and signing requirements for such manifests are outside the scope of this specification.
 
 ### 11.19 First-Publish Trust (TOFU)
 
 On first publish, `source_repo` is self-asserted — there is no prior state to validate against. This is an inherent property of decentralized systems without a central pre-registration authority.
 
-Verifiers SHOULD treat the first-publish `source_repo` binding as an unvalidated claim until the signer has an established publish history. Subsequent publishes from the same signing identity and `source_repo` reinforce the binding. A change in signing identity for the same `source_repo` is a red flag that consumers SHOULD surface prominently.
+Verifiers MUST treat the first-publish `source_repo` binding as an unvalidated claim until the signer has an established publish history. Subsequent publishes from the same signing identity and `source_repo` reinforce the binding. A change in signing identity for the same `source_repo` is a red flag that consumers MUST surface prominently.
 
-Registries SHOULD implement their own first-publish authorization policies:
+Registries SHOULD implement challenge-response authorization for first-publish claims (e.g., requiring a `.well-known/moat-verify` file in the claimed `source_repo`, or verifying repository ownership via the platform API). First-publish authorization policies include:
 - Centralized registries MAY require explicit pre-registration (analogous to PyPI Trusted Publishers).
-- Community registries MAY accept TOFU with additional review.
+- Community registries MAY accept TOFU with additional review but SHOULD implement challenge-response where platform APIs are available.
 - The `repository_owner_id` field (Section 5.3.16) provides additional hardening: if a username is deleted and re-registered, the numeric ID changes, making account resurrection detectable even when the `source_repo` string matches.
 
-The spec does not mandate a specific first-publish policy — it documents the limitation and delegates policy to registries.
+### 11.20 Trust Root Substitution (Identity Substitution Attack)
+
+Both `signature` and `sigstore_trust_root` are excluded from `meta_hash` computation (Section 8.1). An attacker controlling a distribution point (CDN, mirror, registry relay) can exploit this to perform a full identity substitution:
+
+1. Strip the original signature from `meta.yaml`.
+2. Re-sign the content with their own Fulcio certificate from their own Sigstore instance.
+3. Update `signature`, `sigstore_trust_root`, and optionally `repository_owner_id` to match the new signing identity.
+4. All hashes remain valid — `meta_hash` and `content_hash` are untouched.
+5. The new signature is cryptographically valid against the attacker's trust root.
+
+This is a complete identity substitution — the content appears to come from any identity the attacker controls. The defense is consumer-side trust root pinning: consumers MUST NOT derive trust root from the sidecar being verified (Section 5.3.17, Section 9.2 step 8). The public-good Sigstore instance SHOULD be the only default trust root. All other trust roots MUST require explicit consumer configuration, analogous to how TLS clients ship with pre-installed CA certificates and reject unknown CAs by default.
+
+### 11.21 Hard Link Integrity Bypass
+
+Hard links share inodes and are undetectable via `readlink()`. A hard link from inside the content directory to a file outside it enables post-verification content mutation: an external process modifying the linked file changes the content visible inside the content directory without any symlink-related check triggering. This differs from symlink TOCTOU (Section 11.14) because mutation can occur at any time after verification — not only during a race window between check and use.
+
+The risk is amplified by registry packaging: tarballs that preserve hard links enable post-extraction cross-file mutation. An agent modifying one hard-linked file unknowingly corrupts the other.
+
+Implementations SHOULD verify that no file in the content directory has a hard link count greater than 1 with links outside the content directory (Section 7.3 step 1). Registries that distribute tarballs SHOULD strip or reject hard links during packaging.
+
+### 11.22 FIFO and Special File Denial of Service
+
+Section 7.3 step 1 requires enumerating files in the content directory. If the enumeration does not distinguish regular files from special files, the following denial-of-service attacks are possible:
+
+- **FIFOs (named pipes):** `open()` on a FIFO blocks indefinitely until a writer connects (POSIX behavior). A content directory containing a FIFO causes the hash computation to hang.
+- **Device files:** Depending on the device, `open()` or `read()` can block, crash, or produce unbounded data.
+- **Sockets and block devices:** Similar hazards.
+
+Implementations MUST enumerate only regular files and symlinks to regular files (Section 7.3 step 1). This is consistent with SEI CERT FIO32-C.
+
+### 11.23 YAML Parser Differential Risks
+
+Different YAML parsers in different languages produce different in-memory representations for the same `meta.yaml` bytes, causing `meta_hash` divergence between publisher and consumer. The primary divergence vectors are:
+
+- **Boolean coercion (YAML 1.1 vs 1.2).** PyYAML (Python, YAML 1.1 default) interprets `yes`, `no`, `on`, `off` as booleans. js-yaml (JavaScript, YAML 1.2 default) treats them as strings. A `meta.yaml` containing an unquoted `yes` in a string field produces different `meta_hash` values depending on the parser. Section 8.2 addresses this with normative coercion rules.
+
+- **Timestamp auto-parsing.** Unquoted timestamps are parsed into native datetime objects by YAML 1.1 parsers. Different languages produce different string representations when serializing these objects back to JSON, causing silent `meta_hash` divergence with no clear error message.
+
+- **Unicode normalization.** YAML parsers may or may not apply Unicode normalization to string values (distinct from the path normalization in Section 7.3 step 3). This is a latent interoperability risk for string fields containing non-ASCII characters.
+
+- **Multi-document YAML.** Some parsers silently process only the first document; others process all documents or raise errors. A `meta.yaml` with a second document after `---` is parsed inconsistently.
+
+Implementers SHOULD use the parser configuration guidance in Section 8.2 and validate against the test vectors in Appendix B (TV-YAML-01, TV-YAML-02) to confirm their parser produces correct `meta_hash` values.
+
+### 11.24 Content Transparency and Registry-Served Content Divergence
+
+A consumer can verify "this content was signed by alice" but cannot verify "this is the same content alice published to everyone else." Without a content transparency log, a malicious registry can serve different content to different consumers — both legitimate and malicious versions independently verify if both carry valid signatures.
+
+This is analogous to the Certificate Transparency problem for TLS: a CA can issue certificates to an attacker that are technically valid but unauthorized. Certificate Transparency logs make such issuance publicly auditable. Registries SHOULD publish signed content manifests — analogous to Go's `sum.golang.org` — enabling consumers to verify they received the same content as everyone else.
+
+### 11.25 Trust Laundering via False Derivation Claims
+
+The `derived_from` field (Section 5.3.14) records lineage as a self-reported claim. An attacker can claim derivation from a trusted skill using the real `source_hash` (publicly computable by hashing the source's available content). The `source_hash` verifies, making the false derivation claim convincing. Consumer tooling displays "Derived from anthropic/official-code-review" — lending trust by association.
+
+No mechanism exists for upstream authors to deny derivation claims. Combined with composition (multiple `derived_from` entries), an attacker can create content claiming derivation from many trusted sources simultaneously.
+
+Consumer tooling SHOULD clearly distinguish "verified derivation" (where `source_hash` matches signed, accessible source content from a trusted publisher) from "claimed derivation" (self-reported, not independently verified). Displaying both categories identically enables trust laundering.
+
+### 11.26 OIDC Token Exfiltration and Reusable Workflow Confusion
+
+Section 11.17 addresses repository takeover as a source binding risk. Two additional attack vectors produce valid Fulcio certificates without requiring repository write access:
+
+- **OIDC token exfiltration from CI/CD.** A compromised GitHub Action or third-party CI step can exfiltrate the OIDC token when the workflow has `id-token: write` permission. The exfiltrated token produces valid Fulcio certificates with legitimate source binding OIDs. This is a demonstrated attack vector: CVE-2025-30066 (tj-actions/changed-files, affecting 23,000+ repositories) and the hackerbot-claw campaign (2026, targeting Microsoft, DataDog, and CNCF repositories) both systematically stole CI/CD tokens. Publishers SHOULD pin GitHub Actions to commit SHAs (not tags) and use minimal `id-token` permissions scoped to signing workflows only.
+
+- **Reusable workflow identity confusion.** When signing is performed by a reusable GitHub Actions workflow, the Fulcio certificate's Build Signer URI (OID `1.3.6.1.4.1.57264.1.8`) identifies the workflow, not the calling repository. A compromised reusable signing workflow produces valid certificates for every repository that calls it. Consumers SHOULD verify the Build Signer URI (OID `.8`) in addition to the Source Repository URI (OID `.12`) to determine what workflow performed the signing. See Appendix D for OID details.
 
 ## 12. References
 
@@ -770,14 +844,14 @@ Conforming implementations MUST produce the exact hashes listed below for the gi
 
 Tests the per-file hash sub-procedure used in Section 7.3 step 4.
 
-Input: 12 bytes — `Hello, MOAT!\n`
+Input: 13 bytes — `Hello, MOAT!\n`
 
 ```
-Hex: 48656c6c6f2c20414350210a
+Hex: 48656c6c6f2c204d4f4154210a
 ```
 
 ```
-Per-file SHA-256: 621ce4cf6cca465755bc79d96598ad73afe693dfa387b063a79710ee6fa2d7fe
+Per-file SHA-256: 14f2b66ec98e9ccb2286536561521b83c00fadb9a6b98bb0c5922823c4e79fff
 ```
 
 Validates: Section 7.2 baseline. Result MUST match `sha256sum` of the raw bytes.
@@ -1215,6 +1289,64 @@ meta_hash: sha256:9f63655d8c059c40b81b8f5d0a710246ae521f57393794e1b6eece067280e7
 
 Validates: Section 8.1 — the new `publisher_identity` and `repository_owner_id` fields are included in the hashed allowlist and sort correctly in JCS output (`publisher_identity` between `published_at` and `repository_owner_id`). The `content_hash` reuses TV-03's value. `repository_owner_id` is serialized as a string (not integer) per Section 8.2. `sigstore_trust_root` is absent and correctly excluded — it is not in the hashed allowlist regardless of presence.
 
+### TV-YAML-01: YAML 1.1/1.2 boolean coercion divergence (Section 8.2)
+
+Tests that implementations correctly handle YAML 1.1 boolean values as strings.
+
+Input `meta.yaml` (note: `description` contains unquoted `yes`):
+
+```yaml
+meta_version: 1
+type: skill
+name: bool-test
+version: 1
+description: yes
+content_hash: sha256:9c9c3591140eae4e0f047060470af98da00629b668f152ac6d4846e64ff91d40
+```
+
+**Correct behavior:** `description` MUST be parsed as the string `"yes"`, not the boolean `true`.
+
+JCS canonical JSON:
+
+```
+{"content_hash":"sha256:9c9c3591140eae4e0f047060470af98da00629b668f152ac6d4846e64ff91d40","description":"yes","meta_version":1,"name":"bool-test","type":"skill","version":1}
+```
+
+```
+meta_hash: sha256:ae26a1ee69e4230022c71698343f5b0eacfd160c564c80feed18e9547fc7ba99
+```
+
+**Incorrect behavior (YAML 1.1 boolean coercion):** A parser that coerces `yes` → `true` produces JCS `"description":true` instead of `"description":"yes"`, resulting in a different (incorrect) `meta_hash`. Implementations MUST NOT apply boolean coercion to MOAT string fields regardless of YAML parser version. The following values are affected: `yes`, `no`, `on`, `off`, `y`, `n`, `true`, `false` (case-insensitive).
+
+### TV-YAML-02: Unquoted timestamp handling (Section 8.2)
+
+Tests that implementations correctly handle unquoted timestamps as strings.
+
+Input `meta.yaml`:
+
+```yaml
+meta_version: 1
+type: skill
+name: timestamp-test
+version: 1
+published_at: 2026-04-01T14:32:00Z
+content_hash: sha256:9c9c3591140eae4e0f047060470af98da00629b668f152ac6d4846e64ff91d40
+```
+
+**Correct behavior:** `published_at` MUST be parsed as the string `"2026-04-01T14:32:00Z"`, not a native datetime object.
+
+JCS canonical JSON:
+
+```
+{"content_hash":"sha256:9c9c3591140eae4e0f047060470af98da00629b668f152ac6d4846e64ff91d40","meta_version":1,"name":"timestamp-test","published_at":"2026-04-01T14:32:00Z","type":"skill","version":1}
+```
+
+```
+meta_hash: sha256:a385caa28478784b8eead4d92a38f47326895d6b9933ebd000a8a55c18ce52cd
+```
+
+**Incorrect behavior (YAML timestamp auto-parsing):** A parser that converts the unquoted timestamp to a native datetime produces a different string representation on serialization. Python: `2026-04-01 14:32:00+00:00`. JavaScript: `2026-04-01T14:32:00.000Z`. Go: varies by format string. None match the original `2026-04-01T14:32:00Z`, producing different (incorrect) `meta_hash` values with no clear error message. Implementations MUST detect non-string types for `published_at` and raise an error.
+
 ## Appendix C: Platform Signing Support (Informative)
 
 Sigstore OIDC signing is supported by the following platforms as of April 2026:
@@ -1246,6 +1378,9 @@ Additional Fulcio OID extensions available for verification hardening:
 
 | OID | Name | Use |
 |-----|------|-----|
+| `1.3.6.1.4.1.57264.1.8` | Build Signer URI | Identifies the workflow that performed signing (Section 11.26). For GitHub Actions, this is `https://github.com/{owner}/{repo}/.github/workflows/{workflow}@{ref}`. Consumers SHOULD verify this to detect reusable workflow confusion. |
+| `1.3.6.1.4.1.57264.1.9` | Build Signer Digest | SHA of the workflow file at signing time |
+| `1.3.6.1.4.1.57264.1.10` | Runner Environment | Identifies whether the runner was GitHub-hosted or self-hosted |
 | `1.3.6.1.4.1.57264.1.12` | Source Repository URI | Primary `source_repo` binding (Section 9.2 step 6) |
 | `1.3.6.1.4.1.57264.1.15` | Source Repository Identifier | Numeric repo ID (immutable, for hardening) |
 | `1.3.6.1.4.1.57264.1.16` | Source Repository Owner URI | Owner-level binding |

@@ -2,6 +2,48 @@
 
 All notable changes to the MOAT specification are documented in this file.
 
+## [0.3.0] — 2026-04-04
+
+Security hardening release based on 5-agent adversarial review (31 findings, 29 revision items). Elevates multiple informative recommendations to normative requirements and adds 7 new security considerations.
+
+### Added
+
+- Section 7.3 step 1: regular-file-only enumeration — FIFOs, device files, sockets, and block devices MUST be excluded
+- Section 7.3 step 1: hard link detection guidance — SHOULD verify no file has link count > 1 with external links
+- Section 8.2: YAML merge key (`<<`) prohibition — MUST NOT be used in `meta.yaml`
+- Section 8.2: YAML timestamp coercion prohibition — MUST NOT auto-parse unquoted timestamps
+- Section 8.2: SHOULD use YAML 1.2 parser; expanded boolean coercion MUST NOT list (`yes`, `no`, `on`, `off`, `y`, `n`, case-insensitive)
+- Section 8.2: SHOULD set alias expansion limits (billion laughs mitigation)
+- Section 8.2: SHOULD reject multi-document YAML
+- Section 9.1: future `meta_version` signing input formats MUST use incompatible prefix
+- Section 9.2 step 3: Rekor entry content verification — MUST verify `data.hash.value`, `signature.content`, and `signature.publicKey.content` match the MOAT artifact (ref: CVE-2026-22703)
+- Section 9.2 step 6: `repository_owner_id` verification against OID `1.3.6.1.4.1.57264.1.17`
+- Section 11.14: fd-based TOCTOU mitigation guidance (ref: CVE-2024-23651, CVE-2024-21626)
+- Section 11.17: verification pipeline composition guidance (fail-closed) and publisher tooling validation
+- Section 11.20: Trust Root Substitution — full identity substitution attack via `sigstore_trust_root` + signature replacement
+- Section 11.21: Hard Link Integrity Bypass
+- Section 11.22: FIFO and Special File Denial of Service
+- Section 11.23: YAML Parser Differential Risks
+- Section 11.24: Content Transparency and Registry-Served Content Divergence
+- Section 11.25: Trust Laundering via False Derivation Claims
+- Section 11.26: OIDC Token Exfiltration and Reusable Workflow Confusion
+- Appendix D: Build Signer URI (OID `.8`), Build Signer Digest (`.9`), Runner Environment (`.10`)
+- TV-YAML-01: YAML 1.1/1.2 boolean coercion divergence test vector
+- TV-YAML-02: Unquoted timestamp handling test vector
+
+### Changed
+
+- Section 5.3.16: `repository_owner_id` elevated from RECOMMENDED to REQUIRED for Sigstore-signed content
+- Section 5.3.17: `sigstore_trust_root` reframed as "discovery hint" — MUST NOT be used as sole basis for trust
+- Section 9.2 step 3: Rekor inclusion proof verification elevated from SHOULD to MUST
+- Section 9.2 step 7: `publisher_identity` MUST be displayed alongside verified signing identity; MUST NOT be presented as verified
+- Section 9.2 step 8: trust root pinning strengthened — public-good Sigstore is RECOMMENDED default; all others require explicit configuration
+- Section 11.10: `type` field MUST NOT be used for access control without independent content analysis
+- Section 11.11: added SSL-stripping analogy; registries SHOULD maintain per-publisher signing expectations
+- Section 11.16: Rekor verification elevated to MUST for both inclusion proofs and entry content matching
+- Section 11.18: version rollback — "encouraged" elevated to SHOULD for signed latest-version manifests
+- Section 11.19: TOFU — SHOULD elevated to MUST for first-publish claim treatment; added challenge-response authorization guidance
+
 ## [0.2.1] — 2026-04-03
 
 Readability improvements based on reviewer feedback.
