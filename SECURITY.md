@@ -4,7 +4,7 @@
 
 If you discover a security vulnerability in the MOAT specification itself (e.g., a flaw in the hash algorithm, signing input construction, or verification logic that could be exploited by an attacker), please report it responsibly.
 
-**Email:** security@moatspec.org
+**Email:** openscribbler.dev@pm.me
 
 Please include:
 

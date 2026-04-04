@@ -1,5 +1,5 @@
 blank_issues_enabled: true
 contact_links:
   - name: Security Vulnerability
-    url: mailto:security@moatspec.org
+    url: mailto:openscribbler.dev@pm.me
     about: For security vulnerabilities that could be actively exploited, please email us directly
