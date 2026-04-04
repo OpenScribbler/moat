@@ -99,6 +99,8 @@ When content is exported, published, or shared, `meta.yaml` MUST travel with the
 
 Content without a `meta.yaml` sidecar has no provenance.
 
+> **Rationale:** MOAT combines descriptive metadata (name, description, authors) and integrity metadata (hashes, signatures) in a single sidecar rather than separating them. This is deliberate: the `meta_hash` binds descriptive fields to the content hash, so claims like authorship and origin are integrity-protected — not just informational. Separating them would require consumers to decide which metadata to trust independently, and would allow descriptive metadata to be modified without invalidating signatures. The trade-off is that sidecar removal (Section 11.4) loses both, but this is mitigable by registry enforcement and strict consumer policy (Section 6.2.2), whereas metadata substitution in a split model would be harder to detect.
+
 ### 5.2 Schema
 
 The file MUST be valid YAML ([YAML 1.2]). All fields use lowercase snake_case keys.
