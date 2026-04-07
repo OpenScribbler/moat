@@ -218,7 +218,7 @@ Suspicious provenance (content hash exists in Rekor under a different identity w
 - **Version semantics** — `version` is an optional, non-normative display label (OCI model). Content hash is the normative identifier. Clients use `attested_at` for freshness, not version labels.
 - **`scan_status` structure** — per-item manifest field: `scanner` (name+version string), `scanned_at` (RFC 3339), `result` (`clean` | `findings` | `not_scanned`), optional `findings_url`. Scanning is a registry policy decision, not a MOAT requirement — but the format is normative so conforming clients can surface it uniformly.
 - **`risk_tier` definition** — per-item manifest field derived by registry tooling from content analysis. Four levels: `L0` (read-only, no shell, no network), `L1` (reads config or user files), `L2` (writes files or makes network requests), `L3` (shell execution or credential access). Not embedded in content files — belongs in the manifest where it can be computed and updated independently of the content hash.
-- **Revocation feed** — mechanism for registries to publish denounced content hashes post-attestation. Conforming clients MUST check the revocation feed on install. Format and delivery (manifest section vs. separate feed URL) to be resolved in open issue #8.
+- **Revocation mechanism** — `revocations` array in the manifest (REQUIRED; empty array if none) + optional `revocation_feed_url` for low-latency revocation without a full manifest re-sign. Four reason values: `malicious`, `compromised`, `deprecated`, `policy_violation`. Conforming clients MUST check revocations at install time; MUST block install for `malicious`/`compromised`; SHOULD warn for `deprecated`/`policy_violation`. Cross-registry: clients SHOULD check all trusted registries' revocations against all installed content hashes (by content hash, registry-neutral).
 
 ### Reference profiles (informative)
 - **Sigstore profile** — keyless OIDC signing via Fulcio/Rekor.
@@ -285,7 +285,7 @@ Architecture: hash raw bytes, normalize at registry ingestion boundary (Go model
 - **Conformance test suite:** Ships with spec as first-class artifact. Adversarial test vectors required (mixed line endings, lone CR, BOM, BOM+CRLF compound, case-variant extensions, binary with CRLF-like bytes, `\r\r\n` sequences, files with text extensions but NUL bytes).
 
 **4. Registry manifest size and pagination**
-For large registries with thousands of content items, the manifest could become unwieldy. Need to decide if the spec supports paginated/chunked manifests or if that's a registry implementation detail. Depends on #1 and #2 — need to know what a manifest entry looks like first.
+For large registries with thousands of content items, the manifest could become unwieldy. Need to decide if the spec supports paginated/chunked manifests or if that's a registry implementation detail. The manifest entry structure is now fully defined (issues #1–#3, #6–#8 resolved) — this question is unblocked but deferred. Candidate resolution: v1 defines no pagination (split into sub-registries if needed); pagination is a MAY for future extensibility. Requires an explicit decision before the spec moves to Draft status.
 
 **5. Consumer motivation (spec introduction)**
 The spec intro needs to make the value proposition concrete — not "you should verify because security" but "here's what you get and here's what you risk." Security practices only scale when the secure path is lower friction than the insecure path. Best written after protocol design is settled.
@@ -337,8 +337,65 @@ Key decisions:
 - **The rubric is about capability granted, not strings present.** A skill that *documents* a shell command is not L3; a hook that *executes* one is. False-positive reduction belongs in companion specs (per-content-type analyzer rules). Two registries may disagree at the margin — that's acceptable; the tier is attributed to the registry making the claim.
 - **MCP configs and inert-config types** are an open sub-issue: content whose risk manifests at connection-time rather than content-analysis-time may need companion spec guidance. Registries SHOULD tier such content conservatively pending that spec.
 
-**8. Revocation / denouncement mechanism**
-MOAT currently has no way for a registry to mark content as yanked after attestation. If a skill is discovered to be malicious post-distribution, there is no standard signal conforming clients must check. This is the gap that lets a poisoning incident (like ClawHub Q1 2026) propagate even after discovery. The OWASP AST10 treats revocation as a registry operational procedure, but MOAT should define a standard `denounced` list in the registry manifest (or a separate revocation feed URL) that conforming clients MUST check at install time and optionally on a schedule post-install. Key design questions: is revocation a field in the main manifest (simpler, one fetch) or a separate revocation feed (more scalable for large registries)? What happens to already-installed content when it's denounced — clients MUST warn? MUST block execution? SHOULD prompt re-verification? How does cross-registry revocation work — if Registry A denounces content that Registry B also distributes, does that signal propagate?
+**8. Revocation / denouncement mechanism** ✅ RESOLVED
+
+Registries MUST maintain a `revocations` array in the manifest (empty array if none). For registries that need lower-latency revocation than a full manifest re-sign allows, an optional `revocation_feed_url` field points to a separate signed revocation document using the same signing envelope as the manifest.
+
+**Revocation entry format:**
+```json
+{
+  "revocations": [
+    {
+      "content_hash": "sha256:abc123...",
+      "revoked_at": "2026-04-07T10:00:00Z",
+      "reason": "malicious",
+      "details_url": "https://..."
+    }
+  ]
+}
+```
+
+`reason` values (normative):
+- `malicious` — content confirmed to contain or enable malicious behavior
+- `compromised` — content is likely valid, but source repo or signing identity was compromised
+- `deprecated` — content replaced or superseded; continued use is not recommended
+- `policy_violation` — removed by registry policy (legal, ToS, etc.)
+
+`malicious` and `compromised` are security events. `deprecated` and `policy_violation` are informational. Clients MUST surface them differently.
+
+**Client behavior at install time (normative):**
+- Conforming clients MUST check `revocations` in the manifest AND the revocation feed (if `revocation_feed_url` is present) before completing an install.
+- If the requested content hash appears in `revocations` with reason `malicious` or `compromised`: MUST NOT install. MUST surface reason and `details_url` if present.
+- If reason is `deprecated` or `policy_violation`: SHOULD warn; MAY allow install with explicit user confirmation.
+- Clients SHOULD NOT use a cached manifest older than a client-configurable threshold (default: 24h) for install-time revocation checks — stale revocation data understates actual risk.
+
+**Client behavior for already-installed content (normative):**
+- Conforming clients SHOULD check revocations on each registry sync.
+- MUST surface active revocations in status and list views (a visible revocation marker alongside the item).
+- MUST NOT silently continue presenting revoked content as fully trusted.
+- MUST NOT autonomously uninstall or modify content — user action is required.
+- Re-install of a `malicious` or `compromised` hash MUST be blocked unless the user explicitly overrides.
+
+**Cross-registry revocation propagation:**
+Content hashes are universal — the client lockfile tracks installed hashes without regard to which registry distributed them. Conforming clients SHOULD check all trusted registries' `revocations` lists against all locally installed content hashes. If Registry A revokes hash X and the user has hash X installed from Registry B, the client SHOULD surface a cross-registry revocation warning attributed to its source: "Registry A has denounced this content hash."
+
+This is additive, not transitive: Registry A's revocation does not invalidate Registry B's attestation. Both signals are surfaced and the user decides. Cross-registry revocation works without any central infrastructure — the client aggregates by iterating trusted registries on each sync.
+
+**Revocation feed format** (when `revocation_feed_url` is present): Same structure as the embedded `revocations` array, wrapped in the standard MOAT signing envelope. Clients MUST verify the feed is signed by the same registry identity as the manifest. Unsigned revocation feeds MUST be rejected.
+
+Key decisions:
+- **Embedded array is the baseline** — no separate endpoint required for conformance. Every manifest has `revocations` (empty array is valid). Small registries need no additional infrastructure.
+- **Optional feed URL enables low-latency response** — a security incident cannot wait for the next content ingest cycle to trigger a manifest re-sign. The feed URL is the escape hatch for registries that need faster turnaround.
+- **Reason taxonomy is normative and bounded** — four values, no extension point. Avoids the "deprecation reasons are a mess" failure mode of npm. If a future spec version adds a reason, unknown reasons from older manifests are treated as `policy_violation` by clients (fail to the least-alarming safe default; `malicious` would be false-positive noise).
+- **No automatic uninstall** — MOAT does not control the filesystem or agent platforms. Forcing removal is out of scope and introduces its own risk (breaking active workflows). The obligation is to surface the signal clearly and block reinstall.
+- **Cross-registry hash matching closes the ClawHub gap** — if a poisoning incident is discovered after distribution across multiple registries, any one registry denouncing the hash is sufficient to warn users who installed from any registry. No central authority needed.
+
+OWASP alignment:
+- **CICD-SEC-3** (Dependency Chain Abuse): revocation prevents already-distributed compromised content from persisting in the supply chain after discovery
+- **CICD-SEC-9** (Improper Artifact Integrity Validation): revocation check is now part of the normative install-time verification path
+- **AST01** (Malicious Skills): revocation is the post-distribution remediation path for confirmed malicious content
+- **AST02** (Supply Chain Compromise): revocation is the incident response mechanism for registry-level compromise events
+- **AST10** (Cross-Platform Reuse): hash-based cross-registry model ensures revocation signals propagate regardless of which platform or client distributed the content
 
 ---
 
@@ -383,7 +440,7 @@ The single most directly applicable list: MOAT is a domain-specific implementati
 
 | OWASP Risk | MOAT Coverage | Status |
 |---|---|---|
-| CICD-SEC-3 — Dependency Chain Abuse | Registry namespace enforcement + verified checksums block confusion/typosquatting | ✅ Covered |
+| CICD-SEC-3 — Dependency Chain Abuse | Registry namespace enforcement + verified checksums block confusion/typosquatting + revocation prevents post-distribution persistence of compromised content | ✅ Covered |
 | CICD-SEC-8 — Ungoverned 3rd Party Services | Registry federation trust model; registries declare and vet upstream sources | ⚠️ Partial (not yet specified) |
 | CICD-SEC-9 — Improper Artifact Integrity Validation | Signed manifests + hash pinning + lockfile = the prescribed control per CICD-SEC-9 | ✅ Covered |
 
