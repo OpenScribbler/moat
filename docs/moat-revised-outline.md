@@ -24,6 +24,16 @@ MOAT does NOT define:
 - Per-file metadata within content items (that's a client implementation detail)
 - Individual file provenance outside a registry context (unsolvable without platform cooperation)
 
+### Use Cases
+
+**Individual user:** Installs skills from a community registry. Wants confidence that nothing was tampered with between the author's push and their install — and to know the risk level of what they're running.
+
+**Team or enterprise:** Deploying a curated set of approved skills to engineers. Needs to lock known-good content hashes, enforce risk tier thresholds, and block unsigned or unreviewed installs via policy.
+
+**Registry operator:** Curating a "blessed" catalog for a community or organization. Wants a standardized, verifiable way to publish with cryptographic provenance that any conforming client can check.
+
+**Content author:** Wants their work credited accurately, detects when someone forks and republishes with modifications, and can revoke content if their repo is compromised — without managing cryptographic keys.
+
 ---
 
 ## Why This Architecture
@@ -94,6 +104,9 @@ A conforming client:
 - Verifies content hashes on install against the manifest
 - Maintains a local lockfile of installed content hashes
 - Surfaces trust tier clearly at install time
+- MUST surface the `risk_tier` of every content item being installed in a single operation before the user confirms — if installing Skill A also installs Hook B, the user sees both tiers. This is the primary mechanism for communicating transitive risk without requiring a dependency graph in the manifest.
+- MUST treat publisher Rekor revocation entries as prominent warnings (not hard blocks). Registry-confirmed revocations are the gating authority for hard blocks.
+- MUST show the source attribution of every revocation signal ("Registry X has revoked this" / "Author has flagged this content")
 
 ---
 
@@ -101,14 +114,17 @@ A conforming client:
 
 ### Trust Tiers (visible to users)
 
-Two tiers. Simple.
+Three tiers.
 
-| Tier | What it means |
-|------|--------------|
-| **Signed** | Registry-signed with a Rekor transparency log entry. Tamper-evident, survives registry compromise. |
-| **Unsigned** | No MOAT provenance. Works, but labeled clearly. |
+| Tier               | What it means                                                                                                                                                     |
+|--------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Dual-Attested**  | Registry-signed (Rekor entry 1) AND independently attested by the source repo's CI via Sigstore keyless signing (Rekor entry 2). Two independent transparency log entries for the same content hash. Survives registry key compromise — attacker must compromise both the registry identity and the source CI identity simultaneously. |
+| **Signed**         | Registry-signed with a Rekor transparency log entry. Tamper-evident. Fully trusted. Absence of Dual-Attested is NOT a negative signal — Signed content is completely valid. |
+| **Unsigned**       | No MOAT provenance. Works, but labeled clearly.                                                                                                                   |
 
-Creator co-signatures are **optional and additive** — not a separate tier. When a source repo has independently attested content (e.g., via the Publisher Action), clients surface this as an attribution enhancement: "author also independently attested this." It strengthens confidence but is not load-bearing for the trust guarantee.
+**Important:** `Dual-Attested` content will be rare at launch. Clients MUST NOT treat its absence as a negative signal — only its presence as a positive one. `Signed` is the standard trust tier. `Dual-Attested` is additive confidence for users and registries that want a higher bar.
+
+Source co-signatures are produced by the **Publisher Action** — a GitHub Actions workflow any source repo can adopt with a single workflow file. The Publisher Action is a first-class MOAT reference implementation (see below).
 
 ### Registry Trust
 - Adding a registry is an explicit user decision (like `brew tap` or adding a Cargo registry)
@@ -181,6 +197,7 @@ MOAT is explicitly scoped to **registry-distributed content** — things people 
 - Per-file metadata within content items (frontmatter, embedded provenance)
 - Content format definitions (what fields go in SKILL.md, how hooks are structured)
 - Runtime enforcement of permissions or capability requirements
+- Cross-item dependency graphs — files outside a content directory (shared dependencies, auxiliary configs, build inputs, cross-repo content) are not covered by the content hash. MOAT's trust guarantee covers the content directory as a unit. Content with external dependencies should declare them via companion specs (e.g., SKILL.md `requires` field); clients computing install-time risk should surface each dependency's own MOAT-attested `risk_tier`.
 
 This is intentional, not a gap. Individual file provenance without platform cooperation (from Anthropic, Cursor, etc.) or a central authority is not reliably solvable. Every ecosystem we studied converged on this same boundary. The right venue for individual file provenance is platform-level tooling — not something MOAT imposes from the outside.
 
@@ -212,7 +229,7 @@ Suspicious provenance (content hash exists in Rekor under a different identity w
 - **Content hashing algorithm** — simplified, Go dirhash-style. Deterministic, one-pass, trivially implementable.
 - **Hash format** — `<algorithm>:<hex>` with no length constraints.
 - **Signature envelope format** — the platform-agnostic signing model.
-- **Trust tier model** — Signed (registry-attested + Rekor) vs Unsigned.
+- **Trust tier model** — Three tiers: Dual-Attested (registry + source CI, two independent Rekor entries) / Signed (registry-attested + Rekor) / Unsigned. Absence of Dual-Attested is NOT a negative signal.
 - **Client verification protocol** — what a conforming client must check on install.
 - **Lineage model** — `derived_from` for forks and adaptations.
 - **Version semantics** — `version` is an optional, non-normative display label (OCI model). Content hash is the normative identifier. Clients use `attested_at` for freshness, not version labels.
@@ -224,34 +241,91 @@ Suspicious provenance (content hash exists in Rekor under a different identity w
 - **Sigstore profile** — keyless OIDC signing via Fulcio/Rekor.
 - **SSH profile** — SSH key signing for individual operators.
 
-### Reference implementation (normative)
+### Reference implementations (normative)
 - **`moat_hash.py`** — Python reference implementation of the content hashing algorithm. A conforming implementation is one that produces identical output to this script for all test vectors. Ships with the spec. Two independent implementations in different languages must pass all test vectors before the spec advances beyond Draft.
+- **`moat-verify`** — Standalone verification script (Python or TypeScript). Takes a content directory and a trusted registry URL; verifies content hash, registry Rekor attestation, and optionally publisher Rekor attestation. Prints a human-readable trust report. Required behavior: if Rekor is unreachable, fail explicitly — never silently pass. Output MUST state what was not checked. Enables any user to verify any MOAT-attested content without depending on a specific client implementation.
+- **Publisher Action** (`moat-spec/publisher-action@v1`) — GitHub Actions workflow for source repos. Normatively specified; any content signed by a conforming Publisher Action is verifiable by any conforming client. Produces the `Dual-Attested` tier when combined with registry signing.
+
+### Publisher Action specification
+
+The Publisher Action is the primary adoption mechanism for the `Dual-Attested` tier. Any source repo adopts it with a single workflow file — no key management, no MOAT-specific knowledge required beyond adding the workflow.
+
+**What it does on push:**
+1. Detects AI content in the repo (skills, hooks, rules, MCP configs, agents)
+2. Computes content hashes using the MOAT algorithm
+3. Signs via Sigstore keyless OIDC — uses the GitHub Actions runner identity automatically
+4. Posts a Rekor entry (the source CI attestation — the second of the two independent entries)
+5. Updates `moat-attestation.json` at the repo root
+6. Updates the Shields.io badge endpoint data
+
+**Revocation mode:** The action also supports revocation. Publisher adds an entry to `moat-attestation.json` revocations and triggers the action; it posts a signed Rekor revocation entry and optionally notifies the registry via webhook.
+
+**`moat-attestation.json`** (normative format):
+```json
+{
+  "schema_version": "1",
+  "attested_at": "2026-04-07T14:00:00Z",
+  "items": [
+    {
+      "name": "summarizer-skill",
+      "content_hash": "sha256:abc123...",
+      "rekor_log_id": "24296fb24b8ad77a...",
+      "rekor_log_index": 12345678
+    }
+  ],
+  "revocations": []
+}
+```
+
+Location: repo root. One file per repo. MUST be excluded from content hashing (see canonicalization rules).
+
+**Bootstrapping:** The action commits `moat-attestation.json` back to the repo. GitHub Actions using `GITHUB_TOKEN` do not trigger other workflow runs by default, preventing infinite loops. The action MUST include an explicit guard against re-runs triggered by its own commits.
+
+**Badge integration:**
+```markdown
+![MOAT Dual-Attested](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/{owner}/{repo}/main/moat-attestation.json)
+```
+
+Badge asserts per-hash attestation status (not just CI pass/fail). Clients can read `moat-attestation.json` directly to verify specific content hashes without depending on the badge service.
+
+**Webhook (hybrid — passive by default, optional active):**
+
+The action is passive by default — it signs and stops. Registries discover attestations on their own crawl cycle. For fast propagation, publishers can configure an optional webhook URL:
+
+```yaml
+uses: moat-spec/publisher-action@v1
+with:
+  registry-webhook: ${{ secrets.MOAT_REGISTRY_WEBHOOK }}  # optional
+```
+
+The webhook channel carries both attestation and revocation notifications. Webhook payloads MUST be signed by the publisher's OIDC identity. Registries MUST verify the payload signature before processing. Registries SHOULD rate-limit webhook calls per source identity and flag anomalous revocation volumes.
+
+**v1 scope:** GitHub Actions only. GitLab CI is a v1.1 target.
 
 ### Reference tooling (informative)
-- **Publisher Action** — GitHub Action / GitLab CI job for source repos.
 - **Registry Action** — CI job template for running a registry.
 
 ---
 
 ## What Changed from v0.3.0
 
-| v0.3.0 (Metadata spec) | Revised (Registry protocol) |
-|---|---|
-| `meta.yaml` sidecar file format | Registry manifest as the core artifact |
-| Creator produces provenance | Registry produces provenance; creator does nothing |
-| Per-file `meta.yaml` alongside every content item | Per-item entries in a signed registry manifest |
-| Creator signs with Sigstore/SSH | Registry signs; creator co-signing optional |
-| JCS canonical JSON for meta_hash | Simplified dirhash-style content hashing |
-| YAML-to-JSON type mapping + null-byte concatenation | Sort → hash → concatenate → hash (one algorithm) |
-| `source_repo` (git-specific format) | `source_uri` (any valid URI) |
-| `published_at` (ambiguous semantics) | `attested_at` (when registry signed) |
-| `generated_by` field | Dropped — unverifiable, ages poorly |
-| `source_commit` field | Dropped — git-specific, redundant with content hash |
-| 64-character hash length limit | No length limit; prefixed format `alg:hex` |
-| Sigstore-specific normative language | Platform-agnostic envelope + named profiles |
-| "Metadata for Origin, Authorship, and Trust" | "Model for Origin Attestation and Trust" |
-| Integer version, auto-incremented by tooling | Version is optional display label; content hash is identity; `attested_at` for freshness |
-| `name` with 128-char Unicode limit | ASCII `name` (machine ID) + optional UTF-8 `display_name` (human label) |
+| v0.3.0 (Metadata spec)                              | Revised (Registry protocol)                                                              |
+|-----------------------------------------------------|------------------------------------------------------------------------------------------|
+| `meta.yaml` sidecar file format                     | Registry manifest as the core artifact                                                   |
+| Creator produces provenance                         | Registry produces provenance; creator does nothing                                       |
+| Per-file `meta.yaml` alongside every content item   | Per-item entries in a signed registry manifest                                           |
+| Creator signs with Sigstore/SSH                     | Registry signs; creator co-signing optional                                              |
+| JCS canonical JSON for meta_hash                    | Simplified dirhash-style content hashing                                                 |
+| YAML-to-JSON type mapping + null-byte concatenation | Sort → hash → concatenate → hash (one algorithm)                                         |
+| `source_repo` (git-specific format)                 | `source_uri` (any valid URI)                                                             |
+| `published_at` (ambiguous semantics)                | `attested_at` (when registry signed)                                                     |
+| `generated_by` field                                | Dropped — unverifiable, ages poorly                                                      |
+| `source_commit` field                               | Dropped — git-specific, redundant with content hash                                      |
+| 64-character hash length limit                      | No length limit; prefixed format `alg:hex`                                               |
+| Sigstore-specific normative language                | Platform-agnostic envelope + named profiles                                              |
+| "Metadata for Origin, Authorship, and Trust"        | "Model for Origin Attestation and Trust"                                                 |
+| Integer version, auto-incremented by tooling        | Version is optional display label; content hash is identity; `attested_at` for freshness |
+| `name` with 128-char Unicode limit                  | ASCII `name` (machine ID) + optional UTF-8 `display_name` (human label)                  |
 
 ---
 
@@ -281,6 +355,8 @@ Architecture: hash raw bytes, normalize at registry ingestion boundary (Go model
 - **BOM handling:** Strip UTF-8 BOM (EF BB BF) from text files before normalization.
 - **Extensionless files:** Binary by default. Dotfiles with no second dot (`.gitignore`, `.eslintrc`) are extensionless.
 - **VCS directories:** Excluded from hashing (`.git`, `.svn`, `.hg`, `.bzr`, `_darcs`, `.fossil`). Registries SHOULD use `git archive` or equivalent to produce clean content, but the reference implementation excludes these explicitly so local runs against a working directory produce the same hash as registry ingestion.
+
+**MOAT infrastructure files:** `moat-attestation.json` is excluded from content hashing. It is registry/tooling metadata, not content. Including it would create a circular dependency (the hash changes when the attestation file is written, requiring a new hash, ad infinitum).
 - **Symlinks:** Reject at ingestion. No resolve, no skip. npm/Go model.
 - **Conformance test suite:** Ships with spec as first-class artifact. Adversarial test vectors required (mixed line endings, lone CR, BOM, BOM+CRLF compound, case-variant extensions, binary with CRLF-like bytes, `\r\r\n` sequences, files with text extensions but NUL bytes).
 
@@ -319,14 +395,14 @@ The spec intro needs to make the value proposition concrete — not "you should 
 
 **Tier rubric (capability-based, consistent across content types):**
 
-| Tier | Observable capability |
-|---|---|
-| `L0` | Read-only. No shell, no filesystem writes, no network. Pure transformation/advice. |
-| `L1` | Reads user files or config outside its own content dir. No writes, no shell, no network. |
-| `L2` | Writes files outside its content dir, OR makes network requests. No shell, no credential access. |
-| `L3` | Invokes a shell, executes arbitrary commands, or reads/writes credentials (SSH keys, tokens, env vars matching secret patterns). |
-| `not_analyzed` | Registry did not attempt analysis. |
-| `indeterminate` | Registry ran analysis; could not classify conclusively. |
+| Tier            | Observable capability                                                                                                            |
+|-----------------|----------------------------------------------------------------------------------------------------------------------------------|
+| `L0`            | Read-only. No shell, no filesystem writes, no network. Pure transformation/advice.                                               |
+| `L1`            | Reads user files or config outside its own content dir. No writes, no shell, no network.                                         |
+| `L2`            | Writes files outside its content dir, OR makes network requests. No shell, no credential access.                                 |
+| `L3`            | Invokes a shell, executes arbitrary commands, or reads/writes credentials (SSH keys, tokens, env vars matching secret patterns). |
+| `not_analyzed`  | Registry did not attempt analysis.                                                                                               |
+| `indeterminate` | Registry ran analysis; could not classify conclusively.                                                                          |
 
 Key decisions:
 - **Registry-assigned, not self-declared.** Publisher declarations (e.g. `permissions` in SKILL.md frontmatter) are companion-spec concerns that registries MAY consult as input, but the manifest field is always the registry's independent claim. Registries MUST NOT accept publisher-asserted lower tiers.
@@ -381,6 +457,26 @@ Content hashes are universal — the client lockfile tracks installed hashes wit
 
 This is additive, not transitive: Registry A's revocation does not invalidate Registry B's attestation. Both signals are surfaced and the user decides. Cross-registry revocation works without any central infrastructure — the client aggregates by iterating trusted registries on each sync.
 
+**Publisher-side revocation (independent signal):**
+Publishers can post signed Rekor revocation entries via the Publisher Action without waiting for their registry to update. This is a separate signal from the registry manifest `revocations` array — checked directly by clients against Rekor.
+
+Publisher revocations are **warnings, not hard blocks**. The registry is the gating authority for hard blocks. This distinction prevents abuse (rage-quit revocations, compromised publisher accounts triggering mass revocations). Client behavior:
+- Publisher Rekor revocation entry present: MUST surface prominently ("author has flagged this content"); MUST NOT silently ignore; MUST NOT hard block without registry confirmation
+- Registry manifest revocation present: existing hard-block rules apply
+- Both present: MUST block; SHOULD surface as a high-confidence dual-revocation signal with distinct UI treatment
+
+Publisher-side revocation is especially valuable when a registry is compromised — the legitimate author can independently flag their content via a completely separate signing identity, raising the bar for an attacker (must compromise both registry identity and source CI identity simultaneously).
+
+**Out-of-band revocation:** Publishers whose GitHub Actions is compromised cannot use the Publisher Action to revoke. Direct registry contact MUST remain an available mechanism. Publisher-side Rekor revocation is an additional path, not the only path.
+
+**Revocation abuse mitigations:**
+- Registries SHOULD implement anomalous revocation detection: unusual volume of revocations from a single OIDC identity in a short window → rate limit processing, flag for manual review
+- Clients MUST display the source attribution of every revocation signal (registry name or publisher identity)
+- Clients SHOULD surface per-registry revocation counts in their trust UI — anomalous patterns from a single registry are visible
+- Webhook revocation payloads MUST be signed and verified before processing
+
+See `docs/research/revocation-abuse-scenarios.md` for full scenario analysis.
+
 **Revocation feed format** (when `revocation_feed_url` is present): Same structure as the embedded `revocations` array, wrapped in the standard MOAT signing envelope. Clients MUST verify the feed is signed by the same registry identity as the manifest. Unsigned revocation feeds MUST be rejected.
 
 Key decisions:
@@ -405,32 +501,32 @@ MOAT is validated against six OWASP standards. Two are critical (direct design s
 
 ### Reference Standards
 
-| Priority | List | URL |
-|---|---|---|
-| Critical | OWASP CI/CD Security Top 10 (2022) | https://owasp.org/www-project-top-10-ci-cd-security-risks/ |
-| Critical | OWASP Top 10 for Agentic Applications (2026) | https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/ |
-| High | OWASP Top 10 (2025) | https://owasp.org/Top10/2025/ |
-| High | OWASP LLM Top 10 (2025) | https://owasp.org/www-project-top-10-for-large-language-model-applications/ |
-| High | OWASP Agentic Skills Top 10 (2026) | https://github.com/OWASP/www-project-agentic-skills-top-10 |
-| Medium | OWASP API Security Top 10 (2023) | https://owasp.org/www-project-api-security/ |
-| Reference | OWASP Software Component Verification Standard | https://scvs.owasp.org |
+| Priority  | List                                           | URL                                                                              |
+|-----------|------------------------------------------------|----------------------------------------------------------------------------------|
+| Critical  | OWASP CI/CD Security Top 10 (2022)             | https://owasp.org/www-project-top-10-ci-cd-security-risks/                       |
+| Critical  | OWASP Top 10 for Agentic Applications (2026)   | https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/ |
+| High      | OWASP Top 10 (2025)                            | https://owasp.org/Top10/2025/                                                    |
+| High      | OWASP LLM Top 10 (2025)                        | https://owasp.org/www-project-top-10-for-large-language-model-applications/      |
+| High      | OWASP Agentic Skills Top 10 (2026)             | https://github.com/OWASP/www-project-agentic-skills-top-10                       |
+| Medium    | OWASP API Security Top 10 (2023)               | https://owasp.org/www-project-api-security/                                      |
+| Reference | OWASP Software Component Verification Standard | https://scvs.owasp.org                                                           |
 
 ### Agentic Skills Top 10 (AST prefix)
 
 OWASP Agentic Skills Top 10 (v1.0, 2026) maps to MOAT as follows:
 
-| OWASP Risk | MOAT Coverage | Status |
-|---|---|---|
-| AST01 — Malicious Skills | Content hash + Sigstore signing + Rekor transparency log | ✅ Covered |
-| AST02 — Supply Chain Compromise | Transparency logs (Rekor), registry trust model, explicit registry add | ✅ Covered |
-| AST03 — Over-Privileged Skills | Out of scope (content format concern, not registry protocol) | — |
-| AST04 — Insecure Metadata | Registry signing covers manifest integrity; scan_status covers quality | ⚠️ Partial (open issue #6) |
-| AST05 — Unsafe Deserialization | Out of scope (client implementation concern) | — |
-| AST06 — Weak Isolation | Out of scope (runtime concern) | — |
-| AST07 — Update Drift | Content hash + lockfile model catches drift | ✅ Covered |
-| AST08 — Poor Scanning | `scan_status` REQUIRED in manifest (result: not_scanned valid); structured scanner array with scanned_at | ✅ Covered |
-| AST09 — No Governance | `risk_tier` REQUIRED in manifest (L0–L3 + not_analyzed + indeterminate); registry-assigned, advisory | ✅ Covered |
-| AST10 — Cross-Platform Reuse | MOAT is platform-agnostic by design | ✅ Covered |
+| OWASP Risk                      | MOAT Coverage                                                                                            | Status                     |
+|---------------------------------|----------------------------------------------------------------------------------------------------------|----------------------------|
+| AST01 — Malicious Skills        | Content hash + Sigstore signing + Rekor transparency log                                                 | ✅ Covered                  |
+| AST02 — Supply Chain Compromise | Transparency logs (Rekor), registry trust model, explicit registry add                                   | ✅ Covered                  |
+| AST03 — Over-Privileged Skills  | Out of scope (content format concern, not registry protocol)                                             | —                          |
+| AST04 — Insecure Metadata       | Registry signing covers manifest integrity; scan_status covers quality                                   | ⚠️ Partial (open issue #6) |
+| AST05 — Unsafe Deserialization  | Out of scope (client implementation concern)                                                             | —                          |
+| AST06 — Weak Isolation          | Out of scope (runtime concern)                                                                           | —                          |
+| AST07 — Update Drift            | Content hash + lockfile model catches drift                                                              | ✅ Covered                  |
+| AST08 — Poor Scanning           | `scan_status` REQUIRED in manifest (result: not_scanned valid); structured scanner array with scanned_at | ✅ Covered                  |
+| AST09 — No Governance           | `risk_tier` REQUIRED in manifest (L0–L3 + not_analyzed + indeterminate); registry-assigned, advisory     | ✅ Covered                  |
+| AST10 — Cross-Platform Reuse    | MOAT is platform-agnostic by design                                                                      | ✅ Covered                  |
 
 OWASP's Universal Skill Format embeds `content_hash`, `scan_status`, and `risk_tier` in individual skill files (SKILL.md frontmatter). MOAT's approach puts these in the registry manifest per-item entries instead — more sound architecturally (avoids self-referential hash problem) and consistent with how npm, Cargo, and Go handle this. The information is equivalent; the location differs.
 
@@ -438,51 +534,51 @@ OWASP's Universal Skill Format embeds `content_hash`, `scan_status`, and `risk_t
 
 The single most directly applicable list: MOAT is a domain-specific implementation of these controls for AI content registries.
 
-| OWASP Risk | MOAT Coverage | Status |
-|---|---|---|
-| CICD-SEC-3 — Dependency Chain Abuse | Registry namespace enforcement + verified checksums block confusion/typosquatting + revocation prevents post-distribution persistence of compromised content | ✅ Covered |
-| CICD-SEC-8 — Ungoverned 3rd Party Services | Registry federation trust model; registries declare and vet upstream sources | ⚠️ Partial (not yet specified) |
-| CICD-SEC-9 — Improper Artifact Integrity Validation | Signed manifests + hash pinning + lockfile = the prescribed control per CICD-SEC-9 | ✅ Covered |
+| OWASP Risk                                          | MOAT Coverage                                                                                                                                                | Status                         |
+|-----------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------|
+| CICD-SEC-3 — Dependency Chain Abuse                 | Registry namespace enforcement + verified checksums block confusion/typosquatting + revocation prevents post-distribution persistence of compromised content | ✅ Covered                      |
+| CICD-SEC-8 — Ungoverned 3rd Party Services          | Registry federation trust model; registries declare and vet upstream sources                                                                                 | ⚠️ Partial (not yet specified) |
+| CICD-SEC-9 — Improper Artifact Integrity Validation | Signed manifests + hash pinning + lockfile = the prescribed control per CICD-SEC-9                                                                           | ✅ Covered                      |
 
 ### Top 10 for Agentic Applications (ASI prefix)
 
 ASI04 explicitly names signed manifests + curated registries as the required mitigation — MOAT is the protocol that implements this.
 
-| OWASP Risk | MOAT Coverage | Status |
-|---|---|---|
-| ASI04 — Agentic Supply Chain Vulnerabilities | Signed manifests, curated registry model, hash verification — the directly prescribed answer | ✅ Covered |
-| ASI07 — Insecure Inter-Agent Communication | Out of scope for v1 (runtime communication, not distribution) | — |
-| ASI10 — Rogue Agents | Registry signing establishes verifiable identity; rogue agents cannot impersonate MOAT-signed content | ✅ Covered |
+| OWASP Risk                                   | MOAT Coverage                                                                                         | Status    |
+|----------------------------------------------|-------------------------------------------------------------------------------------------------------|-----------|
+| ASI04 — Agentic Supply Chain Vulnerabilities | Signed manifests, curated registry model, hash verification — the directly prescribed answer          | ✅ Covered |
+| ASI07 — Insecure Inter-Agent Communication   | Out of scope for v1 (runtime communication, not distribution)                                         | —         |
+| ASI10 — Rogue Agents                         | Registry signing establishes verifiable identity; rogue agents cannot impersonate MOAT-signed content | ✅ Covered |
 
 ### OWASP Top 10:2025 (Web Application)
 
 A03 and A08 are the 2025 Top 10's explicit recognition that supply chain and artifact integrity are first-class concerns.
 
-| OWASP Risk | MOAT Coverage | Status |
-|---|---|---|
-| A03:2025 — Software Supply Chain Failures | Signed packages, provenance, attestation — MOAT's core design | ✅ Covered |
-| A04:2025 — Cryptographic Failures | Key management, algorithm selection, certificate lifecycle in signing profiles | ⚠️ Informative only in v1 |
-| A08:2025 — Software or Data Integrity Failures | Content cannot be silently replaced between signing and installation | ✅ Covered |
+| OWASP Risk                                     | MOAT Coverage                                                                  | Status                    |
+|------------------------------------------------|--------------------------------------------------------------------------------|---------------------------|
+| A03:2025 — Software Supply Chain Failures      | Signed packages, provenance, attestation — MOAT's core design                  | ✅ Covered                 |
+| A04:2025 — Cryptographic Failures              | Key management, algorithm selection, certificate lifecycle in signing profiles | ⚠️ Informative only in v1 |
+| A08:2025 — Software or Data Integrity Failures | Content cannot be silently replaced between signing and installation           | ✅ Covered                 |
 
 ### LLM Top 10:2025 (LLM prefix)
 
 LLM03 is the AI-specific restatement of supply chain failure — MOAT is the registry-layer control LLM03 says must exist.
 
-| OWASP Risk | MOAT Coverage | Status |
-|---|---|---|
-| LLM03:2025 — Supply Chain Vulnerabilities | Cryptographic verification + provenance tracking + trusted registry channel | ✅ Covered |
-| LLM04:2025 — Data and Model Poisoning | Provenance chain covers behavioral specs in distributed content | ⚠️ Partial (content-type dependent) |
-| LLM07:2025 — System Prompt Leakage | Out of scope for protocol; referenced in "Sensitive Files" publisher requirement | — |
+| OWASP Risk                                | MOAT Coverage                                                                    | Status                              |
+|-------------------------------------------|----------------------------------------------------------------------------------|-------------------------------------|
+| LLM03:2025 — Supply Chain Vulnerabilities | Cryptographic verification + provenance tracking + trusted registry channel      | ✅ Covered                           |
+| LLM04:2025 — Data and Model Poisoning     | Provenance chain covers behavioral specs in distributed content                  | ⚠️ Partial (content-type dependent) |
+| LLM07:2025 — System Prompt Leakage        | Out of scope for protocol; referenced in "Sensitive Files" publisher requirement | —                                   |
 
 ### API Security Top 10:2023
 
 MOAT's registry HTTP surface is an API; these controls apply to the publish/fetch endpoints.
 
-| OWASP Risk | MOAT Coverage | Status |
-|---|---|---|
-| API2:2023 — Broken Authentication | Publisher and consumer auth is registry implementation concern; spec must define required auth model | ⚠️ Not yet specified |
-| API7:2023 — Server Side Request Forgery | URI validation for external references (upstream registries, CDN mirrors) | ⚠️ Not yet specified |
-| API10:2023 — Unsafe Consumption of APIs | Federation trust: treat upstream registry responses as untrusted input | ⚠️ Not yet specified |
+| OWASP Risk                              | MOAT Coverage                                                                                        | Status               |
+|-----------------------------------------|------------------------------------------------------------------------------------------------------|----------------------|
+| API2:2023 — Broken Authentication       | Publisher and consumer auth is registry implementation concern; spec must define required auth model | ⚠️ Not yet specified |
+| API7:2023 — Server Side Request Forgery | URI validation for external references (upstream registries, CDN mirrors)                            | ⚠️ Not yet specified |
+| API10:2023 — Unsafe Consumption of APIs | Federation trust: treat upstream registry responses as untrusted input                               | ⚠️ Not yet specified |
 
 ---
 
