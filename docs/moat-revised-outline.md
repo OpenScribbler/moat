@@ -290,18 +290,75 @@ For large registries with thousands of content items, the manifest could become 
 **5. Consumer motivation (spec introduction)**
 The spec intro needs to make the value proposition concrete — not "you should verify because security" but "here's what you get and here's what you risk." Security practices only scale when the secure path is lower friction than the insecure path. Best written after protocol design is settled.
 
-**6. `scan_status` in registry manifest entries**
-OWASP AST10 (AST08/AST09) recommends a machine-readable `scan_status` field covering scanner name+version, scan date, and result (`pass`/`fail`/`not_scanned`). MOAT should define a standard structure for this in per-item manifest entries so conforming clients can surface it and users can make trust decisions based on whether a registry scans content. Key design questions: is `scan_status` REQUIRED for conforming registries (raises bar) or OPTIONAL with clients surfacing absence as a visible signal (lower bar, more adoptable)? What scanner names/versions are valid — open list or registry-declared? How stale can a scan be before it loses value (`last_scanned` date)?
+**6. `scan_status` in registry manifest entries** ✅ RESOLVED
 
-**7. `risk_tier` in registry manifest entries**
-OWASP AST10 (AST09/AST10) recommends a `risk_tier` field enabling automated governance without per-skill human review. Proposed levels: `L0` (safe/read-only), `L1` (low — reads config), `L2` (elevated — writes files or makes network requests), `L3` (destructive — shell execution, credential access). Key design questions: who assigns `risk_tier` — the registry (based on scanning/analysis) or the publisher (self-declared, unverified)? Is it normative (clients MUST gate on it) or advisory (clients SHOULD surface it)? How does MOAT define the tier boundaries in a way that's consistent across different content types (skills vs. hooks vs. MCP configs have very different risk profiles)?
+`scan_status` is REQUIRED in the manifest schema, but `result: "not_scanned"` is a valid value. Every entry is parseable; registries that don't scan must say so explicitly rather than omitting the field. This follows the "secure path is visibly tiered" principle — a registry that never scans is legitimate but surfaces as a distinct signal. Aligned with OWASP AST08 (poor scanning), AST04 (insecure metadata), LLM03:2025 (supply chain), and CICD-SEC-9 (artifact integrity validation).
+
+**Structure:**
+```json
+{
+  "scan_status": {
+    "result": "clean" | "findings" | "not_scanned",
+    "scanner": [{ "name": "semgrep", "version": "1.89.0" }],
+    "scanned_at": "2026-04-05T12:00:00Z",
+    "findings_url": "https://..."
+  }
+}
+```
+
+- `scanner` is a structured array of `{name, version}` objects (not a free-form string — avoids `@` parsing ambiguity and lets clients group by scanner name across scan ages). Common case is one entry; chained scanners are expressible.
+- `scanner` and `scanned_at` are required when `result` is `clean` or `findings`; omitted when `result` is `not_scanned`.
+- `findings_url` is optional — only when `result: "findings"` and a public report exists. Clients MUST surface it when present.
+- No normative staleness threshold in v1. `scanned_at` is RFC 3339. Registries SHOULD re-scan on re-attestation and on scanner version bumps. Hard staleness policy is a client/enterprise concern. Spec SHOULD guidance: clients SHOULD surface the delta between `scanned_at` and `attested_at` when it exceeds a client-configured threshold.
+- Scanner names are an open list — no central registry. Registries declare their own scanner selection; users trust the registry, which transitively trusts its scanner choice.
+- Client display should avoid alert fatigue: surfacing `not_scanned` on every install without context hierarchy defeats the signal. This is client UI guidance, not protocol.
+
+**7. `risk_tier` in registry manifest entries** ✅ RESOLVED
+
+`risk_tier` is REQUIRED in the manifest schema, with `not_analyzed` as a valid value. Assigned by registry tooling (independent static analysis), never by publisher self-declaration. Advisory by default — clients MUST parse and SHOULD display prominently at install time; clients MAY gate installs on tier threshold (enterprise policy). Hard MUST-gating at protocol level conflicts with "unsigned content works, it's just labeled." Aligned with OWASP AST09 (no governance), ASI04 (agentic supply chain), LLM04:2025 (data poisoning), and CICD-SEC-9.
+
+**Tier rubric (capability-based, consistent across content types):**
+
+| Tier | Observable capability |
+|---|---|
+| `L0` | Read-only. No shell, no filesystem writes, no network. Pure transformation/advice. |
+| `L1` | Reads user files or config outside its own content dir. No writes, no shell, no network. |
+| `L2` | Writes files outside its content dir, OR makes network requests. No shell, no credential access. |
+| `L3` | Invokes a shell, executes arbitrary commands, or reads/writes credentials (SSH keys, tokens, env vars matching secret patterns). |
+| `not_analyzed` | Registry did not attempt analysis. |
+| `indeterminate` | Registry ran analysis; could not classify conclusively. |
+
+Key decisions:
+- **Registry-assigned, not self-declared.** Publisher declarations (e.g. `permissions` in SKILL.md frontmatter) are companion-spec concerns that registries MAY consult as input, but the manifest field is always the registry's independent claim. Registries MUST NOT accept publisher-asserted lower tiers.
+- **`not_analyzed` vs `indeterminate`** are distinct: `not_analyzed` = never attempted; `indeterminate` = ran analysis, genuinely inconclusive (e.g. MCP config whose risk manifests at connection-time, not content-analysis-time). Clients cannot conflate these — they have different trust implications.
+- **Tier values are normative names with normative definitions.** A registry using `L0`–`L3` MUST follow MOAT's definitions. Clients MUST treat unknown tier strings (e.g. from a future spec version) as `not_analyzed` — fail to uncertainty, not to `L0`. This ensures forward-compat when the rubric evolves.
+- **Ties resolve upward** — content exhibiting both L1 and L3 behaviors is L3. The rubric is about the worst capability the content enables, not the average.
+- **`risk_tier` is per-item, not transitive.** Clients that resolve content dependencies are responsible for computing effective install-time tier as `max(tier of selected content, tier of its declared dependencies)`. Transitivity is a client concern, not a protocol requirement.
+- **The rubric is about capability granted, not strings present.** A skill that *documents* a shell command is not L3; a hook that *executes* one is. False-positive reduction belongs in companion specs (per-content-type analyzer rules). Two registries may disagree at the margin — that's acceptable; the tier is attributed to the registry making the claim.
+- **MCP configs and inert-config types** are an open sub-issue: content whose risk manifests at connection-time rather than content-analysis-time may need companion spec guidance. Registries SHOULD tier such content conservatively pending that spec.
 
 **8. Revocation / denouncement mechanism**
 MOAT currently has no way for a registry to mark content as yanked after attestation. If a skill is discovered to be malicious post-distribution, there is no standard signal conforming clients must check. This is the gap that lets a poisoning incident (like ClawHub Q1 2026) propagate even after discovery. The OWASP AST10 treats revocation as a registry operational procedure, but MOAT should define a standard `denounced` list in the registry manifest (or a separate revocation feed URL) that conforming clients MUST check at install time and optionally on a schedule post-install. Key design questions: is revocation a field in the main manifest (simpler, one fetch) or a separate revocation feed (more scalable for large registries)? What happens to already-installed content when it's denounced — clients MUST warn? MUST block execution? SHOULD prompt re-verification? How does cross-registry revocation work — if Registry A denounces content that Registry B also distributes, does that signal propagate?
 
 ---
 
-## OWASP AST10 Coverage Map
+## OWASP Coverage Map
+
+MOAT is validated against six OWASP standards. Two are critical (direct design space); three are high (adjacent concerns); one is a reference checklist. Note: "Agentic Skills Top 10" (AST prefix) and "Top 10 for Agentic Applications" (ASI prefix) are separate lists from different OWASP working groups.
+
+### Reference Standards
+
+| Priority | List | URL |
+|---|---|---|
+| Critical | OWASP CI/CD Security Top 10 (2022) | https://owasp.org/www-project-top-10-ci-cd-security-risks/ |
+| Critical | OWASP Top 10 for Agentic Applications (2026) | https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/ |
+| High | OWASP Top 10 (2025) | https://owasp.org/Top10/2025/ |
+| High | OWASP LLM Top 10 (2025) | https://owasp.org/www-project-top-10-for-large-language-model-applications/ |
+| High | OWASP Agentic Skills Top 10 (2026) | https://github.com/OWASP/www-project-agentic-skills-top-10 |
+| Medium | OWASP API Security Top 10 (2023) | https://owasp.org/www-project-api-security/ |
+| Reference | OWASP Software Component Verification Standard | https://scvs.owasp.org |
+
+### Agentic Skills Top 10 (AST prefix)
 
 OWASP Agentic Skills Top 10 (v1.0, 2026) maps to MOAT as follows:
 
@@ -314,11 +371,61 @@ OWASP Agentic Skills Top 10 (v1.0, 2026) maps to MOAT as follows:
 | AST05 — Unsafe Deserialization | Out of scope (client implementation concern) | — |
 | AST06 — Weak Isolation | Out of scope (runtime concern) | — |
 | AST07 — Update Drift | Content hash + lockfile model catches drift | ✅ Covered |
-| AST08 — Poor Scanning | `scan_status` field in manifest entries | ⚠️ Open issue #6 |
-| AST09 — No Governance | `risk_tier` + `scan_status` in manifest | ⚠️ Open issue #7 |
+| AST08 — Poor Scanning | `scan_status` REQUIRED in manifest (result: not_scanned valid); structured scanner array with scanned_at | ✅ Covered |
+| AST09 — No Governance | `risk_tier` REQUIRED in manifest (L0–L3 + not_analyzed + indeterminate); registry-assigned, advisory | ✅ Covered |
 | AST10 — Cross-Platform Reuse | MOAT is platform-agnostic by design | ✅ Covered |
 
 OWASP's Universal Skill Format embeds `content_hash`, `scan_status`, and `risk_tier` in individual skill files (SKILL.md frontmatter). MOAT's approach puts these in the registry manifest per-item entries instead — more sound architecturally (avoids self-referential hash problem) and consistent with how npm, Cargo, and Go handle this. The information is equivalent; the location differs.
+
+### CI/CD Security Top 10 (CICD-SEC prefix)
+
+The single most directly applicable list: MOAT is a domain-specific implementation of these controls for AI content registries.
+
+| OWASP Risk | MOAT Coverage | Status |
+|---|---|---|
+| CICD-SEC-3 — Dependency Chain Abuse | Registry namespace enforcement + verified checksums block confusion/typosquatting | ✅ Covered |
+| CICD-SEC-8 — Ungoverned 3rd Party Services | Registry federation trust model; registries declare and vet upstream sources | ⚠️ Partial (not yet specified) |
+| CICD-SEC-9 — Improper Artifact Integrity Validation | Signed manifests + hash pinning + lockfile = the prescribed control per CICD-SEC-9 | ✅ Covered |
+
+### Top 10 for Agentic Applications (ASI prefix)
+
+ASI04 explicitly names signed manifests + curated registries as the required mitigation — MOAT is the protocol that implements this.
+
+| OWASP Risk | MOAT Coverage | Status |
+|---|---|---|
+| ASI04 — Agentic Supply Chain Vulnerabilities | Signed manifests, curated registry model, hash verification — the directly prescribed answer | ✅ Covered |
+| ASI07 — Insecure Inter-Agent Communication | Out of scope for v1 (runtime communication, not distribution) | — |
+| ASI10 — Rogue Agents | Registry signing establishes verifiable identity; rogue agents cannot impersonate MOAT-signed content | ✅ Covered |
+
+### OWASP Top 10:2025 (Web Application)
+
+A03 and A08 are the 2025 Top 10's explicit recognition that supply chain and artifact integrity are first-class concerns.
+
+| OWASP Risk | MOAT Coverage | Status |
+|---|---|---|
+| A03:2025 — Software Supply Chain Failures | Signed packages, provenance, attestation — MOAT's core design | ✅ Covered |
+| A04:2025 — Cryptographic Failures | Key management, algorithm selection, certificate lifecycle in signing profiles | ⚠️ Informative only in v1 |
+| A08:2025 — Software or Data Integrity Failures | Content cannot be silently replaced between signing and installation | ✅ Covered |
+
+### LLM Top 10:2025 (LLM prefix)
+
+LLM03 is the AI-specific restatement of supply chain failure — MOAT is the registry-layer control LLM03 says must exist.
+
+| OWASP Risk | MOAT Coverage | Status |
+|---|---|---|
+| LLM03:2025 — Supply Chain Vulnerabilities | Cryptographic verification + provenance tracking + trusted registry channel | ✅ Covered |
+| LLM04:2025 — Data and Model Poisoning | Provenance chain covers behavioral specs in distributed content | ⚠️ Partial (content-type dependent) |
+| LLM07:2025 — System Prompt Leakage | Out of scope for protocol; referenced in "Sensitive Files" publisher requirement | — |
+
+### API Security Top 10:2023
+
+MOAT's registry HTTP surface is an API; these controls apply to the publish/fetch endpoints.
+
+| OWASP Risk | MOAT Coverage | Status |
+|---|---|---|
+| API2:2023 — Broken Authentication | Publisher and consumer auth is registry implementation concern; spec must define required auth model | ⚠️ Not yet specified |
+| API7:2023 — Server Side Request Forgery | URI validation for external references (upstream registries, CDN mirrors) | ⚠️ Not yet specified |
+| API10:2023 — Unsafe Consumption of APIs | Federation trust: treat upstream registry responses as untrusted input | ⚠️ Not yet specified |
 
 ---
 
