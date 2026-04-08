@@ -2,7 +2,6 @@
 
 **Status:** Working design document — v0.4.0
 **Sub-specs:** [`specs/publisher-action.md`](../specs/publisher-action.md), [`specs/moat-verify.md`](../specs/moat-verify.md)
-**Decisions:** [`docs/decisions/resolved.md`](decisions/resolved.md)
 **OWASP alignment:** [`docs/owasp-alignment.md`](owasp-alignment.md)
 **Author:** Holden Hewett
 **Date:** 2026-04-06
@@ -271,8 +270,8 @@ item — such files have no protocol meaning and their presence is a conformance
 ### Content Hashing
 
 The content hash identifies a content directory by canonical byte sequence using the normative `moat_hash.py` reference
-implementation. Resolved normalization rules, exclusion rules, and conformance expectations are archived in
-[`docs/decisions/resolved.md`](decisions/resolved.md).
+implementation. Resolved normalization rules, exclusion rules, and conformance expectations are defined by the
+reference implementation and its test vectors.
 
 ### Trust Anchor Model
 
@@ -373,14 +372,18 @@ implement exactly these.
 - **Signature envelope format** — platform-agnostic signing model.
 - **Trust tier model** — Dual-Attested / Signed / Unsigned. Absence of Dual-Attested is NOT a negative signal.
 - **Client verification protocol** — what a conforming client must check on install.
-- **Revocation mechanism** — `revocations` array in manifest (REQUIRED; empty if none), four reason values, client
-  behavior rules. Normative client behavior when syncing a manifest update that adds a revocation entry for
-  already-installed content:
+- **Revocation mechanism** — `revocations` array in manifest (REQUIRED; empty if none). Each entry MUST include:
+  `content_hash`, `reason`, and `details_url` (REQUIRED for registry revocations; OPTIONAL for publisher
+  revocations). Reason values (informational only — they do NOT determine client behavior): `malicious`,
+  `compromised`, `deprecated`, `policy_violation`. Unknown future reason values MUST be accepted without error.
+
+  **Client behavior is determined by revocation source, not reason code.** Normative behavior when syncing a
+  manifest update that adds a revocation entry for already-installed content:
 
   | Revocation source | Required client behavior                                                                                                                                                                                                                                                                                                                       |
   |-------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-  | Registry          | MUST hard-block all use of that content. Client refuses to load or execute the item. MUST present the revocation reason and the registry that issued the revocation to the End User. Block is in effect until the End User explicitly removes the content or installs a non-revoked version. The revoked content hash MUST be added to `revoked_hashes` in the lockfile — see lockfile specification above. |
-  | Publisher         | MUST present the revocation reason and the registry that issued the revocation to the End User. MUST warn once per client session, recurring after any client restart. MAY allow use with explicit End User confirmation. MUST NOT silently continue.                                                                                            |
+  | Registry          | MUST hard-block all use of that content. Client refuses to load or execute the item. MUST present the reason, the `details_url` if present, and the registry that issued the revocation to the End User. Block is in effect until the End User explicitly removes the content or installs a non-revoked version. The revoked content hash MUST be added to `revoked_hashes` in the lockfile — see lockfile specification above. |
+  | Publisher         | MUST present the reason, the `details_url` if present, and the registry that surfaced the revocation to the End User. MUST warn once per client session, recurring after any client restart. MAY allow use with explicit End User confirmation. MUST NOT silently continue.                                                                     |
 
   All conforming clients MUST, regardless of environment: exit with a non-zero exit code when revoked content is
   encountered, and write to stderr the content item name as recorded in the lockfile, the revocation reason, and the
@@ -483,7 +486,6 @@ That creates a de facto trust root for discovery and therefore needs explicit go
 
 ## Open Issues
 
-Resolved decisions are archived in [`docs/decisions/resolved.md`](decisions/resolved.md).
 
 ~~**Issue 4: Registry manifest size and pagination**~~ **Resolved.** No pagination in v1. Registries serving large
 catalogs should split into sub-registries. Pagination support is a MAY for future spec versions and client
@@ -529,11 +531,12 @@ spec is finalized.
 subject-pattern check. The spec needs to decide which claims are authoritative and whether stable IDs should be
 preferred over mutable names.
 
-**Issue 20: Binary revocation states (REVOKED / YANKED)** Third-party feedback proposes collapsing the four revocation
-reason codes (`malicious`, `compromised`, `deprecated`, `policy_violation`) into two machine-actionable states:
-`REVOKED` (hard block) and `YANKED` (warn, allow). The current four-code model preserves more human context, but the
-client behavior is already effectively binary. Decision needed: keep the taxonomy, or collapse to states plus a
-mandatory `details_url`.
+~~**Issue 20: Binary revocation states (REVOKED / YANKED)**~~ **Resolved.** Client behavior is determined by
+revocation source (registry = hard block, publisher = warn), not by reason code. The four reason codes
+(`malicious`, `compromised`, `deprecated`, `policy_violation`) are informational — they carry urgency signal for
+security operators and End Users but do not change client enforcement behavior. `details_url` added as REQUIRED
+for registry revocations. Collapsing to REVOKED/YANKED would discard useful urgency signal without simplifying
+client implementation.
 
 **Issue 21: Threat feeds vs cross-registry revocation** Third-party feedback argues that any trusted registry being able
 to warn about content from another registry creates trust bleeding and DoS potential. The proposed alternative is a
