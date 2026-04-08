@@ -321,10 +321,8 @@ that MOAT v1 targets.
 
 ### Signature Envelope
 
-The core spec defines a platform-agnostic signing envelope. Informative profiles currently include:
-
-- `sigstore` for keyless OIDC signing via Fulcio/Rekor
-- `ssh` for operator-managed signing
+The core spec defines a platform-agnostic signing envelope. The normative signing profile for v1 is `sigstore`
+— keyless OIDC signing via Fulcio/Rekor.
 
 ---
 
@@ -483,7 +481,6 @@ implement exactly these.
 ### Informative profiles
 
 - **Sigstore profile** — keyless OIDC signing via Fulcio/Rekor.
-- **SSH profile** — SSH key signing for individual operators.
 
 ---
 
@@ -606,10 +603,10 @@ intentional — MOAT's model is registry-side crawling of source content, not pu
 creator-side packaging tooling in a future version, archive hashing should be reconsidered at that point.
 Deferred to v2.
 
-**Issue 23: SSH profile retention vs CI-only mandate** Third-party feedback recommends removing the SSH signing profile
-and making CI-backed signing the only path to a Signed tier. That would raise the trust floor but also raise adoption
-friction. Decision needed: whether SSH remains an informative profile, disappears entirely, or survives with a visibly
-lower trust signal than CI-backed keyless signing.
+~~**Issue 23: SSH profile retention vs CI-only mandate**~~ **Resolved.** SSH signing removed from the spec
+entirely. Sigstore keyless OIDC is the only signing profile in v1. SSH key distribution is an unsolved
+problem — no reliable mechanism exists to distribute and trust SSH public keys at ecosystem scale — and
+air-gapped or private registry operators can satisfy the signing requirement with a private Rekor instance.
 
 ~~**Issue 24: Runtime dependency scope**~~ **Resolved.** Scope Boundary section now includes an explicit runtime
 dependency disclaimer. Conforming clients SHOULD surface the boundary at install time; companion specs MAY require
