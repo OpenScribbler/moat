@@ -320,7 +320,7 @@ Suspicious provenance (content hash exists in Rekor under a different identity w
 
 ### Reference implementations (normative)
 - **`moat_hash.py`** — Python reference implementation of the content hashing algorithm. A conforming implementation is one that produces identical output to this script for all test vectors. Ships with the spec. Two independent implementations in different languages must pass all test vectors before the spec advances beyond Draft.
-- **`moat-verify`** — Standalone verification script (Python or TypeScript). Takes a content directory and a trusted registry URL; verifies content hash, registry Rekor attestation, and optionally publisher Rekor attestation. Prints a human-readable trust report. Required behavior: if Rekor is unreachable, fail explicitly — never silently pass. Output MUST state what was not checked. Enables any user to verify any MOAT-attested content without depending on a specific client implementation.
+- **`moat-verify`** — Standalone verification script (Python 3.9+). Takes a content directory and a trusted registry URL; verifies content hash, registry Rekor attestation, and optionally publisher Rekor attestation. Prints a human-readable trust report. Required behavior: if Rekor is unreachable, fail explicitly — never silently pass. Output MUST state what was not checked. Enables any user to verify any MOAT-attested content without depending on a specific client implementation.
 - **Publisher Action** (`moat-spec/publisher-action@v1`) — GitHub Actions workflow for source repos. Normatively specified; any content signed by a conforming Publisher Action is verifiable by any conforming client. Produces the `Dual-Attested` tier when combined with registry signing.
 
 ### Publisher Action specification
@@ -419,6 +419,214 @@ Transport auth and content proof are intentionally separate. A spoofed webhook w
 Registries MUST verify both layers before processing a webhook payload. Registries SHOULD rate-limit webhook calls per source identity and flag anomalous revocation volumes (more than N revocations in a rolling window signals possible account compromise).
 
 **v1 scope:** GitHub Actions only. GitLab CI is a v1.1 target.
+
+### moat-verify specification
+
+`moat-verify` is a standalone verification tool that allows any user to verify MOAT-attested content without depending on a specific client implementation. It makes the trust model auditable end-to-end.
+
+**Language and dependencies:**
+- Python 3.9+ (consistent with `moat_hash.py`; both ship together as spec artifacts)
+- `moat_hash.py` imported as a module — no duplicated hashing logic
+- `cosign` CLI on PATH — used for Rekor entry verification
+- No third-party Python packages beyond the above (stdlib only)
+
+---
+
+**Interface:**
+
+```
+moat-verify <directory> --registry <url> [--source <uri>] [--json]
+```
+
+Arguments:
+- `<directory>` — Required positional. Path to the content directory to verify.
+- `--registry <url>` — Required. Base URL of the registry to verify against (e.g., `https://registry.moatspec.org`). The user decides which registries to trust by providing this URL — `moat-verify` does not evaluate registry trustworthiness.
+- `--source <uri>` — Optional. Source repository URI for publisher co-attestation (e.g., `https://github.com/alice/my-skills`). When provided, also verifies the publisher CI Rekor attestation. When absent, publisher tier is reported as `NOT REQUESTED` — this is not a failure.
+- `--json` — Optional. Emit machine-readable JSON to stdout (schema below) in addition to the human-readable report.
+
+**Exit codes:**
+- `0` — All requested verifications passed
+- `1` — Verification failed (hash not in manifest, Rekor entry invalid, Rekor unreachable, content hash mismatch)
+- `2` — Input or protocol error (directory not found, invalid arguments, registry unreachable, malformed manifest)
+
+---
+
+**Verification steps:**
+
+**Step 1: Compute content hash**
+
+Apply the MOAT content hashing algorithm (normative reference: `moat_hash.py::content_hash()`) to `<directory>`. Uses the exact same algorithm as registry ingestion — no separate hash computation logic.
+
+Fail with exit code 2 if: directory does not exist or is not a directory; directory contains symlinks; directory is empty after VCS directory exclusion.
+
+Output: `Content hash: sha256:<hex>`
+
+**Step 2: Fetch registry manifest**
+
+GET `<registry-url>/manifest.json`. The manifest MUST be valid JSON with a `schema_version` field.
+
+Fail with exit code 2 if: registry is unreachable (TCP timeout, DNS failure); HTTP status is not 200; response is not valid JSON; `schema_version` is unknown to this version of `moat-verify`.
+
+**Step 3: Look up content hash**
+
+Search the manifest `items` array for an entry whose `content_hash` equals the hash from Step 1.
+
+Fail with exit code 1 if no match:
+```
+[✗] Hash not found in registry manifest
+    Computed: sha256:<hex>
+    Registry: <url>
+```
+
+If found, output:
+```
+[✓] Hash found in registry manifest
+    Name:    <item-name>
+    Version: <version or "unset">
+    Type:    <item-type>
+```
+
+**Step 4: Verify registry Rekor attestation**
+
+Read `attestation.rekor_log_id` from the matching manifest item. This is the Rekor entry for the registry's signing of this content.
+
+Fetch entry: GET `https://rekor.sigstore.dev/api/v1/log/entries/<rekor-log-id>`
+
+**Rekor unavailability MUST produce an explicit failure — never a silent pass.** If Rekor is unreachable (TCP error, DNS failure, timeout), fail with exit code 1:
+```
+[✗] Cannot verify Rekor attestation — transparency log unreachable
+    Rekor URL: https://rekor.sigstore.dev
+    This is a hard failure. moat-verify will never pass without Rekor verification.
+```
+
+Fail with exit code 1 if: entry not found (HTTP 404); entry body is malformed.
+
+Verify the entry:
+1. Extract the payload hash from the entry. Compare to the computed content hash. Fail if they do not match — this means the Rekor entry does not attest to this content.
+2. Verify the entry's signature against the embedded certificate using `cosign verify-blob` (or equivalent). Fail if verification fails.
+3. Extract the signing identity (certificate subject) from the verified certificate.
+
+Output:
+```
+[✓] Registry Rekor attestation verified
+    Log ID:    <rekor-log-id>
+    Log Index: <index>
+    Signer:    <certificate-subject>
+```
+
+**Step 5: Publisher attestation (conditional on `--source`)**
+
+If `--source` was not provided, skip this step and output:
+```
+Publisher attestation: NOT REQUESTED
+(Pass --source <uri> to verify publisher CI attestation)
+```
+
+If `--source <uri>` was provided:
+
+Fetch `<source-uri>/raw/main/moat-attestation.json`. The source URI MUST be a GitHub repository URL for this version of `moat-verify` (GitLab CI support is a v1.1 target, matching Publisher Action scope).
+
+Fail with exit code 1 if: source URI is unreachable; `moat-attestation.json` is missing (HTTP 404) or malformed.
+
+Search `moat-attestation.json` items for an entry whose `content_hash` matches Step 1. Fail with exit code 1 if no match — this means the publisher has not attested this content hash.
+
+Extract `rekor_log_id` from the matching publisher entry. Fetch and cryptographically verify the Rekor entry using the same procedure as Step 4, with one additional check:
+
+Verify that the certificate OIDC issuer is `https://token.actions.githubusercontent.com` and the certificate subject matches:
+```
+https://github.com/<owner>/<repo>/.github/workflows/moat.yml@refs/heads/<branch>
+```
+where `<owner>/<repo>` is derived from the `--source` URI.
+
+**moat-verify MUST report the actual OIDC identity found — it MUST NOT decide whether this identity is the "legitimate" owner of the source repository.** That decision belongs to the user.
+
+Output:
+```
+[✓] Publisher Rekor attestation verified
+    Log ID:        <rekor-log-id>
+    Log Index:     <index>
+    OIDC Identity: https://github.com/alice/my-skills/.github/workflows/moat.yml@refs/heads/main
+```
+
+---
+
+**Trust result:**
+
+After all steps, determine and report the result:
+
+| Conditions | Result |
+|---|---|
+| Step 4 passed, Step 5 `NOT REQUESTED` | `SIGNED` |
+| Steps 4 and 5 both passed | `DUAL-ATTESTED` |
+| Any step failed | `FAILED` |
+
+```
+RESULT: SIGNED ✓
+```
+or
+```
+RESULT: DUAL-ATTESTED ✓
+```
+or
+```
+RESULT: FAILED ✗
+    Reason: <first failure message>
+```
+
+---
+
+**Required "NOT verified" block:**
+
+At the end of every run — including failures — `moat-verify` MUST output:
+
+```
+What this script did NOT verify:
+  - Whether the registry at <url> is one you should trust
+  - Whether the registry signing identity is the legitimate operator of this registry
+  - Whether the publisher OIDC identity is the legitimate owner of this source repository
+  - Content safety, malicious behavior, or sandbox escape
+```
+
+Implementations that omit this block do not conform. The block is not optional. Its purpose is to prevent users from mistaking cryptographic verification for a safety guarantee.
+
+---
+
+**JSON output (`--json`):**
+
+When `--json` is specified, emit to stdout after the human-readable report:
+
+```json
+{
+  "schema_version": "1",
+  "content_hash": "sha256:abc123...",
+  "registry": "https://registry.example.com",
+  "result": "SIGNED",
+  "steps": {
+    "hash_computed": true,
+    "manifest_fetched": true,
+    "hash_found_in_manifest": true,
+    "registry_rekor_verified": true,
+    "publisher_rekor_verified": null
+  },
+  "registry_attestation": {
+    "rekor_log_id": "24296fb24b8ad77a...",
+    "rekor_log_index": 12345678,
+    "signer": "did:web:registry.example.com"
+  },
+  "publisher_attestation": null,
+  "not_verified": [
+    "registry trustworthiness",
+    "registry signing identity legitimacy",
+    "publisher OIDC identity ownership",
+    "content safety"
+  ],
+  "error": null
+}
+```
+
+`steps` values: `true` = passed, `false` = failed, `null` = not attempted (step skipped or earlier step failed). `publisher_rekor_verified` is `null` when `--source` was not provided.
+
+---
 
 ### Reference tooling (informative)
 - **Registry Action** — CI job template for running a registry.
