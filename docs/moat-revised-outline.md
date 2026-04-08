@@ -39,6 +39,11 @@ MOAT does NOT define:
 
 MOAT involves six distinct actors. They are not interchangeable.
 
+**End User**
+The human who chooses which registries to trust and who approves installs or use of content through a conforming
+client. MOAT requires clients to surface trust tier, `risk_tier`, and revocation state clearly so the End User can
+make an informed decision.
+
 **Publisher**
 Creates content and keeps it in a source repository. A publisher may adopt the Publisher Action to produce
 source-side attestations, but MOAT does not require the publisher to run a registry or implement client behavior.
@@ -53,11 +58,6 @@ The install and management tool that implements MOAT's normative client behavior
 manifests, verifies signatures and content hashes, maintains a lockfile, checks revocations, and surfaces trust
 signals before install or use. A conforming client is not an AI agent runtime.
 
-**End User**
-The human who chooses which registries to trust and who approves installs or use of content through a conforming
-client. MOAT requires clients to surface trust tier, `risk_tier`, and revocation state clearly so the End User can
-make an informed decision.
-
 **AI Agent Runtime**
 A system such as Claude Code, Gemini, Cursor, or Windsurf that loads or executes content after installation. AI
 agent runtimes are outside the MOAT protocol boundary. MOAT does not define runtime behavior, sandboxing,
@@ -69,20 +69,30 @@ install, manage, or execute content. It is therefore not a conforming client and
 
 ### Use Cases
 
-**End User:** Wants to know what registry attested a content item, whether it has been tampered with, what risk signal
-the registry assigned, and whether the item has been revoked before confirming install or use.
+**End User**
+Chooses which registries to trust and decides whether to install, load, or remove content based on the trust tier,
+`risk_tier`, and revocation state surfaced by a conforming client. This includes individual users and team or
+enterprise administrators enforcing local policy.
 
-**Team or enterprise administrator:** Uses a conforming client to lock approved content hashes, enforce policy
-thresholds, and control which registries are trusted inside an organization.
+**Publisher**
+Wants accurate source attribution, visible lineage for forks, and an optional low-friction way to co-attest content
+from the source repository.
 
-**Registry Operator:** Publishes a curated catalog with verifiable registry attestations that any conforming client can
+**Registry Operator**
+Publishes a curated catalog with verifiable registry attestations that any conforming client can
 consume.
 
-**Publisher:** Wants accurate source attribution, visible lineage for forks, and an optional low-friction way to
-co-attest content from the source repository.
+**Conforming Client**
+Implements install-time and sync-time protocol behavior: fetch manifest, verify signatures and hashes, maintain a
+lockfile, surface trust signals, and enforce revocation behavior consistently for the End User.
 
-**Tool builder:** Implements a conforming client that can fetch manifests, verify content, maintain lockfiles, and
-surface trust decisions consistently across environments.
+**AI Agent Runtime**
+Loads or executes already-installed content after a conforming client has completed verification and placement. It
+appears here to make the boundary explicit: MOAT intentionally defines no runtime behavior for it.
+
+**moat-verify**
+Lets any reader independently audit the trust chain for a specific content item without installing or executing it.
+Its use case is diagnosis, validation, and interoperability testing rather than installation or runtime management.
 
 ---
 
