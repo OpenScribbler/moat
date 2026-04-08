@@ -323,102 +323,19 @@ Suspicious provenance (content hash exists in Rekor under a different identity w
 - **`moat-verify`** — Standalone verification script (Python 3.9+). Takes a content directory and a trusted registry URL; verifies content hash, registry Rekor attestation, and optionally publisher Rekor attestation. Prints a human-readable trust report. Required behavior: if Rekor is unreachable, fail explicitly — never silently pass. Output MUST state what was not checked. Enables any user to verify any MOAT-attested content without depending on a specific client implementation.
 - **Publisher Action** (`moat-spec/publisher-action@v1`) — GitHub Actions workflow for source repos. Normatively specified; any content signed by a conforming Publisher Action is verifiable by any conforming client. Produces the `Dual-Attested` tier when combined with registry signing.
 
-### Publisher Action specification
+### Publisher Action
 
-The Publisher Action is the primary adoption mechanism for the `Dual-Attested` tier. Any source repo adopts it with a single workflow file — no key management, no MOAT-specific knowledge required beyond adding the workflow.
+The Publisher Action is the primary adoption mechanism for the `Dual-Attested` tier. Any source repo adds a single workflow file — no key management, no MOAT-specific knowledge required.
 
-**What it does on push:**
-1. Discovers content items via two-tier model: canonical category directories (`skills/`, `agents/`, `rules/`, `commands/`) or `moat.yml` manifest if present
-2. Computes content hashes using the MOAT algorithm (`moat_hash.py`). Errors (symlinks, empty directories) skip the item with a logged warning.
-3. Builds one attestation payload JSON per content item (schema below)
-4. Signs each payload with `cosign sign-blob` using Sigstore keyless OIDC — GitHub Actions provides the OIDC token automatically via `$ACTIONS_ID_TOKEN_REQUEST_URL`. No keys, no secrets required.
-5. Rekor creates a transparency log entry. `cosign` returns a bundle file containing `logID` and `logIndex`.
-6. Writes/updates `moat-attestation.json` at repo root with the Rekor references for each attested item
-7. Commits `moat-attestation.json` back to the repo with commit message `chore(moat): update attestation [skip ci]`
-8. If `registry-webhook` is configured, POSTs a signed notification payload to the webhook URL
+On push, it discovers content items, computes content hashes, signs each with `cosign sign-blob` via Sigstore keyless OIDC, and writes `moat-attestation.json` to the repo root with Rekor references. The commit is guarded against triggering recursive runs.
 
-**Attestation payload schema (normative):**
+`moat-attestation.json` MUST be excluded from content hashing — including it creates a circular dependency.
 
-Each content item produces one payload file. This is what gets signed and recorded in Rekor.
+Publisher revocation is also handled by this action: adding a revocation entry and triggering the action posts a signed Rekor revocation entry and optionally notifies the registry. Publisher revocations are **warnings, not hard blocks** — the registry is the gating authority.
 
-```json
-{
-  "_type": "https://moatspec.org/attestation/v1",
-  "item_name": "summarizer-skill",
-  "item_type": "skill",
-  "content_hash": "sha256:abc123...",
-  "source_uri": "https://github.com/alice/my-skills",
-  "source_ref": "abc123def456...",
-  "attested_at": "2026-04-07T14:00:00Z"
-}
-```
+Webhook support is optional and passive by default; the action signs and stops, with registries discovering attestations on their own crawl cycle.
 
-Field definitions:
-- `_type` — URI identifying this as a MOAT attestation payload. Versioned with the schema version.
-- `item_name` — the content item's `name` field (basename of the content directory, or `name` from `moat.yml`)
-- `item_type` — one of the normative content type identifiers: `skill`, `subagent`, `rules`, `command`
-- `content_hash` — the MOAT content hash of the directory, in `<alg>:<hex>` format
-- `source_uri` — the source repository URI (`https://github.com/$GITHUB_REPOSITORY`)
-- `source_ref` — the full commit SHA that triggered the workflow (`$GITHUB_SHA`). Immutable reference to the exact tree that was hashed. Branch name is intentionally excluded — branch refs drift; commit SHAs do not.
-- `attested_at` — ISO 8601 UTC timestamp of when the action signed
-
-**Rekor entry:** `cosign sign-blob` creates a `hashedrekord` entry containing the hash of the payload JSON, the signature, and the OIDC certificate. The certificate subject encodes the GitHub Actions OIDC identity:
-```
-https://github.com/{owner}/{repo}/.github/workflows/moat.yml@refs/heads/main
-```
-
-This identity is what registries and `moat-verify` use to verify that the attestation came from a legitimate Publisher Action run on the claimed source repository — not from an arbitrary signer.
-
-**Revocation mode:** The action also supports revocation. Publisher adds an entry to `moat-attestation.json` revocations and triggers the action; it posts a signed Rekor revocation entry and optionally notifies the registry via webhook.
-
-**`moat-attestation.json`** (normative format):
-```json
-{
-  "schema_version": "1",
-  "attested_at": "2026-04-07T14:00:00Z",
-  "items": [
-    {
-      "name": "summarizer-skill",
-      "content_hash": "sha256:abc123...",
-      "rekor_log_id": "24296fb24b8ad77a...",
-      "rekor_log_index": 12345678
-    }
-  ],
-  "revocations": []
-}
-```
-
-Location: repo root. One file per repo. MUST be excluded from content hashing (see canonicalization rules).
-
-**Bootstrapping:** The action commits `moat-attestation.json` back to the repo. GitHub Actions using `GITHUB_TOKEN` do not trigger other workflow runs by default, preventing infinite loops. The action MUST include an explicit guard against re-runs triggered by its own commits.
-
-**Badge integration:**
-```markdown
-![MOAT Dual-Attested](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/{owner}/{repo}/main/moat-attestation.json)
-```
-
-Badge asserts per-hash attestation status (not just CI pass/fail). Clients can read `moat-attestation.json` directly to verify specific content hashes without depending on the badge service.
-
-**Webhook (hybrid — passive by default, optional active):**
-
-The action is passive by default — it signs and stops. Registries discover attestations on their own crawl cycle. For fast propagation, publishers can configure an optional webhook URL:
-
-```yaml
-uses: moat-spec/publisher-action@v1
-with:
-  registry-webhook: ${{ secrets.MOAT_REGISTRY_WEBHOOK }}  # optional
-```
-
-The webhook channel carries both attestation and revocation notifications. Two-layer security model:
-
-- **Transport auth (HMAC-SHA256):** The Publisher Action signs the webhook payload with a shared secret (`registry-webhook` contains the URL and secret). Registries verify the `X-MOAT-Signature-256` header before processing. This authenticates the sender — "this request came from the publisher who configured the action."
-- **Content proof (Rekor):** The webhook payload contains Rekor `logID` and `logIndex` references. Registries independently verify the attestation via Rekor. This authenticates the content — "this content hash is actually recorded in a transparency log under the claimed OIDC identity."
-
-Transport auth and content proof are intentionally separate. A spoofed webhook with a valid HMAC but no matching Rekor entry fails content verification. A Rekor entry without a valid webhook signature is ignored (passive discovery path handles it on the next crawl cycle).
-
-Registries MUST verify both layers before processing a webhook payload. Registries SHOULD rate-limit webhook calls per source identity and flag anomalous revocation volumes (more than N revocations in a rolling window signals possible account compromise).
-
-**v1 scope:** GitHub Actions only. GitLab CI is a v1.1 target.
+**Full specification:** `specs/publisher-action.md`
 
 ### moat-verify specification
 
