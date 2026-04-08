@@ -376,7 +376,8 @@ implement exactly these.
   directory names, and deferred types (`hook`, `mcp`).
 - **Repository layout convention** — canonical directory structure and two-tier discovery model (`moat.yml` override).
 - **Registry manifest format** — the signed document a registry publishes. The core artifact of MOAT. Per-item entries:
-  `name`, `display_name`, `content_hash`, `source_uri`, `attested_at`, `derived_from`, `scan_status`.
+  `name`, `display_name`, `content_hash`, `source_uri`, `attested_at`, `derived_from`, `scan_status`, and
+  `signing_profile` (REQUIRED for Dual-Attested items; omitted for Signed and Unsigned).
 - **Content hashing algorithm** — deterministic, one-pass, Go dirhash-inspired. Defined by normative reference
   implementation (`moat_hash.py`), not pseudocode.
 - **Hash format** — `<algorithm>:<hex>` with no length constraints.
@@ -387,6 +388,39 @@ implement exactly these.
   unrecognized algorithm MUST refuse to verify rather than silently pass.
 - **Signature envelope format** — platform-agnostic signing model.
 - **Trust tier model** — Dual-Attested / Signed / Unsigned. Absence of Dual-Attested is NOT a negative signal.
+- **Publisher signing identity model** — For Dual-Attested items, the registry manifest entry MUST include a
+  `signing_profile` field declaring the publisher's expected CI signing identity:
+
+  ```json
+  { "issuer": "https://token.actions.githubusercontent.com", "subject": "repo:owner/repo:ref:refs/heads/main" }
+  ```
+
+  Signing identity is expressed as an OIDC issuer URL and subject claim — the values captured in the
+  Rekor/Fulcio certificate at signing time. This model is provider-agnostic; any CI platform with OIDC support
+  produces these fields. Registries populate `signing_profile` from the publisher's `moat-attestation.json`
+  when indexing a Dual-Attested item. Conforming clients MUST verify that the Rekor certificate's OIDC issuer
+  and subject match the declared `signing_profile`. This check is load-bearing for the Dual-Attested tier —
+  without it there is no interoperability guarantee that clients are verifying the correct publisher identity.
+
+  **Risk note:** OIDC subjects derived from repository names are vulnerable to rename attacks. If a publisher
+  renames their repository, the subject claim changes, and an attacker who claims the old name could produce
+  matching attestations. Stable numeric ID claims (`repository_id` on GitHub Actions, `project_id` on GitLab)
+  avoid this problem, but verification against numeric IDs requires tooling support beyond standard `cosign`
+  flags. This is a known limitation of the v1 Dual-Attested verification model.
+
+  *Informative — known CI provider signing profiles:*
+
+  | Provider | Issuer | Subject format |
+  |----------|--------|----------------|
+  | GitHub Actions | `https://token.actions.githubusercontent.com` | `repo:{owner}/{repo}:ref:refs/heads/{branch}` |
+  | GitLab CI | `https://gitlab.com` | `project_path:{namespace}/{project}:ref_type:branch:ref:{branch}` |
+
+  Other providers with OIDC support: the issuer is the provider's OIDC endpoint URL; the subject format is
+  provider-defined. Consult the provider's OIDC documentation. Providers are added to this table when their
+  subject format is verified against a working Sigstore implementation. Forgejo/Codeberg Actions OIDC support
+  is not yet shipped as of this writing; the table will be updated when a production implementation is
+  available.
+
 - **Client verification protocol** — what a conforming client must check on install.
 - **Revocation mechanism** — `revocations` array in manifest (REQUIRED; empty if none). Each entry MUST include:
   `content_hash`, `reason`, and `details_url` (REQUIRED for registry revocations; OPTIONAL for publisher
@@ -545,9 +579,11 @@ Verification of Signed content depends on Rekor availability." The distinction i
 churn and policy friction. The alternative of bundles or release artifacts needs evaluation before the Publisher Action
 spec is finalized.
 
-**Issue 19: GitHub identity verification claims** GitHub exposes richer OIDC claims than the current simple
-subject-pattern check. The spec needs to decide which claims are authoritative and whether stable IDs should be
-preferred over mutable names.
+~~**Issue 19: GitHub identity verification claims**~~ **Resolved.** Signing identity is expressed as OIDC issuer
++ subject — provider-agnostic. `signing_profile` added as REQUIRED on Dual-Attested manifest items; conforming
+clients MUST verify Rekor certificate issuer and subject match it. Mutable-name rename risk documented as a
+known v1 limitation. Informative table covers GitHub Actions and GitLab CI; Forgejo/Codeberg excluded until
+their OIDC Actions support ships.
 
 ~~**Issue 20: Binary revocation states (REVOKED / YANKED)**~~ **Resolved.** Client behavior is determined by
 revocation source (registry = hard block, publisher = warn), not by reason code. The four reason codes
