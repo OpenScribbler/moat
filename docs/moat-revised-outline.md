@@ -563,8 +563,9 @@ unrecognized algorithms rather than silently passing.
 conforming client manifest staleness requirement (24-hour default). Lockfile is the offline trust anchor;
 `attestation_bundle` provides complete proof retention without network calls.
 
-**Issue 14: Cross-registry blocklist federation** Client-side cross-registry revocation matching exists conceptually,
-but a registry-side sharing format for urgent revocation signals is still undefined.
+~~**Issue 14: Cross-registry blocklist federation**~~ **Resolved (closed by Issue 21).** Cross-registry revocation
+sharing requires either a shared authority no one has established or trust delegation users did not grant. Both
+undermine the per-registry trust model. Out of scope for v1. See Issue 21 resolution.
 
 ~~**Issue 15: Trust anchor ambiguity**~~ **Resolved.** Per-item Rekor entry is the authoritative trust anchor. Manifest
 signature establishes index integrity. Both required. See Trust Anchor Model in the Trust Model section.
@@ -597,11 +598,17 @@ security operators and End Users but do not change client enforcement behavior. 
 for registry revocations. Collapsing to REVOKED/YANKED would discard useful urgency signal without simplifying
 client implementation.
 
-**Issue 21: Threat feeds vs cross-registry revocation** Third-party feedback argues that any trusted registry being able
-to warn about content from another registry creates trust bleeding and DoS potential. The proposed alternative is a
-standardized optional `threat-feed.json` maintained by a trusted community or security operator. That may be cleaner,
-but it reintroduces central infrastructure and governance. Decision needed: keep cross-registry revocation, replace it
-with threat feeds, or support both with different trust semantics.
+~~**Issue 21: Threat feeds vs cross-registry revocation**~~ **Resolved.** Cross-registry threat propagation is
+intentionally out of scope for MOAT v1. The per-registry trust model is a design property, not a limitation: users
+grant trust to specific registries, and revocation authority is scoped to the content each registry attests.
+Cross-registry revocation creates trust bleeding — revocations from authorities users did not intend to grant — and
+the competitive-suppression DoS vector (a registry issuing cross-registry revocations against a competitor's content)
+is documented behavior from the CA ecosystem. Threat feeds require sustained operational investment and governance
+that volunteer communities do not reliably maintain; stale feeds harm users by blocking content based on outdated
+signals. The real-world signal path for malicious content (security researcher → CVE / GitHub Security Advisory →
+community channels) functions without protocol-level intermediation. Registries that discover malicious content from
+another registry can publish advisories through external channels. MOAT's job is clean enforcement when a registry
+revokes its own content — which the current model already provides. This decision also closes Issue 14.
 
 ~~**Issue 22: Archive hashing vs directory hashing**~~ **Resolved (rationale preserved).** Directory hashing is
 intentional — MOAT's model is registry-side crawling of source content, not publisher-side packaging. If MOAT adds
