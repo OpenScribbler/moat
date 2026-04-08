@@ -418,8 +418,11 @@ implement exactly these.
   Other providers with OIDC support: the issuer is the provider's OIDC endpoint URL; the subject format is
   provider-defined. Consult the provider's OIDC documentation. Providers are added to this table when their
   subject format is verified against a working Sigstore implementation. Forgejo/Codeberg Actions OIDC support
-  is not yet shipped as of this writing; the table will be updated when a production implementation is
-  available.
+  is not yet shipped as of this writing (April 2026). Tracking: Gitea PR
+  [#36988](https://github.com/go-gitea/gitea/pull/36988) (draft, opened 2026-03-25) and Forgejo PR
+  [#5344](https://codeberg.org/forgejo/forgejo/pulls/5344) (closed 2025-02-02, no active successor). When
+  either ships, the issuer will be `<instance-url>/api/actions/oidc` and the subject format will mirror
+  GitHub's. Check these PRs before updating this table.
 
 - **Client verification protocol** — what a conforming client must check on install.
 - **Revocation mechanism** — `revocations` array in manifest (REQUIRED; empty if none). Each entry MUST include:
