@@ -548,12 +548,15 @@ implementations. This is consistent with the static-file registry model and avoi
 whether named as such or not. Inclusion criteria, removal policy, incident response, namespace disputes, appeals, and
 signing all need explicit governance.
 
-**Issue 10: Publisher authentication model** How publishers authenticate to registries and how clients authenticate to
-private registries is still open. OIDC should be the primary path; long-lived tokens, if allowed, must be clearly
-treated as the weaker compatibility path.
+~~**Issue 10: Publisher authentication model**~~ **Deferred.** Publisher identity for the Dual-Attested tier is already
+handled by OIDC signing via Sigstore — the CI identity IS the publisher identity. Transport-layer auth for private
+registries is out of scope for v0.4.0; registry operators may use any mechanism they choose. Private content
+isolation — preventing accidental publishing of private repo content to public registries — is a conforming client
+responsibility addressed at the tooling layer. Deferred to a future version.
 
-**Issue 11: Federation security** Federation introduces SSRF risk, trust laundering risk, and upstream-input
-sanitization risk. Response size limits and timeouts should be conformance requirements when federation exists.
+~~**Issue 11: Federation security**~~ **Deferred.** Federation is not defined in MOAT v0.4.0. SSRF mitigation, trust
+laundering prevention, upstream-input sanitization, response size limits, and timeout requirements will be specified
+in the version that introduces federation. Deferred to a future version.
 
 ~~**Issue 12: Algorithm deprecation guidance**~~ **Resolved.** See Algorithm requirements in the normative core.
 `sha256` required; `sha512` optional; `sha1` and `md5` forbidden (hard failure). Clients refuse to verify
