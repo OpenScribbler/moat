@@ -195,6 +195,9 @@ The spec defines what a conforming client must do on install and sync:
 - Surface trust tier before install confirmation
 - Surface revocation source attribution and treat publisher revocations as warnings, registry revocations as the gating
   signal
+- MUST NOT use a cached registry manifest for revocation checks when the cached copy exceeds a configurable
+  staleness threshold (default: 24 hours). When the threshold is exceeded, the client MUST sync the manifest
+  before performing revocation checks.
 - On manifest sync: check all installed content hashes against the updated `revocations` array; apply hard-block for
   registry revocations and warn-on-use for publisher revocations (see Revocation mechanism above)
 
@@ -330,6 +333,12 @@ runtime sandboxing, permission enforcement, or execution semantics.
 MOAT's trust guarantee covers the content directory as a unit. Dependencies outside that directory are outside the
 guarantee and need to be surfaced by companion specs and conforming clients.
 
+Runtime dependencies — external packages fetched at execution time, remote resources loaded by scripts, or any
+resource resolved outside the attested content directory — are outside MOAT's signing guarantee. Content that
+appears clean at install time may load untrusted resources at runtime. Conforming clients SHOULD surface this
+boundary explicitly to End Users at install time. Companion specs MAY require publishers to declare known external
+dependencies so clients can present them before the End User confirms an install.
+
 ---
 
 ## Fork and Lineage Handling
@@ -356,6 +365,11 @@ implement exactly these.
 - **Content hashing algorithm** — deterministic, one-pass, Go dirhash-inspired. Defined by normative reference
   implementation (`moat_hash.py`), not pseudocode.
 - **Hash format** — `<algorithm>:<hex>` with no length constraints.
+- **Algorithm requirements** — `sha256` is the REQUIRED algorithm; conforming implementations MUST support it.
+  `sha512` is OPTIONAL. The following algorithms are FORBIDDEN and MUST NOT appear in content hashes: `sha1`,
+  `md5`, and any algorithm with known practical collision attacks. Conforming clients MUST reject content hashes
+  using a forbidden algorithm — this is a hard failure, not a warning. Conforming clients that encounter an
+  unrecognized algorithm MUST refuse to verify rather than silently pass.
 - **Signature envelope format** — platform-agnostic signing model.
 - **Trust tier model** — Dual-Attested / Signed / Unsigned. Absence of Dual-Attested is NOT a negative signal.
 - **Client verification protocol** — what a conforming client must check on install.
@@ -383,15 +397,24 @@ implement exactly these.
 - **Lineage model** — `derived_from` for forks and adaptations.
 - **Version semantics** — `version` is an optional display label; content hash is normative identity; `attested_at` for
   freshness.
-- **`scan_status` structure** — per-item manifest field; `not_scanned` is valid. The `scanners` array entry schema:
+- **`scan_status` structure** — per-item manifest field. Schema:
 
   ```json
-  { "name": "string", "version": "string", "result": "pass|fail|inconclusive", "scanned_at": "ISO8601" }
+  {
+    "result": "clean|findings|not_scanned",
+    "scanner": [{ "name": "string", "version": "string" }],
+    "scanned_at": "ISO8601",
+    "findings_url": "https://..."
+  }
   ```
 
-  `name` is a controlled value — registries MUST use the canonical name for well-known scanners (e.g.
-  `"snyk-mcp-scan"`, `"semgrep"`) to enable aggregation. Additional fields are permitted. Free-form scanner name
-  strings defeat cross-registry aggregation and do not conform.
+  Field rules:
+  - `result` is REQUIRED. `not_scanned` is valid.
+  - `scanner` and `scanned_at` are REQUIRED when `result` is `clean` or `findings`; omitted when `not_scanned`.
+  - `findings_url` is OPTIONAL; only present when `result` is `findings` and a public report exists.
+  - `scanner[].name` is a controlled value — registries MUST use the canonical name for well-known scanners
+    (e.g. `"snyk-mcp-scan"`, `"semgrep"`) to enable cross-registry aggregation. Additional fields within
+    scanner entries are permitted. Free-form scanner name strings defeat aggregation and do not conform.
 ### Reference implementations (normative behavior, separate artifacts)
 
 - **`moat_hash.py`** — Python reference implementation. A conforming implementation produces identical output for all
@@ -462,9 +485,9 @@ That creates a de facto trust root for discovery and therefore needs explicit go
 
 Resolved decisions are archived in [`docs/decisions/resolved.md`](decisions/resolved.md).
 
-**Issue 4: Registry manifest size and pagination** For large registries, the manifest could become unwieldy. Candidate
-resolution: no pagination (split into sub-registries if needed); pagination is a MAY for future extensibility.
-Requires an explicit decision before Draft.
+~~**Issue 4: Registry manifest size and pagination**~~ **Resolved.** No pagination in v1. Registries serving large
+catalogs should split into sub-registries. Pagination support is a MAY for future spec versions and client
+implementations. This is consistent with the static-file registry model and avoids protocol complexity in v1.
 
 **Issue 9: Registry index governance** If one index ships as the default discovery source, it becomes a legitimacy root
 whether named as such or not. Inclusion criteria, removal policy, incident response, namespace disputes, appeals, and
@@ -477,11 +500,13 @@ treated as the weaker compatibility path.
 **Issue 11: Federation security** Federation introduces SSRF risk, trust laundering risk, and upstream-input
 sanitization risk. Response size limits and timeouts should be conformance requirements when federation exists.
 
-**Issue 12: Algorithm deprecation guidance** The `<alg>:<hex>` format supports agility but does not yet define forbidden
-algorithms, deprecation signaling, or required client behavior for deprecated algorithms.
+~~**Issue 12: Algorithm deprecation guidance**~~ **Resolved.** See Algorithm requirements in the normative core.
+`sha256` required; `sha512` optional; `sha1` and `md5` forbidden (hard failure). Clients refuse to verify
+unrecognized algorithms rather than silently passing.
 
-**Issue 13: Offline verification** Clients need a conforming offline verification model for already-installed content:
-cached manifests, lockfile behavior, proof retention, and staleness handling all need specification.
+~~**Issue 13: Offline verification**~~ **Resolved.** See Trust Anchor Model (offline lockfile verification) and the
+conforming client manifest staleness requirement (24-hour default). Lockfile is the offline trust anchor;
+`attestation_bundle` provides complete proof retention without network calls.
 
 **Issue 14: Cross-registry blocklist federation** Client-side cross-registry revocation matching exists conceptually,
 but a registry-side sharing format for urgent revocation signals is still undefined.
@@ -492,8 +517,9 @@ signature establishes index integrity. Both required. See Trust Anchor Model in 
 **Issue 16: Anti-rollback / anti-freeze model** Current freshness guidance does not defend against replay of old but
 still valid manifests. Either MOAT adopts explicit freshness semantics or it explicitly disclaims that threat class.
 
-**Issue 17: "No central infrastructure" language** Operating a registry does not require central infrastructure, but
-verifying Signed content depends on Rekor availability. The spec language needs to keep that distinction explicit.
+~~**Issue 17: "No central infrastructure" language**~~ **Resolved.** Core Design Principles already reads: "No central
+infrastructure required to operate a registry. A GitHub repo with a GitHub Action is enough to run one.
+Verification of Signed content depends on Rekor availability." The distinction is explicit.
 
 **Issue 18: Publisher Action source repo mutation** Writing `moat-attestation.json` back to source repos creates commit
 churn and policy friction. The alternative of bundles or release artifacts needs evaluation before the Publisher Action
@@ -515,22 +541,19 @@ standardized optional `threat-feed.json` maintained by a trusted community or se
 but it reintroduces central infrastructure and governance. Decision needed: keep cross-registry revocation, replace it
 with threat feeds, or support both with different trust semantics.
 
-**Issue 22: Archive hashing vs directory hashing** Third-party feedback recommends deterministic archive hashing instead
-of hashing directory contents directly. That fits ecosystems where publishers hand registries canonical archives, but
-MOAT's current model is registry-side crawling of source content. If MOAT ever grows creator-side packaging tooling,
-archive hashing should be reconsidered. This issue is recorded mainly to preserve the rationale behind the current
-direction.
+~~**Issue 22: Archive hashing vs directory hashing**~~ **Resolved (rationale preserved).** Directory hashing is
+intentional — MOAT's model is registry-side crawling of source content, not publisher-side packaging. If MOAT adds
+creator-side packaging tooling in a future version, archive hashing should be reconsidered at that point.
+Deferred to v2.
 
 **Issue 23: SSH profile retention vs CI-only mandate** Third-party feedback recommends removing the SSH signing profile
 and making CI-backed signing the only path to a Signed tier. That would raise the trust floor but also raise adoption
 friction. Decision needed: whether SSH remains an informative profile, disappears entirely, or survives with a visibly
 lower trust signal than CI-backed keyless signing.
 
-**Issue 24: Runtime dependency scope** Third-party feedback argues that unlocked runtime dependencies outside the
-content directory make MOAT's signing guarantee incomplete. The current design explicitly scopes trust to the content
-directory and defers dependency graphs to a future version. Decision needed: whether the spec should add stronger
-disclaimer language
-now and whether companion specs should require declaration of external dependencies so clients can surface them.
+~~**Issue 24: Runtime dependency scope**~~ **Resolved.** Scope Boundary section now includes an explicit runtime
+dependency disclaimer. Conforming clients SHOULD surface the boundary at install time; companion specs MAY require
+external dependency declaration. Full dependency graphs deferred to a future version.
 
 ---
 
