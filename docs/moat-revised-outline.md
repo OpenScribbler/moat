@@ -298,6 +298,21 @@ Writing `moat-attestation.json` back to source repos creates commit churn and po
 **Issue 19: GitHub identity verification claims**
 GitHub exposes richer OIDC claims than the current simple subject-pattern check. The spec needs to decide which claims are authoritative and whether stable IDs should be preferred over mutable names.
 
+**Issue 20: Binary revocation states (REVOKED / YANKED)**
+Third-party feedback proposes collapsing the four revocation reason codes (`malicious`, `compromised`, `deprecated`, `policy_violation`) into two machine-actionable states: `REVOKED` (hard block) and `YANKED` (warn, allow). The current four-code model preserves more human context, but the client behavior is already effectively binary. Decision needed: keep the taxonomy, or collapse to states plus a mandatory `details_url`.
+
+**Issue 21: Threat feeds vs cross-registry revocation**
+Third-party feedback argues that any trusted registry being able to warn about content from another registry creates trust bleeding and DoS potential. The proposed alternative is a standardized optional `threat-feed.json` maintained by a trusted community or security operator. That may be cleaner, but it reintroduces central infrastructure and governance. Decision needed: keep cross-registry revocation, replace it with threat feeds, or support both with different trust semantics.
+
+**Issue 22: Archive hashing vs directory hashing**
+Third-party feedback recommends deterministic archive hashing instead of hashing directory contents directly. That fits ecosystems where publishers hand registries canonical archives, but MOAT's current model is registry-side crawling of source content. If MOAT ever grows creator-side packaging tooling, archive hashing should be reconsidered. For v1, this issue is recorded mainly to preserve the rationale behind the current direction.
+
+**Issue 23: SSH profile retention vs CI-only mandate**
+Third-party feedback recommends removing the SSH signing profile and making CI-backed signing the only path to a Signed tier. That would raise the trust floor but also raise adoption friction. Decision needed: whether SSH remains an informative profile, disappears entirely, or survives with a visibly lower trust signal than CI-backed keyless signing.
+
+**Issue 24: Runtime dependency scope**
+Third-party feedback argues that unlocked runtime dependencies outside the content directory make MOAT's signing guarantee incomplete. The current design explicitly scopes trust to the content directory and defers dependency graphs to v2. Decision needed: whether the spec should add stronger disclaimer language now and whether companion specs should require declaration of external dependencies so clients can surface them.
+
 ---
 
 ## OWASP Alignment
