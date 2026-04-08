@@ -386,184 +386,93 @@ Syllago ships with this index as its default discovery source, similar to how Ho
 
 ## Open Issues
 
-**1. Version semantics** ✅ RESOLVED
-Content hash is the normative identifier. Version is an optional, non-normative display label (OCI model). Registries/publishers populate it however they want (semver, date strings, or omit entirely). Clients determine freshness by comparing content hashes first, then `attested_at` timestamps — never by version label. Spec must spell out "update available" logic in client verification section: different hash + later `attested_at` = update; same hash + later `attested_at` = re-attestation, not an update.
+Resolved decisions are archived in `docs/decisions/resolved.md`.
 
-**2. `name` field constraints** ✅ RESOLVED
-Two-layer naming model (Google Play / Apple App Store / PRECIS pattern):
-- `name` — REQUIRED. ASCII machine identifier. Regex: `[a-z0-9][a-z0-9-]*[a-z0-9]` (lowercase alphanumeric + hyphens, must start/end with alphanumeric). 128-character MUST limit (OCI precedent; bytes = characters since ASCII-only). Immutable once published. Used in lockfiles, CLI commands, URLs, config files. This is protocol plumbing — not the user-facing label.
-- `display_name` — OPTIONAL. UTF-8 string for human presentation. Used in search, discovery, and UI rendering by clients. Mutable. No format constraints beyond valid UTF-8. Clients SHOULD prefer `display_name` over `name` in user-facing contexts when present.
-The spec must clearly disambiguate: `name` is the protocol identifier (machines use this), `display_name` is the presentation label (humans see this). Content without `display_name` falls back to `name` for display. Future spec versions may extend `name` to UTF-8 with NFC normalization once implementations have validated the protocol.
+**Issue 4: Registry manifest size and pagination**
+For large registries, the manifest could become unwieldy. v1 candidate resolution: no
+pagination (split into sub-registries if needed); pagination is a MAY for future
+extensibility. Requires an explicit decision before the spec moves to Draft status.
 
-**3. CRLF normalization details** ✅ RESOLVED (panel reviewed)
-Architecture: hash raw bytes, normalize at registry ingestion boundary (Go model). Spec frames hash input as "canonical byte sequence" with forward reference to normalization section.
-- **Text detection:** Extension-based allowlist, normative, spec-versioned. Case-insensitive (normalize extension to lowercase). Match final extension only (`.config.js` → `.js` → text). NUL-byte guard: if first 8 KB contain `\x00`, treat as binary regardless of extension. Mirrors git's binary detection heuristic; prevents silent corruption of misnamed binary files.
-- **Normalization algorithm:** Single left-to-right pass, greedy CRLF matching. Streaming — no size cap, O(chunk size) memory. `\r\n` → `\n`, lone `\r` → `\n`. `\r\r\n` → `\n\n`. Defined by normative reference implementation (`moat_hash.py`), not pseudocode.
-- **BOM handling:** Strip UTF-8 BOM (EF BB BF) from text files before normalization.
-- **Extensionless files:** Binary by default. Dotfiles with no second dot (`.gitignore`, `.eslintrc`) are extensionless.
-- **VCS directories:** Excluded from hashing (`.git`, `.svn`, `.hg`, `.bzr`, `_darcs`, `.fossil`). Registries SHOULD use `git archive` or equivalent to produce clean content, but the reference implementation excludes these explicitly so local runs against a working directory produce the same hash as registry ingestion.
+**Issue 9: Registry index governance**
+`OpenScribbler/registry-index` with Syllago shipping it as the default discovery source
+means a de facto root of ecosystem legitimacy exists whether named as such or not. Needs
+explicit governance: inclusion criteria, removal policy, incident response, namespace
+disputes, appeals, who signs the index, and what happens when it is wrong. "Light vetting
+before merge" is not a security control.
 
-**MOAT infrastructure files:** `moat-attestation.json` is excluded from content hashing. It is registry/tooling metadata, not content. Including it would create a circular dependency (the hash changes when the attestation file is written, requiring a new hash, ad infinitum).
-- **Symlinks:** Reject at ingestion. No resolve, no skip. npm/Go model.
-- **Conformance test suite:** Ships with spec as first-class artifact. Adversarial test vectors required (mixed line endings, lone CR, BOM, BOM+CRLF compound, case-variant extensions, binary with CRLF-like bytes, `\r\r\n` sequences, files with text extensions but NUL bytes).
+**Issue 10: Publisher authentication model**
+How does a publisher authenticate to a registry to submit a new manifest entry? How does
+a client authenticate to fetch manifests from a private registry? Primary path should be
+OIDC-based (Sigstore Trusted Publishing model). Long-lived tokens are an acceptable
+compatibility path but must be surfaced as the less-secure option. JWT validation
+requirements must be normative if JWTs are used.
 
-**4. Registry manifest size and pagination**
-For large registries with thousands of content items, the manifest could become unwieldy. Need to decide if the spec supports paginated/chunked manifests or if that's a registry implementation detail. The manifest entry structure is now fully defined (issues #1–#3, #6–#8 resolved) — this question is unblocked but deferred. Candidate resolution: v1 defines no pagination (split into sub-registries if needed); pagination is a MAY for future extensibility. Requires an explicit decision before the spec moves to Draft status.
+**Issue 11: Federation security**
+Three open attack surfaces when a registry federates with an upstream: (1) SSRF — upstream
+URLs are attacker-controllable; (2) trust laundering — federated content must be
+re-verified, not inherited; (3) input sanitization — all upstream manifest field values
+are untrusted. Response size limits and connection timeouts are conformance requirements,
+not implementation details. Federation is deferred from v1 but must be addressed as a
+first-class v2 feature.
 
-**5. Consumer motivation (spec introduction)**
-The spec intro needs to make the value proposition concrete — not "you should verify because security" but "here's what you get and here's what you risk." Security practices only scale when the secure path is lower friction than the insecure path. Best written after protocol design is settled.
+**Issue 12: Algorithm deprecation guidance**
+The `<alg>:<hex>` format is well-designed for agility but does not define: which
+algorithms are forbidden (MD5, SHA-1 must be explicitly prohibited); how a registry
+signals that a hash algorithm in an existing manifest entry is deprecated; what clients
+must do with deprecated-algorithm content. Signing profiles also need minimum
+cryptographic requirements. A post-quantum migration path should be documented as
+informative in v1.
 
-**6. `scan_status` in registry manifest entries** ✅ RESOLVED
+**Issue 13: Offline verification**
+Conforming clients must verify already-installed content hashes offline using a cached
+manifest and lockfile. Live registry queries are required for installation but not for
+verifying installed content. Needs spec: (1) what must be locally cached; (2) whether
+Rekor inclusion proofs should be embedded in the lockfile; (3) behavior when cached
+manifest exceeds staleness threshold during offline operation.
 
-`scan_status` is REQUIRED in the manifest schema, but `result: "not_scanned"` is a valid value. Every entry is parseable; registries that don't scan must say so explicitly rather than omitting the field. This follows the "secure path is visibly tiered" principle — a registry that never scans is legitimate but surfaces as a distinct signal. Aligned with OWASP AST08 (poor scanning), AST04 (insecure metadata), LLM03:2025 (supply chain), and CICD-SEC-9 (artifact integrity validation).
+**Issue 14: Cross-registry blocklist federation**
+Per-registry revocation is insufficient when malicious content propagates across multiple
+registries simultaneously. A standardized format for registries to share revocation
+signals within a defined SLA would complement the existing client-side cross-registry hash
+matching. A revocation from a well-known community registry should be expressible as an
+input to other registries' review queues.
 
-**Structure:**
-```json
-{
-  "scan_status": {
-    "result": "clean" | "findings" | "not_scanned",
-    "scanner": [{ "name": "semgrep", "version": "1.89.0" }],
-    "scanned_at": "2026-04-05T12:00:00Z",
-    "findings_url": "https://..."
-  }
-}
-```
+**Issue 15 (new): Trust anchor ambiguity**
+The spec currently implies two trust models: the manifest signature as the trust anchor,
+and per-item Rekor entries as independently verifiable attestation. These are not
+equivalent and the spec hasn't explicitly chosen between them. Needs one explicit
+statement: "The manifest signature is the trust anchor. Per-item Rekor entries are
+independently verifiable corroboration, not a parallel trust anchor." Decide and
+state this before the spec advances.
 
-- `scanner` is a structured array of `{name, version}` objects (not a free-form string — avoids `@` parsing ambiguity and lets clients group by scanner name across scan ages). Common case is one entry; chained scanners are expressible.
-- `scanner` and `scanned_at` are required when `result` is `clean` or `findings`; omitted when `result` is `not_scanned`.
-- `findings_url` is optional — only when `result: "findings"` and a public report exists. Clients MUST surface it when present.
-- No normative staleness threshold in v1. `scanned_at` is RFC 3339. Registries SHOULD re-scan on re-attestation and on scanner version bumps. Hard staleness policy is a client/enterprise concern. Spec SHOULD guidance: clients SHOULD surface the delta between `scanned_at` and `attested_at` when it exceeds a client-configured threshold.
-- Scanner names are an open list — no central registry. Registries declare their own scanner selection; users trust the registry, which transitively trusts its scanner choice.
-- Client display should avoid alert fatigue: surfacing `not_scanned` on every install without context hierarchy defeats the signal. This is client UI guidance, not protocol.
+**Issue 16 (new): Anti-rollback / anti-freeze model**
+MOAT currently relies on `attested_at`, cache age, and "don't use stale manifests"
+guidance. This does not defend against an adversarial CDN, mirror, or compromised cache
+serving a valid old signed manifest to suppress revocations or updates. Options: (1)
+adopt TUF-style timestamp/snapshot semantics; (2) explicitly disclaim this threat class
+and state that MOAT depends on another layer for freshness guarantees. Either is
+acceptable but must be an explicit decision, not an implicit gap.
 
-**7. `risk_tier` in registry manifest entries** ✅ RESOLVED
+**Issue 17 (new): "No central infrastructure" language**
+The spec says "no central infrastructure required" but the Signed trust tier requires a
+Rekor entry and `moat-verify` hard-fails if `rekor.sigstore.dev` is unreachable. Rekor is
+external trust infrastructure. The statement should be scoped: "no central infrastructure
+required to operate a registry." Verification depends on Rekor availability. If offline
+bundle verification is made normative (see Issue 13), update this accordingly.
 
-`risk_tier` is REQUIRED in the manifest schema, with `not_analyzed` as a valid value. Assigned by registry tooling (independent static analysis), never by publisher self-declaration. Advisory by default — clients MUST parse and SHOULD display prominently at install time; clients MAY gate installs on tier threshold (enterprise policy). Hard MUST-gating at protocol level conflicts with "unsigned content works, it's just labeled." Aligned with OWASP AST09 (no governance), ASI04 (agentic supply chain), LLM04:2025 (data poisoning), and CICD-SEC-9.
+**Issue 18 (new): Publisher Action source repo mutation**
+The Publisher Action commits `moat-attestation.json` back to source repos on every push.
+This creates extra commits, potential merge churn, and policy friction for repos that want
+source history to reflect only human changes. Alternative: emit signed bundles or release
+artifacts rather than rewriting source tree. Needs a decision before the Publisher Action
+spec is finalized.
 
-**Tier rubric (capability-based, consistent across content types):**
-
-| Tier            | Observable capability                                                                                                            |
-|-----------------|----------------------------------------------------------------------------------------------------------------------------------|
-| `L0`            | Read-only. No shell, no filesystem writes, no network. Pure transformation/advice.                                               |
-| `L1`            | Reads user files or config outside its own content dir. No writes, no shell, no network.                                         |
-| `L2`            | Writes files outside its content dir, OR makes network requests. No shell, no credential access.                                 |
-| `L3`            | Invokes a shell, executes arbitrary commands, or reads/writes credentials (SSH keys, tokens, env vars matching secret patterns). |
-| `not_analyzed`  | Registry did not attempt analysis.                                                                                               |
-| `indeterminate` | Registry ran analysis; could not classify conclusively.                                                                          |
-
-Key decisions:
-- **Registry-assigned, not self-declared.** Publisher declarations (e.g. `permissions` in SKILL.md frontmatter) are companion-spec concerns that registries MAY consult as input, but the manifest field is always the registry's independent claim. Registries MUST NOT accept publisher-asserted lower tiers.
-- **`not_analyzed` vs `indeterminate`** are distinct: `not_analyzed` = never attempted; `indeterminate` = ran analysis, genuinely inconclusive (e.g. MCP config whose risk manifests at connection-time, not content-analysis-time). Clients cannot conflate these — they have different trust implications.
-- **Tier values are normative names with normative definitions.** A registry using `L0`–`L3` MUST follow MOAT's definitions. Clients MUST treat unknown tier strings (e.g. from a future spec version) as `not_analyzed` — fail to uncertainty, not to `L0`. This ensures forward-compat when the rubric evolves.
-- **Ties resolve upward** — content exhibiting both L1 and L3 behaviors is L3. The rubric is about the worst capability the content enables, not the average.
-- **`risk_tier` is per-item, not transitive.** Clients that resolve content dependencies are responsible for computing effective install-time tier as `max(tier of selected content, tier of its declared dependencies)`. Transitivity is a client concern, not a protocol requirement.
-- **The rubric is about capability granted, not strings present.** A skill that *documents* a shell command is not L3; a hook that *executes* one is. False-positive reduction belongs in companion specs (per-content-type analyzer rules). Two registries may disagree at the margin — that's acceptable; the tier is attributed to the registry making the claim.
-- **MCP configs and inert-config types** are an open sub-issue: content whose risk manifests at connection-time rather than content-analysis-time may need companion spec guidance. Registries SHOULD tier such content conservatively pending that spec.
-
-**8. Revocation / denouncement mechanism** ✅ RESOLVED
-
-Registries MUST maintain a `revocations` array in the manifest (empty array if none). For registries that need lower-latency revocation than a full manifest re-sign allows, an optional `revocation_feed_url` field points to a separate signed revocation document using the same signing envelope as the manifest.
-
-**Revocation entry format:**
-```json
-{
-  "revocations": [
-    {
-      "content_hash": "sha256:abc123...",
-      "revoked_at": "2026-04-07T10:00:00Z",
-      "reason": "malicious",
-      "details_url": "https://..."
-    }
-  ]
-}
-```
-
-`reason` values (normative):
-- `malicious` — content confirmed to contain or enable malicious behavior
-- `compromised` — content is likely valid, but source repo or signing identity was compromised
-- `deprecated` — content replaced or superseded; continued use is not recommended
-- `policy_violation` — removed by registry policy (legal, ToS, etc.)
-
-`malicious` and `compromised` are security events. `deprecated` and `policy_violation` are informational. Clients MUST surface them differently.
-
-**Note on reason code consistency:** In practice, registries respond to incidents before investigation is complete. `compromised` will often be used as a precautionary catch-all when a registry is uncertain — "something is wrong with the source" is almost always technically true, whereas `malicious` implies a confirmed accusation that operators are reluctant to make under time pressure. Clients MUST NOT infer precision from the code beyond its block/warn category — the behavioral response is what matters. The `details_url` field is where incident-specific context belongs.
-
-**Client behavior at install time (normative):**
-- Conforming clients MUST check `revocations` in the manifest AND the revocation feed (if `revocation_feed_url` is present) before completing an install.
-- If the requested content hash appears in `revocations` with reason `malicious` or `compromised`: MUST NOT install. MUST surface reason and `details_url` if present.
-- If reason is `deprecated` or `policy_violation`: SHOULD warn; MAY allow install with explicit user confirmation.
-- Clients SHOULD NOT use a cached manifest older than a client-configurable threshold (default: 24h) for install-time revocation checks — stale revocation data understates actual risk.
-
-**Client behavior for already-installed content (normative):**
-- Conforming clients SHOULD check revocations on each registry sync.
-- MUST surface active revocations in status and list views (a visible revocation marker alongside the item).
-- MUST NOT silently continue presenting revoked content as fully trusted.
-- MUST NOT autonomously uninstall or modify content — user action is required.
-- Re-install of a `malicious` or `compromised` hash MUST be blocked. There is no override path.
-
-**Cross-registry revocation propagation:**
-Content hashes are universal — the client lockfile tracks installed hashes without regard to which registry distributed them. Conforming clients SHOULD check all trusted registries' `revocations` lists against all locally installed content hashes. If Registry A revokes hash X and the user has hash X installed from Registry B, the client SHOULD surface a cross-registry revocation warning attributed to its source: "Registry A has denounced this content hash."
-
-This is additive, not transitive: Registry A's revocation does not invalidate Registry B's attestation. Both signals are surfaced and the user decides. Cross-registry revocation works without any central infrastructure — the client aggregates by iterating trusted registries on each sync.
-
-**Publisher-side revocation (independent signal):**
-Publishers can post signed Rekor revocation entries via the Publisher Action without waiting for their registry to update. This is a separate signal from the registry manifest `revocations` array — checked directly by clients against Rekor.
-
-Publisher revocations are **warnings, not hard blocks**. The registry is the gating authority for hard blocks. This distinction prevents abuse (rage-quit revocations, compromised publisher accounts triggering mass revocations). Client behavior:
-- Publisher Rekor revocation entry present: MUST surface prominently ("author has flagged this content"); MUST NOT silently ignore; MUST NOT hard block without registry confirmation
-- Registry manifest revocation present: existing hard-block rules apply
-- Both present: MUST block; SHOULD surface as a high-confidence dual-revocation signal with distinct UI treatment
-
-Publisher-side revocation is especially valuable when a registry is compromised — the legitimate author can independently flag their content via a completely separate signing identity, raising the bar for an attacker (must compromise both registry identity and source CI identity simultaneously).
-
-**Out-of-band revocation:** Publishers whose GitHub Actions is compromised cannot use the Publisher Action to revoke. Direct registry contact MUST remain an available mechanism. Publisher-side Rekor revocation is an additional path, not the only path.
-
-**Revocation abuse mitigations:**
-- Registries SHOULD implement anomalous revocation detection: unusual volume of revocations from a single OIDC identity in a short window → rate limit processing, flag for manual review
-- Clients MUST display the source attribution of every revocation signal (registry name or publisher identity)
-- Clients SHOULD surface per-registry revocation counts in their trust UI — anomalous patterns from a single registry are visible
-- Webhook revocation payloads MUST be signed and verified before processing
-
-See `docs/research/revocation-abuse-scenarios.md` for full scenario analysis.
-
-**Revocation feed format** (when `revocation_feed_url` is present): Same structure as the embedded `revocations` array, wrapped in the standard MOAT signing envelope. Clients MUST verify the feed is signed by the same registry identity as the manifest. Unsigned revocation feeds MUST be rejected.
-
-**Feed unavailability at install time:** If `revocation_feed_url` is present but the endpoint is unreachable (DNS failure, timeout, non-2xx response), clients MUST NOT block the install solely on that basis. The manifest `revocations` array is the baseline revocation floor and remains checked. Clients MUST surface a degradation warning before the user can confirm the install — not in a log, not after completion. The warning MUST include: (1) the feed URL that was unreachable, (2) the staleness window being relied upon (time since last manifest fetch), and (3) a timestamp of the last successful manifest fetch. This is a graceful degradation to the manifest baseline, not a revocation signal failure.
-
-**Note:** Registries that deploy `revocation_feed_url` typically do so to achieve sub-manifest-refresh revocation response. During feed outages, clients are relying on the manifest's revocation data, which may lag by up to the client's manifest cache threshold (default: 24h). The warning exists to make this tradeoff visible, not to block legitimate installs during transient infrastructure events.
-
-Key decisions:
-- **Embedded array is the baseline** — no separate endpoint required for conformance. Every manifest has `revocations` (empty array is valid). Small registries need no additional infrastructure.
-- **Optional feed URL enables low-latency response** — a security incident cannot wait for the next content ingest cycle to trigger a manifest re-sign. The feed URL is the escape hatch for registries that need faster turnaround.
-- **Reason taxonomy is normative and bounded** — four values, no extension point. Avoids the "deprecation reasons are a mess" failure mode of npm. If a future spec version adds a reason, unknown reasons from older manifests are treated as `policy_violation` by clients (fail to the least-alarming safe default; `malicious` would be false-positive noise).
-- **No automatic uninstall** — MOAT does not control the filesystem or agent platforms. Forcing removal is out of scope and introduces its own risk (breaking active workflows). The obligation is to surface the signal clearly and block reinstall.
-- **Cross-registry hash matching closes the ClawHub gap** — if a poisoning incident is discovered after distribution across multiple registries, any one registry denouncing the hash is sufficient to warn users who installed from any registry. No central authority needed.
-- **`revoked_at` is registry-asserted, not independently verified** — the field is informational. Clients MUST NOT treat it as a tamper-evident timestamp. For timestamp corroboration, clients MAY cross-reference the corresponding Rekor log entry (via `rekor_log_index` if present in the revocation feed entry). Clients SHOULD treat a `revoked_at` value significantly older than the manifest's own Rekor log timestamp as a signal warranting additional scrutiny or logging. No normative skew window is specified — a fixed value would be wrong for high-latency CI and air-gapped deployment scenarios, and a skew constraint is only enforceable for clients that already check Rekor. X.509 CRL precedent shows timestamp manipulation is a real deployed attack class, but PKI mitigations only work when timestamp verification is mandatory — which it is not here. If the protocol ever adds grace-period semantics (content installed before `revoked_at` is grandfathered), this decision must be revisited before that feature ships.
-
-OWASP alignment:
-- **CICD-SEC-9** (Improper Artifact Integrity Validation): revocation check is now part of the normative install-time verification path
-- **AST01** (Malicious Skills): revocation is the post-distribution remediation path for confirmed malicious content
-- **AST02** (Supply Chain Compromise): revocation is the incident response mechanism for registry-level compromise events
-- **AST09** (No Governance): the only OWASP document that uses "revocation" explicitly — identifies absence of formal content lifecycle management as an enterprise governance gap. MOAT's revocation mechanism is the normative answer to AST09's prescribed control: a defined, auditable process for removing content from active circulation.
-- **AST10** (Cross-Platform Reuse): hash-based cross-registry model ensures revocation signals propagate regardless of which platform or client distributed the content
-
-**9. Identity-bound revocation (deferred to v2)**
-Per-hash revocation covers the v1 use case. A future operational need exists for bulk revocation by signing identity with a time bound — e.g., "nothing signed by `repo:acme-corp/skills-repo` before timestamp T is trusted" — for cases where a whole signing identity is compromised and enumerating individual hashes is impractical. This does not map to traditional key revocation (Sigstore uses ephemeral keys; the OIDC identity is the trust anchor). The correct primitive is identity-bound revocation with a `revoked_before` timestamp, not a `key_revocations` array. Deferred: not a v1 requirement given zero registries at launch, but the mechanism should be defined before the ecosystem scales.
-
-**10. Publisher authentication model**
-The spec defines the signing model but not the authentication model for registry operations. Two gaps: (1) How does a publisher authenticate to a registry to submit a new manifest entry? (2) How does a client authenticate to fetch manifests from a private registry? The primary path should be OIDC-based (Sigstore Trusted Publishing model — short-lived CI-bound tokens, no stored credentials). Long-lived registry-issued API tokens are an acceptable compatibility path but must be surfaced as the less-secure option. JWT validation requirements (reject `alg:none`, enforce expiration + audience) must be normative if JWTs are used. OWASP basis: API2:2023, CICD-SEC-8. Historical precedent: npm Shai-Hulud, crates.io token prediction, Axios 2026 compromise — all rooted in long-lived account-scoped credentials persisting after reform.
-
-**11. Federation security (SSRF, trust laundering, input sanitization)**
-When a MOAT registry federates with an upstream registry, three attack surfaces are introduced that the spec does not yet address: (1) **SSRF** — upstream URLs are attacker-controllable; registry implementations must validate resolved IPs against private/reserved ranges post-DNS-resolution, not at URL configuration time. DNS rebinding and redirect-following are the critical attack vectors. (2) **Trust laundering** — federated content must be re-verified against the upstream's declared signing profile. "Came from my upstream" is not a sufficient integrity guarantee; every manifest entry must be independently verified. (3) **Input sanitization** — all upstream manifest field values are untrusted input, even from trusted upstreams. SQL injection, path traversal, and XSS in string fields are real vectors. Response size limits and connection timeouts are conformance requirements, not implementation details. OWASP basis: API7:2023, API10:2023.
-
-**12. Algorithm deprecation guidance**
-The spec's prefixed hash format (`sha256:hex`, `sha3-256:hex`) is well-designed for algorithm agility, but does not define: (1) what algorithms are forbidden (MD5, SHA-1 must be explicitly prohibited — not just "not recommended"); (2) how a registry signals that a hash algorithm in an existing manifest entry is deprecated; (3) what clients must do when they encounter content with a deprecated algorithm (warn? block? require re-attestation?). The signing profiles (Sigstore, SSH) also need minimum cryptographic requirements. NIST finalized ML-DSA and ML-KEM in 2024 — the spec should document a post-quantum migration path even if it's informative in v1. Historical lesson: the Axios 2026 compromise happened after security reforms because one legacy authentication pathway persisted — deprecation timelines and enforcement matter. OWASP basis: A04:2025.
-
-**13. Offline verification requirement**
-Conforming clients must be able to verify already-installed content hashes offline using a cached manifest and lockfile. Live registry queries are required for installation (to get a current manifest) but not for verification of installed content. This is non-negotiable for enterprise air-gapped deployments and reliability-sensitive CI environments. The spec should specify: (1) what must be locally cached to enable offline verification; (2) whether Rekor inclusion proofs should be embedded in the lockfile (npm bundle format model); (3) the behavior when cached manifest age exceeds the client-configurable threshold during offline operation. Historical lesson: Go's sumdb, Sigstore/Rekor, and TUF all discovered offline verification requirements the hard way after launch. OWASP basis: CICD-SEC-9, A08:2025.
-
-**14. Cross-registry blocklist federation**
-Per-registry revocation is insufficient when malicious content propagates across multiple registries simultaneously — the ClawHavoc campaign demonstrated this: malicious skills appeared across ClawHub, skills.sh, and other registries faster than any single registry's revocation response. The spec should define a standardized format that participating registries can consume and propagate revocation signals within a defined SLA, so a block on one registry becomes a shareable signal. The existing cross-registry hash matching (clients check all trusted registries' revocation lists) is a client-side mitigation; blocklist federation is the registry-side complement. A revocation from a well-known community registry should be expressible as an input to other registries' review queues. OWASP basis: AST10.
+**Issue 19 (new): GitHub identity verification claims**
+The spec currently uses a single GitHub Actions certificate identity pattern for publisher
+verification. GitHub exposes richer OIDC claims (`repository_id`, `repository_owner_id`,
+`ref`, `job_workflow_ref`). Sigstore's GitHub-specific verifier can check repository, ref,
+SHA, trigger, and workflow name. Decision needed: which claims are authoritative, and
+should stable IDs (`repository_id`) be preferred over mutable strings (`repository` name)?
 
 ---
 
