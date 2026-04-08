@@ -14,11 +14,11 @@
 3. Builds one attestation payload JSON per content item (schema below).
 4. Signs each payload with `cosign sign-blob` using Sigstore keyless OIDC. GitHub Actions provides the OIDC token automatically — no keys or secrets required.
 5. Rekor creates a transparency log entry. `cosign` returns a bundle file containing `logID` and `logIndex`.
-6. Writes/updates `moat-attestation.json` at repo root with Rekor references for each attested item.
-7. Commits `moat-attestation.json` back to the repo with commit message `chore(moat): update attestation [skip ci]`.
+6. Writes/updates `moat-attestation.json` with Rekor references for each attested item.
+7. Pushes `moat-attestation.json` to the `moat-attestation` branch with commit message `chore(moat): update attestation`. If the branch does not exist, the action creates it. The `moat-attestation` branch is never merged into the source branch — it contains only attestation data.
 8. If `registry-webhook` is configured, POSTs a signed notification payload to the webhook URL.
 
-**Bootstrapping note:** GitHub Actions using `GITHUB_TOKEN` do not trigger other workflow runs by default, preventing infinite loops. The action MUST include an explicit guard against re-runs triggered by its own commits.
+**Branch isolation note:** The Publisher Action pushes to `moat-attestation`, not to the branch that triggered it. Workflow triggers scoped to `main` (or equivalent) do not fire on pushes to `moat-attestation`, so recursive execution is structurally impossible. Publishers MUST NOT configure the action to trigger on pushes to the `moat-attestation` branch. Unlike the commit-back model, this approach works with standard branch protection on `main` — no PAT or bypass configuration is required.
 
 ---
 
@@ -62,7 +62,7 @@ This identity is what registries and `moat-verify` use to confirm the attestatio
 
 ## `moat-attestation.json` Format (normative)
 
-Location: repo root. One file per repo. MUST be excluded from content hashing (including it creates a circular dependency — the hash changes when attestation is written, requiring a new hash, ad infinitum).
+Location: `moat-attestation` branch root. One file per repo. The file is never present in the source branch, so it is never included in content hashing — the circular dependency concern from the commit-back model does not apply.
 
 ```json
 {
@@ -114,7 +114,7 @@ Registries SHOULD rate-limit webhook calls per source identity and flag anomalou
 ## Badge Integration
 
 ```
-![MOAT Dual-Attested](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/{owner}/{repo}/main/moat-attestation.json)
+![MOAT Dual-Attested](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/{owner}/{repo}/moat-attestation/moat-attestation.json)
 ```
 
 Badge asserts per-hash attestation status. Clients can read `moat-attestation.json` directly to verify specific content hashes without depending on the badge service.

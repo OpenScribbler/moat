@@ -232,7 +232,6 @@ mcp/
 rules/
 skills/
 subagents/
-moat-attestation.json
 ```
 
 The Publisher Action uses a two-tier discovery model:
@@ -240,12 +239,16 @@ The Publisher Action uses a two-tier discovery model:
 - **Tier 1:** Canonical category directories
 - **Tier 2:** `moat.yml` for custom layouts; when present it overrides Tier 1
 
-`moat-attestation.json` is a reserved filename. The file at the root of the content directory is excluded
-from content hashing to avoid a circular dependency — the attestation file records content hashes, so
-including it would cause the hash to change every time attestation is updated. A file named
-`moat-attestation.json` at any subdirectory path is NOT excluded; it is included in the content hash
-normally. Publishers MUST NOT place files named `moat-attestation.json` in subdirectories of a content
-item — such files have no protocol meaning and their presence is a conformance error.
+`moat-attestation.json` is a reserved filename. The Publisher Action writes this file to a dedicated
+`moat-attestation` branch — it is never present in the source branch and is therefore never included in
+content hashing. Publishers MUST NOT create files named `moat-attestation.json` anywhere in their source
+branch; such files have no protocol meaning and their presence is a conformance error.
+
+Registries discover publisher attestations at the canonical URL:
+
+```
+https://raw.githubusercontent.com/{owner}/{repo}/moat-attestation/moat-attestation.json
+```
 
 ---
 
@@ -493,8 +496,8 @@ The Publisher Action is publisher-side CI tooling. It is not a registry, not a c
 agent runtime.
 
 On push, it discovers content items, computes content hashes, signs each with `cosign sign-blob` via Sigstore keyless
-OIDC, and writes `moat-attestation.json` to the repo root with Rekor references. The commit is guarded against
-triggering recursive runs.
+OIDC, and writes `moat-attestation.json` to the `moat-attestation` branch with Rekor references. Pushing to a
+dedicated branch avoids main branch protection rules and eliminates commit churn on the source branch.
 
 Publisher revocation also flows through this action: publishers add a revocation entry, trigger the workflow, and
 optionally notify registries by webhook. Publisher revocations are warnings, not hard blocks.
@@ -575,9 +578,11 @@ is an explicitly out-of-scope threat. Clients SHOULD NOT configure the threshold
 infrastructure required to operate a registry. A GitHub repo with a GitHub Action is enough to run one.
 Verification of Signed content depends on Rekor availability." The distinction is explicit.
 
-**Issue 18: Publisher Action source repo mutation** Writing `moat-attestation.json` back to source repos creates commit
-churn and policy friction. The alternative of bundles or release artifacts needs evaluation before the Publisher Action
-spec is finalized.
+~~**Issue 18: Publisher Action source repo mutation**~~ **Resolved.** The Publisher Action writes `moat-attestation.json`
+to a dedicated `moat-attestation` branch instead of committing back to the source branch. This eliminates main branch
+protection friction and commit churn on the source branch. Pushing to a separate branch is structurally loop-safe —
+workflow triggers scoped to `main` do not fire on `moat-attestation` branch pushes. Registry discovery URL updated to
+`https://raw.githubusercontent.com/{owner}/{repo}/moat-attestation/moat-attestation.json`.
 
 ~~**Issue 19: GitHub identity verification claims**~~ **Resolved.** Signing identity is expressed as OIDC issuer
 + subject — provider-agnostic. `signing_profile` added as REQUIRED on Dual-Attested manifest items; conforming
