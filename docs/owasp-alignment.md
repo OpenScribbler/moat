@@ -1,6 +1,6 @@
 # MOAT OWASP Alignment
 
-**Status:** Research reference (extracted from moat-revised-outline.md)
+**Status:** Research reference (extracted from [moat-revised-outline.md](moat-revised-outline.md))
 
 This document maps MOAT's design decisions against six OWASP standards.
 Two are critical (direct design space); three are high (adjacent concerns);
@@ -38,11 +38,11 @@ OWASP Agentic Skills Top 10 (v1.0, 2026) maps to MOAT as follows:
 | AST05 — Unsafe Deserialization  | Out of scope (client implementation concern)                                                             | —                          |
 | AST06 — Weak Isolation          | Out of scope (runtime concern)                                                                           | —                          |
 | AST07 — Update Drift            | Content hash + lockfile model catches drift                                                              | ✅ Addressed in protocol    |
-| AST08 — Poor Scanning           | `scan_status` REQUIRED in manifest (result: not_scanned valid); structured scanner array with scanned_at | ✅ Addressed in protocol    |
-| AST09 — No Governance           | `risk_tier` REQUIRED in manifest (L0–L3 + not_analyzed + indeterminate); registry-assigned, advisory. Revocation mechanism provides the formal content lifecycle management AST09 explicitly prescribes. | ✅ Addressed in protocol    |
+| AST08 — Poor Scanning           | `scan_status` REQUIRED in manifest with structured scanner array schema (name, version, result, scanned_at). `not_scanned` is a valid value — the spec makes scanning visible and auditable, not mandatory. **Note:** MOAT addresses *transparency about scanning*, not poor scanning itself. A registry can set `not_scanned` and remain conforming. This is appropriate — the spec is a distribution protocol, not a scanning mandate. | ⚠️ Partially addressed — scanning transparency yes, scanning requirement out of scope |
+| AST09 — No Governance           | Revocation mechanism (`revocations` array REQUIRED, four reason codes, normative client behavior) provides formal content lifecycle management. Registry identity is declared and verifiable; signing identity changes require client re-approval. `risk_tier` was considered and dropped from v1 — content quality assessment is out of scope for a distribution protocol; `scan_status` provides scanning transparency instead. | ✅ Addressed in protocol    |
 | AST10 — Cross-Platform Reuse    | MOAT is platform-agnostic by design                                                                      | ✅ Addressed in protocol    |
 
-OWASP's Universal Skill Format embeds `content_hash`, `scan_status`, and `risk_tier` in individual skill files (SKILL.md frontmatter). MOAT's approach puts these in the registry manifest per-item entries instead — more sound architecturally (avoids self-referential hash problem) and consistent with how npm, Cargo, and Go handle this. The information is equivalent; the location differs.
+OWASP's Universal Skill Format embeds `content_hash` and `scan_status` in individual skill files (SKILL.md frontmatter). MOAT's approach puts these in the registry manifest per-item entries instead — more sound architecturally (avoids self-referential hash problem) and consistent with how npm, Cargo, and Go handle this. The information is equivalent; the location differs.
 
 ### CI/CD Security Top 10 (CICD-SEC prefix)
 
@@ -50,7 +50,7 @@ The single most directly applicable list: MOAT is a domain-specific implementati
 
 | OWASP Risk                                          | MOAT Coverage                                                                                                                                                | Status                         |
 |-----------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------|
-| CICD-SEC-3 — Dependency Chain Abuse                 | Registry namespace enforcement + verified checksums block confusion/typosquatting + revocation prevents post-distribution persistence of compromised content | ✅ Addressed in protocol       |
+| CICD-SEC-3 — Dependency Chain Abuse                 | Verified checksums block content substitution once content is identified by hash. Revocation prevents post-distribution persistence. **Not addressed:** namespace enforcement — the spec defines a `name` field and `source_uri` per item but provides no mechanism preventing two registries from publishing content under the same name or preventing typosquatting within a registry. | ⚠️ Partially addressed — hash integrity yes, namespace enforcement not yet specified |
 | CICD-SEC-8 — Ungoverned 3rd Party Services          | Registry federation trust model; registries declare and vet upstream sources                                                                                 | ⚠️ Partially addressed (not yet specified) |
 | CICD-SEC-9 — Improper Artifact Integrity Validation | Signed manifests + hash pinning + lockfile = the prescribed control per CICD-SEC-9                                                                           | ✅ Addressed in protocol       |
 

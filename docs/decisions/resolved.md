@@ -82,23 +82,24 @@ Every entry is parseable. Registries that don't scan must say so explicitly.
 
 ---
 
-## Decision 5 (renumbered): `risk_tier` structure
+## ~~Decision 5 (renumbered): `risk_tier` structure~~ — Dropped from v1
 
-**Resolution:** REQUIRED in manifest schema; `not_analyzed` is a valid value.
-Registry-assigned, never publisher self-declared. Advisory by default.
+**Superseded:** `risk_tier` was removed from the v1 spec entirely.
 
-| Tier | Observable capability |
-|---|---|
-| `L0` | Read-only. No shell, filesystem writes, or network. |
-| `L1` | Reads user files or config outside content dir. No writes, shell, or network. |
-| `L2` | Writes files outside content dir, OR makes network requests. No shell, no credential access. |
-| `L3` | Invokes a shell, executes arbitrary commands, or reads/writes credentials. |
-| `not_analyzed` | Registry did not attempt analysis. |
-| `indeterminate` | Ran analysis; could not classify conclusively. |
+Two competing definitions existed at different points: a capability model (what the
+content can do: read-only → shell/credentials) and an analysis-depth model (how
+carefully it was reviewed: no analysis → third-party audit). Neither model can be
+reliably implemented for natural language AI agent content (SKILL.md, rules, commands)
+because capability is mediated by the AI runtime, not detectable by static analysis.
 
-Key rules: ties resolve upward; `not_analyzed` ≠ `indeterminate`; unknown tier strings
-from future spec versions MUST be treated as `not_analyzed`; rubric is about capability
-granted, not strings present.
+The field was tied to AST09 (No Governance), but the revocation mechanism adequately
+covers that claim. `scan_status` covers scanning transparency. Content quality
+assessment is out of scope for a distribution protocol — MOAT's job is provenance
+and integrity, not safety scoring.
+
+If a future version adds `risk_tier`, the analysis-depth model is the more achievable
+direction. The capability model requires static analysis tooling that does not yet
+exist for NL content.
 
 ---
 

@@ -11,7 +11,7 @@
 
 Each entry follows a consistent structure:
 
-- **Status** — How well MOAT currently covers this risk (from the coverage map in `moat-revised-outline.md`)
+- **Status** — How well MOAT currently covers this risk (from the coverage map in [`moat-revised-outline.md`](moat-revised-outline.md))
 - **What it is** — Brief definition and why it matters to a registry protocol
 - **In the wild** — Real incidents and case studies from other ecosystems
 - **What worked / What failed** — Ecosystem-level lessons

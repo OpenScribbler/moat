@@ -73,7 +73,7 @@ Registries maintain a `revocations` array in the manifest. Four reason codes: `m
 
 MOAT is in active pre-spec design. The working document — [`docs/moat-revised-outline.md`](docs/moat-revised-outline.md) — is the authoritative reference and reflects all current design decisions. [`moat-spec.md`](moat-spec.md) will be updated to v0.4.0 once the outline is finalized.
 
-**What's resolved:** Trust tier model, content hashing algorithm, registry manifest format, signing envelope, `scan_status`, `risk_tier`, revocation mechanism, version semantics, name field constraints, CRLF normalization.
+**What's resolved:** Trust tier model, content hashing algorithm, registry manifest format, signing envelope, `scan_status`, revocation mechanism, version semantics, name field constraints, CRLF normalization.
 
 **What's open:** Publisher authentication model, federation security, algorithm deprecation guidance, offline verification, cross-registry blocklist federation, registry manifest pagination.
 

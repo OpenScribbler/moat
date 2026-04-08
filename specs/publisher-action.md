@@ -1,7 +1,7 @@
 # Publisher Action Specification
 
-**Status:** Pre-spec (extracted from moat-revised-outline.md)
-**Part of:** MOAT v1
+**Status:** Pre-spec (extracted from [moat-revised-outline.md](../docs/moat-revised-outline.md))
+**Part of:** [MOAT](../docs/moat-revised-outline.md)
 
 > The Publisher Action is the primary adoption mechanism for the `Dual-Attested` trust tier. Any source repo adopts it with a single workflow file — no key management, no MOAT-specific knowledge required.
 
@@ -86,7 +86,7 @@ Location: repo root. One file per repo. MUST be excluded from content hashing (i
 
 Publishers can post signed Rekor revocation entries without waiting for their registry to update. To revoke: add an entry to `moat-attestation.json` revocations and trigger the action. It posts a signed Rekor revocation entry and optionally notifies the registry via webhook.
 
-Publisher revocations are **warnings, not hard blocks.** The registry is the gating authority for hard blocks. This prevents abuse (compromised publisher accounts triggering mass revocations). See main spec for full client behavior rules.
+Publisher revocations are **warnings, not hard blocks.** The registry is the gating authority for hard blocks. This prevents abuse (compromised publisher accounts triggering mass revocations). See [main spec](../docs/moat-revised-outline.md) for full client behavior rules.
 
 ---
 

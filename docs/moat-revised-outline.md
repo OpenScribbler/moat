@@ -39,31 +39,50 @@ MOAT does NOT define:
 
 MOAT involves six distinct actors. They are not interchangeable.
 
-**End User** - The human who chooses which registries to trust and who approves installs or use of content through a conforming client. MOAT requires clients to surface trust tier, `risk_tier`, and revocation state clearly so the End User can make an informed decision.
+**End User** - The human who chooses which registries to trust and who approves installs or use of content through a
+conforming client. MOAT requires clients to surface trust tier and revocation state clearly so the End
+User can make an informed decision.
 
-**Publisher** - Creates content and keeps it in a source repository. A publisher may adopt the Publisher Action to produce source-side attestations, but MOAT does not require the publisher to run a registry or implement client behavior.
+**Publisher** - Creates content and keeps it in a source repository. A publisher may adopt the Publisher Action to
+produce source-side attestations, but MOAT does not require the publisher to run a registry or implement client
+behavior.
 
-**Registry Operator** - Runs a registry that crawls or ingests content from source repositories, computes content hashes, signs registry metadata, and publishes a manifest for clients to consume. The Registry Operator is the party making the registry-level attestation.
+**Registry Operator** - Runs a registry that crawls or ingests content from source repositories, computes content
+hashes, signs registry metadata, and publishes a manifest for clients to consume. The Registry Operator is the party
+making the registry-level attestation.
 
-**Conforming Client** - The install and management tool that implements MOAT's normative client behavior. A conforming client fetches manifests, verifies signatures and content hashes, maintains a lockfile, checks revocations, and surfaces trust signals before install or use. A conforming client is not an AI agent runtime.
+**Conforming Client** - The install and management tool that implements MOAT's normative client behavior. A conforming
+client fetches manifests, verifies signatures and content hashes, maintains a lockfile, checks revocations, and surfaces
+trust signals before install or use. A conforming client is not an AI agent runtime.
 
-**AI Agent Runtime** - A system such as Claude Code, Gemini, Cursor, or Windsurf that loads or executes content after installation. AI agent runtimes are outside the MOAT protocol boundary. MOAT does not define runtime behavior, sandboxing, permission enforcement, or execution semantics.
+**AI Agent Runtime** - A system such as Claude Code, Gemini, Cursor, or Windsurf that loads or executes content after
+installation. AI agent runtimes are outside the MOAT protocol boundary. MOAT does not define runtime behavior,
+sandboxing, permission enforcement, or execution semantics.
 
-**moat-verify** - A standalone verification tool that audits the MOAT trust chain for a content item. It verifies, but does not install, manage, or execute content. It is therefore not a conforming client and not a runtime.
+**moat-verify** - A standalone verification tool that audits the MOAT trust chain for a content item. It verifies, but
+does not install, manage, or execute content. It is therefore not a conforming client and not a runtime.
 
 ### Use Cases
 
-**End User** - Chooses which registries to trust and decides whether to install, load, or remove content based on the trust tier, `risk_tier`, and revocation state surfaced by a conforming client. This includes individual users and team or enterprise administrators enforcing local policy.
+**End User** - Chooses which registries to trust and decides whether to install, load, or remove content based on the
+trust tier and revocation state surfaced by a conforming client. This includes individual users and team
+or enterprise administrators enforcing local policy.
 
-**Publisher** - Wants accurate source attribution, visible lineage for forks, and an optional low-friction way to co-attest content from the source repository.
+**Publisher** - Wants accurate source attribution, visible lineage for forks, and an optional low-friction way to
+co-attest content from the source repository.
 
-**Registry Operator** - Publishes a curated catalog with verifiable registry attestations that any conforming client can consume.
+**Registry Operator** - Publishes a curated catalog with verifiable registry attestations that any conforming client can
+consume.
 
-**Conforming Client** - Implements install-time and sync-time protocol behavior: fetch manifest, verify signatures and hashes, maintain a lockfile, surface trust signals, and enforce revocation behavior consistently for the End User.
+**Conforming Client** - Implements install-time and sync-time protocol behavior: fetch manifest, verify signatures and
+hashes, maintain a lockfile, surface trust signals, and enforce revocation behavior consistently for the End User.
 
-**AI Agent Runtime** - Loads or executes already-installed content after a conforming client has completed verification and placement. It appears here to make the boundary explicit: MOAT intentionally defines no runtime behavior for it.
+**AI Agent Runtime** - Loads or executes already-installed content after a conforming client has completed verification
+and placement. It appears here to make the boundary explicit: MOAT intentionally defines no runtime behavior for it.
 
-**moat-verify** - Lets any reader independently audit the trust chain for a specific content item without installing or executing it. Its use case is diagnosis, validation, and interoperability testing rather than installation or runtime management.
+**moat-verify** - Lets any reader independently audit the trust chain for a specific content item without installing or
+executing it. Its use case is diagnosis, validation, and interoperability testing rather than installation or runtime
+management.
 
 ---
 
@@ -132,25 +151,48 @@ The spec defines what a conforming client must do on install and sync:
 
   ```json
   {
-    "moat_lockfile_version": "1",
+    "moat_lockfile_version": 1,
     "entries": [
       {
         "name": "string",
         "type": "skill|subagent|rules|command",
         "registry": "https://...",
         "content_hash": "sha256:<hex>",
-        "attested_at": "ISO8601",
-        "pinned_at": "ISO8601"
+        "attested_at": "RFC 3339 UTC",
+        "pinned_at": "RFC 3339 UTC",
+        "attestation_bundle": {}
       }
-    ]
+    ],
+    "revoked_hashes": []
   }
   ```
 
-  `content_hash` is the normative identity. `attested_at` comes from the manifest item. `pinned_at` records when the
-  the End User installed or pinned this version. Conforming clients MAY add additional fields but MUST include all six.
-  Lockfile interoperability requires all conforming clients to use this schema — a lockfile from one conforming
-  client must be readable by another.
-- Surface trust tier and `risk_tier` before install confirmation
+  Field notes:
+  - `content_hash` is the normative identity for the installed item.
+  - `attested_at` is the registry's recorded attestation time, taken from the manifest item at install. It is the
+    registry's clock, not the client's — do not build freshness logic on it.
+  - `pinned_at` is the local install timestamp (client clock). It cannot be verified by a third party.
+  - `attestation_bundle` is the complete attestation artifact captured during installation — the signature, signing
+    certificate, and transparency log entry as a single embedded JSON object. For Sigstore-signed content this is the
+    cosign bundle. Conforming clients MUST populate this field at install time; the data is available as a byproduct
+    of the verification step that must already occur. This field enables complete offline re-verification of the
+    original attestation without re-querying external services.
+  - `type` is a v1 closed set of registered values (`skill`, `subagent`, `rules`, `command`). Conforming clients MUST
+    accept entries with unrecognized type values without error — new types are added in future spec versions.
+  - `registry` is a URL. Registries MUST treat their URL as permanently stable once published; a URL change
+    invalidates all lockfile entries that reference it.
+  - `revoked_hashes` is a REQUIRED top-level array of content hash strings for which a registry hard-block is in
+    effect. Conforming clients MUST add a content hash to this array when a registry revocation is received and MUST
+    refuse to install any hash present in this array. This field MUST be present even when empty. Entries MUST NOT be
+    silently removed — clearing a revoked hash requires deliberate End User action. This prevents the
+    remove-and-reinstall bypass: a user who removes revoked content and attempts to reinstall the same hash is blocked
+    by this record.
+
+  Conforming clients MAY add additional fields to entries but MUST include all seven entry fields. The top-level
+  `revoked_hashes` array is also required (empty array if no revocations are in effect). Lockfile interoperability
+  requires all conforming clients to use this schema — a lockfile from one conforming client must be readable by
+  another.
+- Surface trust tier before install confirmation
 - Surface revocation source attribution and treat publisher revocations as warnings, registry revocations as the gating
   signal
 - On manifest sync: check all installed content hashes against the updated `revocations` array; apply hard-block for
@@ -203,11 +245,11 @@ The Publisher Action uses a two-tier discovery model:
 
 ### Trust Tiers
 
-| Tier | Meaning |
-|---|---|
+| Tier              | Meaning                                                                                    |
+|-------------------|--------------------------------------------------------------------------------------------|
 | **Dual-Attested** | Registry-signed and independently attested by the source repo CI for the same content hash |
-| **Signed** | Registry-signed with a Rekor transparency log entry. Tamper-evident. Registry-attested. |
-| **Unsigned** | No MOAT attestation. Works, but labeled clearly. |
+| **Signed**        | Registry-signed with a Rekor transparency log entry. Tamper-evident. Registry-attested.    |
+| **Unsigned**      | No MOAT attestation. Works, but labeled clearly.                                           |
 
 `Dual-Attested` will be rare at launch. Its absence is not a negative signal; `Signed` is the standard tier.
 
@@ -234,20 +276,23 @@ they serve different roles:
 - **Per-item Rekor entry:** proves this specific `content_hash` was attested at a logged point in time. Verified for
   each item being installed or verified.
 
-A conforming verifier such as `moat-verify` MUST verify the manifest signature AND MUST verify the per-item Rekor entry for each item under
-verification. Rekor unavailability is a hard failure — there is no fallback to manifest-signature-only when Rekor is
-offline. This is a deliberate design choice: silent degradation to an unverified-transparency state creates a
-downgrade path attackers can exploit.
+A conforming verifier such as `moat-verify` MUST verify the manifest signature AND MUST verify the per-item Rekor entry
+for each item under verification. Rekor unavailability is a hard failure — there is no fallback to
+manifest-signature-only when Rekor is offline. This is a deliberate design choice: silent degradation to an
+unverified-transparency state creates a downgrade path attackers can exploit.
 
 The Rekor instance URL is configurable. Organizations running a private Rekor-compatible instance satisfy the Rekor
 connectivity requirement — there is no hard dependency on `rekor.sigstore.dev`.
 
 **Offline verification of already-installed content** uses the lockfile rather than re-running the full verification
-flow. In this mode, the lockfile is the trust anchor — Rekor is not consulted. Offline lockfile verification
-re-hashes the local content directory and compares against `content_hash` in the lockfile entry, confirming on-disk
-content matches what was installed. It does NOT re-verify current registry state: revocations issued since install,
-superseding versions, and trust tier changes are not reflected. Conforming clients SHOULD surface this
-distinction when operating in lockfile mode.
+flow. In this mode, the lockfile is the trust anchor. Offline lockfile verification re-hashes the local content
+directory and compares against `content_hash` in the lockfile entry, then verifies the original attestation using
+the stored `attestation_bundle` — all without any network call. This provides the same attestation assurance as
+online verification for the state of content at install time.
+
+What offline mode cannot verify is current registry state: revocations issued since install, superseding versions,
+and trust tier changes require a live manifest sync to reflect. Conforming clients SHOULD surface this distinction
+when operating in lockfile mode.
 
 This resolves Issue 15.
 
@@ -302,7 +347,7 @@ implement exactly these.
   directory names, and deferred types (`hook`, `mcp`).
 - **Repository layout convention** — canonical directory structure and two-tier discovery model (`moat.yml` override).
 - **Registry manifest format** — the signed document a registry publishes. The core artifact of MOAT. Per-item entries:
-  `name`, `display_name`, `content_hash`, `source_uri`, `attested_at`, `derived_from`, `scan_status`, `risk_tier`.
+  `name`, `display_name`, `content_hash`, `source_uri`, `attested_at`, `derived_from`, `scan_status`.
 - **Content hashing algorithm** — deterministic, one-pass, Go dirhash-inspired. Defined by normative reference
   implementation (`moat_hash.py`), not pseudocode.
 - **Hash format** — `<algorithm>:<hex>` with no length constraints.
@@ -313,12 +358,23 @@ implement exactly these.
   behavior rules. Normative client behavior when syncing a manifest update that adds a revocation entry for
   already-installed content:
 
-  | Revocation source | Required client behavior |
-  |---|---|
-  | Registry | MUST hard-block all use of that content. Client refuses to load or execute the item. Block is in effect until the End User explicitly removes the content or installs a non-revoked version. |
-  | Publisher | MUST warn on next use attempt with revocation reason. MAY allow use with explicit per-session End User confirmation. MUST NOT silently continue. |
+  | Revocation source | Required client behavior                                                                                                                                                                                                                                                                                                                       |
+  |-------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+  | Registry          | MUST hard-block all use of that content. Client refuses to load or execute the item. MUST present the revocation reason and the registry that issued the revocation to the End User. Block is in effect until the End User explicitly removes the content or installs a non-revoked version. The revoked content hash MUST be added to `revoked_hashes` in the lockfile — see lockfile specification above. |
+  | Publisher         | MUST present the revocation reason and the registry that issued the revocation to the End User. MUST warn once per client session, recurring after any client restart. MAY allow use with explicit End User confirmation. MUST NOT silently continue.                                                                                            |
 
-  In both cases, the client MUST surface the revocation reason and the registry that issued the revocation.
+  All conforming clients MUST, regardless of environment: exit with a non-zero exit code when revoked content is
+  encountered, and write to stderr the content item name as recorded in the lockfile, the revocation reason, and the
+  registry that issued the revocation. Interactive clients MAY additionally prompt for End User confirmation on
+  publisher revocations. Non-interactive clients that cannot prompt MUST exit non-zero and MUST NOT proceed.
+
+  Registry revocations are authoritative hard blocks because the registry is the trust unit in MOAT — clients verify
+  what registries attest, and revocation is part of that attestation. This creates a named trade-off: a compromised
+  registry operator can issue hard blocks against legitimate content. The End User's explicit opt-in to each registry
+  (required for conforming clients) is the primary prevention; attribution — clients MUST surface which registry
+  issued each revocation — is the primary detection mechanism after opt-in. A user who trusts only one registry has
+  no cross-registry signal to compare against if that registry is compromised; this limitation cannot be addressed at
+  the protocol level.
 - **Lineage model** — `derived_from` for forks and adaptations.
 - **Version semantics** — `version` is an optional display label; content hash is normative identity; `attested_at` for
   freshness.
@@ -331,23 +387,6 @@ implement exactly these.
   `name` is a controlled value — registries MUST use the canonical name for well-known scanners (e.g.
   `"snyk-mcp-scan"`, `"semgrep"`) to enable aggregation. Additional fields are permitted. Free-form scanner name
   strings defeat cross-registry aggregation and do not conform.
-- **`risk_tier` definition** — per-item manifest field; registry-assigned, never publisher self-declared. Valid values
-  and their normative criteria:
-
-  | Value | Meaning | Observable criteria |
-  |---|---|---|
-  | `L0` | No analysis performed | No scanner entries in `scan_status`; no human review on record |
-  | `L1` | Automated scan only | At least one entry in `scan_status.scanners` with a machine-generated result |
-  | `L2` | Automated scan + registry human review | Scanner entries present; registry records a human review of scan output |
-  | `L3` | Independent security review | Third-party security audit on record; registry provides a review reference URL |
-  | `not_analyzed` | Registry has not yet assessed this item | Absence of analysis; expected for newly indexed content |
-  | `indeterminate` | Assessment was inconclusive | Registry ran analysis but could not assign a definitive tier |
-
-  A registry assigning `L2` without documented human review, or `L3` without a third-party audit reference, is not
-  conforming. Two registries assigning different tiers to the same `content_hash` is not a protocol error — registries
-  may have different review practices. Clients that gate on `risk_tier` SHOULD surface the assigning registry identity
-  alongside the tier value.
-
 ### Reference implementations (normative behavior, separate artifacts)
 
 - **`moat_hash.py`** — Python reference implementation. A conforming implementation produces identical output for all
