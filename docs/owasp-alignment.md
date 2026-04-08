@@ -31,16 +31,16 @@ OWASP Agentic Skills Top 10 (v1.0, 2026) maps to MOAT as follows:
 
 | OWASP Risk                      | MOAT Coverage                                                                                            | Status                     |
 |---------------------------------|----------------------------------------------------------------------------------------------------------|----------------------------|
-| AST01 — Malicious Skills        | Content hash + Sigstore signing + Rekor transparency log                                                 | ✅ Covered                  |
-| AST02 — Supply Chain Compromise | Transparency logs (Rekor), registry trust model, explicit registry add                                   | ✅ Covered                  |
+| AST01 — Malicious Skills        | Content hash + Sigstore signing + Rekor transparency log                                                 | ✅ Addressed in protocol    |
+| AST02 — Supply Chain Compromise | Transparency logs (Rekor), registry trust model, explicit registry add                                   | ✅ Addressed in protocol    |
 | AST03 — Over-Privileged Skills  | Out of scope (content format concern, not registry protocol)                                             | —                          |
-| AST04 — Insecure Metadata       | Registry signing covers manifest integrity; scan_status covers quality                                   | ⚠️ Partial (open issue #6) |
+| AST04 — Insecure Metadata       | Registry signing covers manifest integrity; scan_status covers quality                                   | ⚠️ Partially addressed (open issue #6) |
 | AST05 — Unsafe Deserialization  | Out of scope (client implementation concern)                                                             | —                          |
 | AST06 — Weak Isolation          | Out of scope (runtime concern)                                                                           | —                          |
-| AST07 — Update Drift            | Content hash + lockfile model catches drift                                                              | ✅ Covered                  |
-| AST08 — Poor Scanning           | `scan_status` REQUIRED in manifest (result: not_scanned valid); structured scanner array with scanned_at | ✅ Covered                  |
-| AST09 — No Governance           | `risk_tier` REQUIRED in manifest (L0–L3 + not_analyzed + indeterminate); registry-assigned, advisory. Revocation mechanism provides the formal content lifecycle management AST09 explicitly prescribes. | ✅ Covered                  |
-| AST10 — Cross-Platform Reuse    | MOAT is platform-agnostic by design                                                                      | ✅ Covered                  |
+| AST07 — Update Drift            | Content hash + lockfile model catches drift                                                              | ✅ Addressed in protocol    |
+| AST08 — Poor Scanning           | `scan_status` REQUIRED in manifest (result: not_scanned valid); structured scanner array with scanned_at | ✅ Addressed in protocol    |
+| AST09 — No Governance           | `risk_tier` REQUIRED in manifest (L0–L3 + not_analyzed + indeterminate); registry-assigned, advisory. Revocation mechanism provides the formal content lifecycle management AST09 explicitly prescribes. | ✅ Addressed in protocol    |
+| AST10 — Cross-Platform Reuse    | MOAT is platform-agnostic by design                                                                      | ✅ Addressed in protocol    |
 
 OWASP's Universal Skill Format embeds `content_hash`, `scan_status`, and `risk_tier` in individual skill files (SKILL.md frontmatter). MOAT's approach puts these in the registry manifest per-item entries instead — more sound architecturally (avoids self-referential hash problem) and consistent with how npm, Cargo, and Go handle this. The information is equivalent; the location differs.
 
@@ -50,9 +50,9 @@ The single most directly applicable list: MOAT is a domain-specific implementati
 
 | OWASP Risk                                          | MOAT Coverage                                                                                                                                                | Status                         |
 |-----------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------|
-| CICD-SEC-3 — Dependency Chain Abuse                 | Registry namespace enforcement + verified checksums block confusion/typosquatting + revocation prevents post-distribution persistence of compromised content | ✅ Covered                      |
-| CICD-SEC-8 — Ungoverned 3rd Party Services          | Registry federation trust model; registries declare and vet upstream sources                                                                                 | ⚠️ Partial (not yet specified) |
-| CICD-SEC-9 — Improper Artifact Integrity Validation | Signed manifests + hash pinning + lockfile = the prescribed control per CICD-SEC-9                                                                           | ✅ Covered                      |
+| CICD-SEC-3 — Dependency Chain Abuse                 | Registry namespace enforcement + verified checksums block confusion/typosquatting + revocation prevents post-distribution persistence of compromised content | ✅ Addressed in protocol       |
+| CICD-SEC-8 — Ungoverned 3rd Party Services          | Registry federation trust model; registries declare and vet upstream sources                                                                                 | ⚠️ Partially addressed (not yet specified) |
+| CICD-SEC-9 — Improper Artifact Integrity Validation | Signed manifests + hash pinning + lockfile = the prescribed control per CICD-SEC-9                                                                           | ✅ Addressed in protocol       |
 
 ### Top 10 for Agentic Applications (ASI prefix)
 
@@ -60,9 +60,9 @@ ASI04 explicitly names signed manifests + curated registries as the required mit
 
 | OWASP Risk                                   | MOAT Coverage                                                                                         | Status    |
 |----------------------------------------------|-------------------------------------------------------------------------------------------------------|-----------|
-| ASI04 — Agentic Supply Chain Vulnerabilities | Signed manifests, curated registry model, hash verification — the directly prescribed answer          | ✅ Covered |
+| ASI04 — Agentic Supply Chain Vulnerabilities | Signed manifests, curated registry model, hash verification — the directly prescribed answer          | ✅ Addressed in protocol |
 | ASI07 — Insecure Inter-Agent Communication   | Out of scope for v1 (runtime communication, not distribution)                                         | —         |
-| ASI10 — Rogue Agents                         | Registry signing establishes verifiable identity; rogue agents cannot impersonate MOAT-signed content | ✅ Covered |
+| ASI10 — Rogue Agents                         | Registry signing establishes verifiable identity; rogue agents cannot impersonate MOAT-signed content | ✅ Addressed in protocol |
 
 ### OWASP Top 10:2025 (Web Application)
 
@@ -70,9 +70,9 @@ A03 and A08 are the 2025 Top 10's explicit recognition that supply chain and art
 
 | OWASP Risk                                     | MOAT Coverage                                                                  | Status                    |
 |------------------------------------------------|--------------------------------------------------------------------------------|---------------------------|
-| A03:2025 — Software Supply Chain Failures      | Signed packages, provenance, attestation — MOAT's core design                  | ✅ Covered                 |
+| A03:2025 — Software Supply Chain Failures      | Signed packages, attestation — MOAT's core design                             | ✅ Addressed in protocol  |
 | A04:2025 — Cryptographic Failures              | Key management, algorithm selection, certificate lifecycle in signing profiles | ⚠️ Informative only in v1 |
-| A08:2025 — Software or Data Integrity Failures | Content cannot be silently replaced between signing and installation           | ✅ Covered                 |
+| A08:2025 — Software or Data Integrity Failures | Content cannot be silently replaced between signing and installation           | ✅ Addressed in protocol  |
 
 ### LLM Top 10:2025 (LLM prefix)
 
@@ -80,8 +80,8 @@ LLM03 is the AI-specific restatement of supply chain failure — MOAT is the reg
 
 | OWASP Risk                                | MOAT Coverage                                                                    | Status                              |
 |-------------------------------------------|----------------------------------------------------------------------------------|-------------------------------------|
-| LLM03:2025 — Supply Chain Vulnerabilities | Cryptographic verification + provenance tracking + trusted registry channel      | ✅ Covered                           |
-| LLM04:2025 — Data and Model Poisoning     | Provenance chain covers behavioral specs in distributed content                  | ⚠️ Partial (content-type dependent) |
+| LLM03:2025 — Supply Chain Vulnerabilities | Cryptographic verification + attestation tracking + trusted registry channel   | ✅ Addressed in protocol               |
+| LLM04:2025 — Data and Model Poisoning     | Attestation chain covers behavioral specs in distributed content                | ⚠️ Partially addressed (content-type dependent) |
 | LLM07:2025 — System Prompt Leakage        | Out of scope for protocol; referenced in "Sensitive Files" publisher requirement | —                                   |
 
 ### API Security Top 10:2023
