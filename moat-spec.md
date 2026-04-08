@@ -13,4 +13,6 @@ This is a Draft specification. It represents a complete architectural revision f
 
 This draft has not been validated by any implementations. Before advancing beyond Draft status, the registry manifest format and content hashing algorithm MUST be confirmed by at least two independent implementations in different languages.
 
+> **Working version:** Active design work is tracked in [`docs/moat-revised-outline.md`](docs/moat-revised-outline.md). That document reflects the current state of all open issues and design decisions and is the authoritative reference until this file is updated to v0.4.0.
+
 Copyright 2026 Holden Hewett. Licensed under the Apache License, Version 2.0. You may obtain a copy of the license at https://www.apache.org/licenses/LICENSE-2.0.
