@@ -196,7 +196,8 @@ The spec defines what a conforming client must do on install and sync:
   signal
 - MUST NOT use a cached registry manifest for revocation checks when the cached copy exceeds a configurable
   staleness threshold (default: 24 hours). When the threshold is exceeded, the client MUST sync the manifest
-  before performing revocation checks.
+  before performing revocation checks. Clients SHOULD NOT allow this threshold to be configured above 48 hours —
+  doing so widens the replay window beyond what the protocol's freshness guarantees are designed around.
 - On manifest sync: check all installed content hashes against the updated `revocations` array; apply hard-block for
   registry revocations and warn-on-use for publisher revocations (see Revocation mechanism above)
 
@@ -302,6 +303,21 @@ and trust tier changes require a live manifest sync to reflect. Conforming clien
 when operating in lockfile mode.
 
 This resolves Issue 15.
+
+### Freshness Guarantee and Replay Scope
+
+The 24-hour staleness threshold is MOAT's freshness guarantee. MOAT does not defend against manifest replay
+attacks within that window. For a replay attack to succeed, an attacker must be able to intercept or
+cache-poison a client's manifest fetch, a revocation must have been issued after the cached manifest was
+generated, and the client must not have refreshed within the staleness threshold. These conditions narrow the
+exploitable window significantly in practice.
+
+Explicit manifest expiry with an `expires_at` field — where clients hard-reject manifests past their declared
+expiry — is deferred to a future version. The prerequisite is registry infrastructure maturity: `expires_at`
+creates a hard liveness dependency on the registry's CI pipeline, and a CI outage means the registry's entire
+catalog goes dark for all clients. That trade-off is appropriate for registry operators with dedicated
+infrastructure and monitoring; it is not appropriate to mandate for the hobbyist and small-team operators
+that MOAT v1 targets.
 
 ### Signature Envelope
 
@@ -516,8 +532,10 @@ but a registry-side sharing format for urgent revocation signals is still undefi
 ~~**Issue 15: Trust anchor ambiguity**~~ **Resolved.** Per-item Rekor entry is the authoritative trust anchor. Manifest
 signature establishes index integrity. Both required. See Trust Anchor Model in the Trust Model section.
 
-**Issue 16: Anti-rollback / anti-freeze model** Current freshness guidance does not defend against replay of old but
-still valid manifests. Either MOAT adopts explicit freshness semantics or it explicitly disclaims that threat class.
+~~**Issue 16: Anti-rollback / anti-freeze model**~~ **Resolved.** See Freshness Guarantee and Replay Scope in the
+Trust Model. The 24-hour staleness threshold is the v1 freshness guarantee. Manifest replay within that window
+is an explicitly out-of-scope threat. Clients SHOULD NOT configure the threshold above 48 hours. Explicit
+`expires_at` expiry is deferred to a future version pending registry infrastructure maturity.
 
 ~~**Issue 17: "No central infrastructure" language**~~ **Resolved.** Core Design Principles already reads: "No central
 infrastructure required to operate a registry. A GitHub repo with a GitHub Action is enough to run one.
