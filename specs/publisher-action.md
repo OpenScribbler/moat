@@ -121,6 +121,29 @@ Badge asserts per-hash attestation status. Clients can read `moat-attestation.js
 
 ---
 
+## Private Repository Guard
+
+The Publisher Action MUST detect source repository visibility before signing. If the source repository is private, the
+action MUST NOT proceed unless the publisher has explicitly opted in via workflow configuration:
+
+```yaml
+uses: moat-spec/publisher-action@v1
+with:
+  allow-private-repo: true
+```
+
+Without this opt-in, the action MUST exit with a non-zero code and a clear error message when run on a private
+repository.
+
+**Why this matters:** Rekor is a public, append-only transparency log. Running the Publisher Action on a private
+repository — even with `allow-private-repo: true` — creates permanent public records containing the content hash and
+repository identity. The content itself is not uploaded, but the metadata is irreversibly public. Publishers who opt
+in on a private repository MUST understand this before proceeding. The action SHOULD emit a prominent warning when
+`allow-private-repo: true` is set, reminding the publisher that attestation metadata will become permanent public
+record.
+
+---
+
 ## Scope
 
 **v1:** GitHub Actions only.
