@@ -237,7 +237,12 @@ The Publisher Action uses a two-tier discovery model:
 - **Tier 1:** Canonical category directories
 - **Tier 2:** `moat.yml` for custom layouts; when present it overrides Tier 1
 
-`moat-attestation.json` is excluded from content hashing to avoid a circular dependency.
+`moat-attestation.json` is a reserved filename. The file at the root of the content directory is excluded
+from content hashing to avoid a circular dependency — the attestation file records content hashes, so
+including it would cause the hash to change every time attestation is updated. A file named
+`moat-attestation.json` at any subdirectory path is NOT excluded; it is included in the content hash
+normally. Publishers MUST NOT place files named `moat-attestation.json` in subdirectories of a content
+item — such files have no protocol meaning and their presence is a conformance error.
 
 ---
 

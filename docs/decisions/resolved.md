@@ -49,7 +49,11 @@ frames hash input as "canonical byte sequence."
 - **BOM handling:** Strip UTF-8 BOM (EF BB BF) from text files.
 - **Extensionless files:** Binary by default. Dotfiles with no second dot are extensionless.
 - **VCS directories:** Excluded (`.git`, `.svn`, `.hg`, `.bzr`, `_darcs`, `.fossil`).
-- **`moat-attestation.json`:** Excluded from content hashing (circular dependency).
+- **`moat-attestation.json`:** Reserved filename. Excluded from content hashing at the root of the
+  content directory only (circular dependency — the file records content hashes). Files named
+  `moat-attestation.json` in subdirectories are included in the hash normally. Root-only exclusion
+  prevents a hiding attack: any-depth exclusion would allow malicious content placed in a subdirectory
+  file of this name to escape the attested hash entirely.
 - **Symlinks:** Reject at ingestion.
 
 Defined by normative reference implementation (`moat_hash.py`), not pseudocode.

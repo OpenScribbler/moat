@@ -43,10 +43,14 @@ NUL_SCAN = 8192   # 8 KB NUL-byte scan window (matches git's binary heuristic)
 # against a working directory.
 VCS_DIRS = frozenset({".git", ".svn", ".hg", ".bzr", "_darcs", ".fossil"})
 
-# Files excluded from content hashing by name (exact match, any path depth).
+# Files excluded from content hashing by name — root of the content directory only.
 # moat-attestation.json is excluded to break the circular dependency: the
 # attestation file contains content hashes, so including it would change
 # the hash every time attestation is updated.
+#
+# Root-only is intentional. A file named moat-attestation.json in a subdirectory
+# has no protocol meaning and MUST be included in the hash — excluding it at any
+# depth would allow malicious content to hide there outside the attested hash.
 EXCLUDED_FILES = frozenset({"moat-attestation.json"})
 
 
@@ -166,7 +170,7 @@ def content_hash(directory: str | Path) -> str:
     for path in root.rglob("*"):
         if any(part in VCS_DIRS for part in path.parts):
             continue
-        if path.name in EXCLUDED_FILES:
+        if path.parent == root and path.name in EXCLUDED_FILES:
             continue
         if path.is_symlink():
             raise ValueError(f"Symlink rejected: {path.relative_to(root).as_posix()}")
