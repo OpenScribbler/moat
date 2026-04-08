@@ -110,6 +110,75 @@ A conforming client:
 
 ---
 
+## Content Types
+
+MOAT defines a fixed set of content types for v1. Each type maps to a reserved top-level category directory in a MOAT registry repository. The category directory is the type declaration — no marker files, no heuristics.
+
+### v1 Content Types
+
+| Type | Category dir | What it covers |
+|---|---|---|
+| `skill` | `skills/` | Reusable, invocable instruction sets. Cross-provider: Claude Code, Gemini CLI, Cursor, Cline. All converging on `SKILL.md` format. |
+| `subagent` | `agents/` | Specialized AI persona definitions with controlled tool access, model selection, and isolated context. Primarily Claude Code (`.claude/agents/`); GitHub Copilot emerging. Not to be confused with `AGENTS.md` or `AGENT.md`, which are rules files. |
+| `rules` | `rules/` | Behavior configuration files. Covers CLAUDE.md equivalents, AGENTS.md (cross-platform standard), Cursor `.mdc` rules, Windsurf rules, Copilot instructions, and similar. Multi-file per item (e.g., a set of scoped rule files). |
+| `command` | `commands/` | Slash commands invocable by the user during a session. Single `.md` file per command, wrapped in a subdirectory for hashing consistency. |
+
+### Deferred to v2
+
+| Type | Category dir | Reason deferred |
+|---|---|---|
+| `hook` | `hooks/` | No established cross-provider packaging convention. Hooks are rarely shared. Hook packaging design is in progress (see companion spec work). |
+| `mcp` | `mcp/` | Scope unclear (config snippet vs. full server). MCP config snippets are a candidate; full servers belong in npm/PyPI. Deferred pending scope decision. |
+
+`hooks/` and `mcp/` category directories are reserved in v1 to ensure structural stability. Registries SHOULD NOT populate them until v2 defines their content format.
+
+### Repository Layout
+
+A MOAT registry repository uses the following canonical structure:
+
+```
+skills/
+  summarizer/          ← content item (hashed as unit)
+  code-explainer/
+agents/
+  code-reviewer/
+rules/
+  typescript-style/    ← directory of one or more rule files
+  security-baseline/
+commands/
+  deploy/
+hooks/                 ← reserved, empty in v1
+mcp/                   ← reserved, empty in v1
+moat-attestation.json  ← Publisher Action output (excluded from content hashing)
+```
+
+Each subdirectory within a category directory is one content item. The content hash covers the entire subdirectory.
+
+### Content Discovery (Publisher Action)
+
+The Publisher Action uses a two-tier discovery model:
+
+**Tier 1 — Canonical layout (zero config):** Walk the six reserved category directories. Each subdirectory = one content item of the parent category's type. No additional configuration needed.
+
+**Tier 2 — `moat.yml` manifest (custom layout):** For repos that cannot adopt the canonical layout (existing repos, monorepos, custom structures), a `moat.yml` at the repo root explicitly declares content items:
+
+```yaml
+version: "1"
+items:
+  - name: summarizer
+    type: skill
+    path: ./src/tools/summarizer
+  - name: typescript-style
+    type: rules
+    path: ./docs/rules/typescript
+```
+
+If `moat.yml` is present, it takes precedence over Tier 1 discovery. Tier 1 is not applied.
+
+A reference tool (`moat init`) assists publishers in generating `moat.yml` interactively for existing repos.
+
+---
+
 ## Trust Model
 
 ### Trust Tiers (visible to users)
@@ -166,7 +235,13 @@ Registries MUST produce the canonical byte sequence before hashing. The canonica
 4. **Symlinks:** Reject at ingestion. No resolution, no skipping.
 5. **Extensionless files:** Treated as binary (no normalization). Dotfiles with no second dot (`.gitignore`, `.eslintrc`) are extensionless.
 
-The Text Extensions List is normative and spec-versioned. Changes require a spec revision. The list covers common AI content file types: `.md`, `.txt`, `.rst`, `.yaml`, `.yml`, `.json`, `.toml`, `.ini`, `.cfg`, `.conf`, `.html`, `.htm`, `.xml`, `.svg`, `.css`, `.scss`, `.less`, `.js`, `.ts`, `.jsx`, `.tsx`, `.mjs`, `.cjs`, `.py`, `.rb`, `.lua`, `.rs`, `.go`, `.sh`, `.bash`, `.zsh`, `.fish`, `.csv`, `.tsv`, `.sql`, `.lock`, `.sum`, `.mod`. Derived from `bevry/textextensions` (community-maintained, MIT-licensed), curated for AI agent content. Extensionless files and dotfiles with no second dot are always binary.
+The Text Extensions List is normative and spec-versioned. Changes require a spec revision. The list covers common AI
+content file types:
+`.md`, `.txt`, `.rst`, `.yaml`, `.yml`, `.json`, `.toml`, `.ini`, `.cfg`, `.conf`, `.html`, `.htm`,
+`.xml`, `.svg`, `.css`, `.scss`, `.less`, `.js`, `.ts`, `.jsx`, `.tsx`, `.mjs`, `.cjs`, `.py`, `.rb`, `.lua`, `.rs`,
+`.go`, `.sh`, `.bash`, `.zsh`, `.fish`, `.csv`, `.tsv`, `.sql`, `.lock`, `.sum`, `.mod`. 
+Derived from`bevry/textextensions` (community-maintained, MIT-licensed), curated for AI agent content. 
+Extensionless files and dotfiles with no second dot are always binary.
 
 **Conformance test suite** ships with the spec as a first-class artifact — not an appendix. Includes adversarial test vectors for: pure CRLF, pure LF, lone CR, mixed endings, `\r\r\n`, BOM presence/absence, BOM+CRLF compound, case-variant extensions, binary files containing CRLF-like bytes, files with text extensions but NUL bytes (must hash as binary), and empty files.
 
@@ -225,6 +300,8 @@ Suspicious provenance (content hash exists in Rekor under a different identity w
 ## What the Spec Needs to Define
 
 ### Core protocol (normative)
+- **Content type registry** — normative list of v1 content types (`skill`, `subagent`, `rules`, `command`), their category directory names, and reserved-but-deferred types (`hook`, `mcp`). Adding a new content type requires a spec revision.
+- **Repository layout convention** — canonical category directory structure and the two-tier discovery model (`moat.yml` override).
 - **Registry manifest format** — the signed document a registry publishes about itself and its content index. The core artifact of MOAT. Per-item entries include: `name`, `display_name`, `content_hash`, `source_uri`, `attested_at`, `derived_from`, `scan_status`, `risk_tier`.
 - **Content hashing algorithm** — simplified, Go dirhash-style. Deterministic, one-pass, trivially implementable.
 - **Hash format** — `<algorithm>:<hex>` with no length constraints.
@@ -251,7 +328,7 @@ Suspicious provenance (content hash exists in Rekor under a different identity w
 The Publisher Action is the primary adoption mechanism for the `Dual-Attested` tier. Any source repo adopts it with a single workflow file — no key management, no MOAT-specific knowledge required beyond adding the workflow.
 
 **What it does on push:**
-1. Detects AI content in the repo (skills, hooks, rules, MCP configs, agents)
+1. Discovers content items via two-tier model: canonical category directories (`skills/`, `agents/`, `rules/`, `commands/`) or `moat.yml` manifest if present
 2. Computes content hashes using the MOAT algorithm
 3. Signs via Sigstore keyless OIDC — uses the GitHub Actions runner identity automatically
 4. Posts a Rekor entry (the source CI attestation — the second of the two independent entries)
@@ -439,6 +516,8 @@ Registries MUST maintain a `revocations` array in the manifest (empty array if n
 
 `malicious` and `compromised` are security events. `deprecated` and `policy_violation` are informational. Clients MUST surface them differently.
 
+**Note on reason code consistency:** In practice, registries respond to incidents before investigation is complete. `compromised` will often be used as a precautionary catch-all when a registry is uncertain — "something is wrong with the source" is almost always technically true, whereas `malicious` implies a confirmed accusation that operators are reluctant to make under time pressure. Clients MUST NOT infer precision from the code beyond its block/warn category — the behavioral response is what matters. The `details_url` field is where incident-specific context belongs.
+
 **Client behavior at install time (normative):**
 - Conforming clients MUST check `revocations` in the manifest AND the revocation feed (if `revocation_feed_url` is present) before completing an install.
 - If the requested content hash appears in `revocations` with reason `malicious` or `compromised`: MUST NOT install. MUST surface reason and `details_url` if present.
@@ -450,7 +529,7 @@ Registries MUST maintain a `revocations` array in the manifest (empty array if n
 - MUST surface active revocations in status and list views (a visible revocation marker alongside the item).
 - MUST NOT silently continue presenting revoked content as fully trusted.
 - MUST NOT autonomously uninstall or modify content — user action is required.
-- Re-install of a `malicious` or `compromised` hash MUST be blocked unless the user explicitly overrides.
+- Re-install of a `malicious` or `compromised` hash MUST be blocked. There is no override path.
 
 **Cross-registry revocation propagation:**
 Content hashes are universal — the client lockfile tracks installed hashes without regard to which registry distributed them. Conforming clients SHOULD check all trusted registries' `revocations` lists against all locally installed content hashes. If Registry A revokes hash X and the user has hash X installed from Registry B, the client SHOULD surface a cross-registry revocation warning attributed to its source: "Registry A has denounced this content hash."
@@ -479,12 +558,17 @@ See `docs/research/revocation-abuse-scenarios.md` for full scenario analysis.
 
 **Revocation feed format** (when `revocation_feed_url` is present): Same structure as the embedded `revocations` array, wrapped in the standard MOAT signing envelope. Clients MUST verify the feed is signed by the same registry identity as the manifest. Unsigned revocation feeds MUST be rejected.
 
+**Feed unavailability at install time:** If `revocation_feed_url` is present but the endpoint is unreachable (DNS failure, timeout, non-2xx response), clients MUST NOT block the install solely on that basis. The manifest `revocations` array is the baseline revocation floor and remains checked. Clients MUST surface a degradation warning before the user can confirm the install — not in a log, not after completion. The warning MUST include: (1) the feed URL that was unreachable, (2) the staleness window being relied upon (time since last manifest fetch), and (3) a timestamp of the last successful manifest fetch. This is a graceful degradation to the manifest baseline, not a revocation signal failure.
+
+**Note:** Registries that deploy `revocation_feed_url` typically do so to achieve sub-manifest-refresh revocation response. During feed outages, clients are relying on the manifest's revocation data, which may lag by up to the client's manifest cache threshold (default: 24h). The warning exists to make this tradeoff visible, not to block legitimate installs during transient infrastructure events.
+
 Key decisions:
 - **Embedded array is the baseline** — no separate endpoint required for conformance. Every manifest has `revocations` (empty array is valid). Small registries need no additional infrastructure.
 - **Optional feed URL enables low-latency response** — a security incident cannot wait for the next content ingest cycle to trigger a manifest re-sign. The feed URL is the escape hatch for registries that need faster turnaround.
 - **Reason taxonomy is normative and bounded** — four values, no extension point. Avoids the "deprecation reasons are a mess" failure mode of npm. If a future spec version adds a reason, unknown reasons from older manifests are treated as `policy_violation` by clients (fail to the least-alarming safe default; `malicious` would be false-positive noise).
 - **No automatic uninstall** — MOAT does not control the filesystem or agent platforms. Forcing removal is out of scope and introduces its own risk (breaking active workflows). The obligation is to surface the signal clearly and block reinstall.
 - **Cross-registry hash matching closes the ClawHub gap** — if a poisoning incident is discovered after distribution across multiple registries, any one registry denouncing the hash is sufficient to warn users who installed from any registry. No central authority needed.
+- **`revoked_at` is registry-asserted, not independently verified** — the field is informational. Clients MUST NOT treat it as a tamper-evident timestamp. For timestamp corroboration, clients MAY cross-reference the corresponding Rekor log entry (via `rekor_log_index` if present in the revocation feed entry). Clients SHOULD treat a `revoked_at` value significantly older than the manifest's own Rekor log timestamp as a signal warranting additional scrutiny or logging. No normative skew window is specified — a fixed value would be wrong for high-latency CI and air-gapped deployment scenarios, and a skew constraint is only enforceable for clients that already check Rekor. X.509 CRL precedent shows timestamp manipulation is a real deployed attack class, but PKI mitigations only work when timestamp verification is mandatory — which it is not here. If the protocol ever adds grace-period semantics (content installed before `revoked_at` is grandfathered), this decision must be revisited before that feature ships.
 
 OWASP alignment:
 - **CICD-SEC-3** (Dependency Chain Abuse): revocation prevents already-distributed compromised content from persisting in the supply chain after discovery
@@ -492,6 +576,9 @@ OWASP alignment:
 - **AST01** (Malicious Skills): revocation is the post-distribution remediation path for confirmed malicious content
 - **AST02** (Supply Chain Compromise): revocation is the incident response mechanism for registry-level compromise events
 - **AST10** (Cross-Platform Reuse): hash-based cross-registry model ensures revocation signals propagate regardless of which platform or client distributed the content
+
+**9. Identity-bound revocation (deferred to v2)**
+Per-hash revocation covers the v1 use case. A future operational need exists for bulk revocation by signing identity with a time bound — e.g., "nothing signed by `repo:acme-corp/skills-repo` before timestamp T is trusted" — for cases where a whole signing identity is compromised and enumerating individual hashes is impractical. This does not map to traditional key revocation (Sigstore uses ephemeral keys; the OIDC identity is the trust anchor). The correct primitive is identity-bound revocation with a `revoked_before` timestamp, not a `key_revocations` array. Deferred: not a v1 requirement given zero registries at launch, but the mechanism should be defined before the ecosystem scales.
 
 ---
 
