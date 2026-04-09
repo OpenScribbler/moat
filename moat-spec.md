@@ -29,7 +29,7 @@ https://www.apache.org/licenses/LICENSE-2.0.
 
 ## What MOAT Is
 
-**Model for Origin Attestation and Trust** — a protocol for secure distribution of AI agent content through registries.
+**Model for Origin Attestation and Trust** is a protocol for secure distribution of AI agent content through registries.
 
 MOAT defines how registries publish, sign, and distribute collections of agent content. It is a distribution protocol,
 not a metadata format.
@@ -50,11 +50,14 @@ MOAT does NOT define:
 - Per-file metadata within content items
 - Individual file attestation outside a registry context
 
-## Scope
+---
 
-MOAT is scoped to registry-distributed content — attestation, install-time verification, lockfiles, and revocation signaling.
+## MOAT is not
 
-**MOAT is not:**
+MOAT is scoped to registry-distributed content — attestation, install-time verification, lockfiles, and revocation
+signaling.
+
+MOAT is explicitly NOT:
 
 - A package manager
 - A central registry
@@ -65,7 +68,12 @@ MOAT is scoped to registry-distributed content — attestation, install-time ver
 - A runtime execution or sandboxing spec for AI agent tools
 - A content-format spec
 
-**Out of scope:**
+### Out of scope
+
+MOAT's trust guarantee covers the content directory as a unit. Dependencies outside that directory are outside the
+guarantee and need to be surfaced by companion specs and conforming clients.
+
+The following are outside MOAT's signing guarantee and therefore out of scope for the core spec:
 
 - Informally shared standalone files
 - Per-file metadata inside content items
@@ -74,14 +82,13 @@ MOAT is scoped to registry-distributed content — attestation, install-time ver
 - Runtime sandboxing or permission enforcement
 - Cross-item dependency graphs
 
-MOAT's trust guarantee covers the content directory as a unit. Dependencies outside that directory are outside the
-guarantee and need to be surfaced by companion specs and conforming clients.
+Runtime dependencies, such as external packages fetched at execution time, remote resources loaded by scripts, or any
+resource resolved outside the attested content directory, are outside MOAT's signing guarantee. Content that appears
+clean at install time may load untrusted resources at runtime. Conforming clients SHOULD surface this boundary
+explicitly to End Users at install time. Companion specs MAY require publishers to declare known external dependencies
+so clients can present them before the End User confirms an install.
 
-Runtime dependencies — external packages fetched at execution time, remote resources loaded by scripts, or any
-resource resolved outside the attested content directory — are outside MOAT's signing guarantee. Content that
-appears clean at install time may load untrusted resources at runtime. Conforming clients SHOULD surface this
-boundary explicitly to End Users at install time. Companion specs MAY require publishers to declare known external
-dependencies so clients can present them before the End User confirms an install.
+---
 
 ## Actors
 
@@ -109,9 +116,19 @@ already-installed content after a conforming client has completed verification a
 outside the MOAT protocol boundary. MOAT intentionally defines no runtime behavior, sandboxing, permission
 enforcement, or execution semantics for it; it appears here to make that boundary explicit.
 
+## Conforming specs
+
+MOAT is a protocol specification, not an implementation. It defines normative behavior for conforming clients and
+registries, but it does not define any specific implementation. The following companion specs are normative parts of the
+MOAT ecosystem:
+
 **[moat-verify](specs/moat-verify.md)** — A standalone verification tool that lets any reader independently audit the
 MOAT trust chain for a content item without installing or executing it. Its use case is diagnosis, validation, and
 interoperability testing. It is therefore not a conforming client and not a runtime.
+
+**[Publisher Action](specs/publisher-action.md)** — A GitHub Actions workflow that publishers can adopt to generate
+source-side attestations. This is normative for the Dual-Attested trust tier, but it is not required to run a registry
+or be a conforming client. Registries that want to support Dual-Attested content MUST be able to consume attestations
 
 ---
 
@@ -259,9 +276,16 @@ https://raw.githubusercontent.com/{owner}/{repo}/moat-attestation/moat-attestati
 ### Registry Trust
 
 - Adding a registry is an explicit End User decision
-- Registry signing identity is declared and verifiable
-- Signing identity changes require client re-approval
+- Registry signing identity is declared in `registry_signing_profile` and verifiable via the manifest bundle
+- Conforming clients MUST track `registry_signing_profile` per trusted registry; changes on a subsequent fetch
+  require End User re-approval before the updated manifest is accepted
+- `operator` and `name` are display labels — changes to these fields MUST NOT be treated as signing identity
+  changes and MUST NOT trigger re-approval
 - Registries are responsible for curation in their own domain
+- **First-install trust boundary:** For registries discovered through a Registry Index, the index entry's
+  `registry_signing_profile` establishes the expected signing identity before first manifest fetch. For
+  manually-added registries, the signing identity is accepted from the manifest on first fetch — the End User's
+  explicit add action is the bootstrap. This is a known TOFU boundary inherent to any PKI-like system.
 
 ### Content Hashing
 
@@ -305,6 +329,12 @@ cache-poison a client's manifest fetch, a revocation must have been issued after
 generated, and the client must not have refreshed within the staleness threshold. These conditions narrow the
 exploitable window significantly in practice.
 
+**`updated_at` and the staleness threshold:** The manifest's `updated_at` field records when the registry last
+regenerated its manifest and is for display and activity monitoring only. The 24-hour staleness threshold MUST be
+computed against the client's own last-fetch timestamp — not against `updated_at`. A manifest whose `updated_at`
+is recent but which the client fetched 25 hours ago is stale; a manifest whose `updated_at` is seven days old but
+which the client fetched two hours ago is not.
+
 Explicit manifest expiry with an `expires_at` field — where clients hard-reject manifests past their declared
 expiry — is deferred to a future version. The prerequisite is registry infrastructure maturity: `expires_at`
 creates a hard liveness dependency on the registry's CI pipeline, and a CI outage means the registry's entire
@@ -314,8 +344,38 @@ that MOAT v1 targets.
 
 ### Signature Envelope
 
-The core spec defines a platform-agnostic signing envelope. The normative signing profile for v1 is `sigstore`
-— keyless OIDC signing via Fulcio/Rekor.
+The normative signing mechanism for MOAT v1 is Sigstore keyless OIDC signing via Fulcio/Rekor.
+
+**Signing input:** The registry CI signs the manifest JSON file with `cosign sign-blob`. The input to signing is
+the raw bytes of the manifest file as it will be served — after any transport-layer decompression, with no
+additional normalization. The manifest MUST be served as UTF-8 without a byte-order mark. Once signed and
+published, the manifest file is byte-stable: any modification breaks the signature.
+
+**Bundle placement:** The cosign bundle (signature, signing certificate, and Rekor transparency log entry) MUST be
+served at `{manifest_uri}.sigstore`. This path is normative — conforming registries MUST serve the bundle there
+and conforming clients MUST fetch it from there. The bundle MUST be served at the same availability level as the
+manifest itself. A bundle at an ephemeral URL will produce verification failures when it expires.
+
+**Manifest verification flow:**
+
+1. Fetch the manifest at `manifest_uri`
+2. Fetch the bundle at `{manifest_uri}.sigstore`
+3. Verify the bundle covers the exact bytes of the downloaded manifest file
+4. Confirm the signing certificate's OIDC issuer and subject match the manifest's `registry_signing_profile`
+5. Confirm the Rekor transparency log entry in the bundle is valid
+
+Rekor unavailability is a hard failure — there is no fallback to bundle-only verification without Rekor
+confirmation. See [Trust Anchor Model](#trust-anchor-model).
+
+**Signing identity trust:**
+
+- For registries discovered through a Registry Index: the index entry's `registry_signing_profile` establishes
+  the expected signing identity before the manifest is fetched. Conforming clients SHOULD confirm the manifest's
+  declared `registry_signing_profile` matches the index entry before accepting.
+- For manually-added registries: the signing identity declared in the manifest is accepted on first fetch. The
+  End User's explicit action to add the registry is the trust bootstrap.
+- On subsequent fetches: if `registry_signing_profile` has changed, conforming clients MUST require End User
+  re-approval before accepting the manifest. `operator` and `name` changes do NOT trigger re-approval.
 
 ---
 
@@ -337,9 +397,11 @@ These items are required for conformance. A conforming registry, a conforming cl
 - **Content type registry** — normative list of current types (`skill`, `subagent`, `rules`, `command`), category
   directory names, and deferred types (`hook`, `mcp`).
 - **Repository layout convention** — canonical directory structure and two-tier discovery model (`moat.yml` override).
-- **Registry manifest format** — the signed document a registry publishes. The core artifact of MOAT. Per-item entries:
-  `name`, `display_name`, `content_hash`, `source_uri`, `attested_at`, `derived_from`, `scan_status`, and
-  `signing_profile` (REQUIRED for Dual-Attested items; omitted for Signed and Unsigned).
+- **Registry manifest format** — the signed document a registry publishes. The core artifact of MOAT. Top-level
+  fields: `schema_version`, `manifest_uri`, `name`, `operator`, `updated_at`, `registry_signing_profile`,
+  `content`, `revocations`. Per-item entries: `name`, `display_name`, `content_hash`, `source_uri`, `attested_at`,
+  `derived_from`, `scan_status`, and `signing_profile` (REQUIRED for Dual-Attested items; omitted for Signed and
+  Unsigned). See [Registry Manifest](#registry-manifest).
 - **Content hashing algorithm** — deterministic, one-pass, Go dirhash-inspired. Defined by normative reference
   implementation (`moat_hash.py`), not pseudocode.
 - **Hash format** — `<algorithm>:<hex>` with no length constraints.
@@ -507,6 +569,15 @@ Minimum structure:
 
 ```json
 {
+  "schema_version": 1,
+  "manifest_uri": "https://example.com/moat-manifest.json",
+  "name": "Example Registry",
+  "operator": "Example Operator",
+  "updated_at": "2026-04-09T00:00:00Z",
+  "registry_signing_profile": {
+    "issuer": "https://token.actions.githubusercontent.com",
+    "subject": "repo:owner/repo:ref:refs/heads/main"
+  },
   "content": [
     {
       "name": "my-skill",
@@ -524,6 +595,14 @@ Minimum structure:
 
 | Field | Required | Description |
 |-------|----------|-------------|
+| `schema_version` | REQUIRED | Manifest format version; currently `1` (integer) |
+| `manifest_uri` | REQUIRED | Canonical URL at which this manifest is hosted. MUST be a stable path-based URL with no query parameters or fragments — the bundle URL is derived from it. Clients MAY use to detect substitution attacks. |
+| `name` | REQUIRED | Human-readable registry name |
+| `operator` | REQUIRED | Human-readable name of the registry operator. Display label only — changes do NOT trigger re-approval. |
+| `updated_at` | REQUIRED | ISO 8601 UTC timestamp of when this manifest was last generated. For display and activity monitoring only — the staleness check uses the client's last-fetch timestamp, not this field. |
+| `registry_signing_profile` | REQUIRED | The registry's CI signing identity. Conforming clients MUST track this per registry; changes on a subsequent fetch require End User re-approval before the manifest is accepted. See [Signature Envelope](#signature-envelope). |
+| `registry_signing_profile.issuer` | REQUIRED | OIDC issuer URL of the registry's CI provider |
+| `registry_signing_profile.subject` | REQUIRED | OIDC subject claim as produced by the registry's CI provider |
 | `content` | REQUIRED | Array of per-item entries |
 | `content[].name` | REQUIRED | Canonical identifier for the content item |
 | `content[].display_name` | REQUIRED | Human-readable name |
@@ -541,8 +620,15 @@ Minimum structure:
 | `revocations[].reason` | REQUIRED | One of: `malicious`, `compromised`, `deprecated`, `policy_violation` |
 | `revocations[].details_url` | REQUIRED for registry / OPTIONAL for publisher | URL to public revocation details |
 
-> The top-level manifest fields covering registry identity, signing envelope, and signature are not yet formally
-> named. They will be defined when the spec advances beyond Draft status.
+**Field notes:**
+
+- `registry_signing_profile` is the registry-level signing identity. It is structurally identical to per-item
+  `signing_profile` (issuer + subject) but scoped to the manifest document itself, not to a publisher's content
+  attestation. Conforming implementations MUST NOT conflate these two fields.
+- `operator` and `name` are display labels. Conforming clients MUST NOT treat changes to these fields as signing
+  identity changes and MUST NOT require re-approval when they change.
+- `updated_at` uses the registry's clock. The 24-hour staleness threshold runs against the client's own last-fetch
+  timestamp. See [Freshness Guarantee and Replay Scope](#freshness-guarantee-and-replay-scope).
 
 ### Lockfile
 
@@ -606,7 +692,7 @@ Minimum structure:
 
 ```json
 {
-  "schema_version": "1",
+  "schema_version": 1,
   "index_uri": "https://example.com/moat-index.json",
   "operator": "Example Registry Index",
   "governance_url": "https://example.com/moat-governance",
@@ -615,23 +701,30 @@ Minimum structure:
     {
       "name": "Example Registry",
       "manifest_url": "https://example.com/moat-manifest.json",
+      "registry_signing_profile": {
+        "issuer": "https://token.actions.githubusercontent.com",
+        "subject": "repo:owner/repo:ref:refs/heads/main"
+      },
       "description": "A registry of example skills"
     }
   ]
 }
 ```
 
-| Field                       | Required | Description                                          |
-|-----------------------------|----------|------------------------------------------------------|
-| `schema_version`            | REQUIRED | Index format version; currently `"1"`                |
-| `index_uri`                 | REQUIRED | Canonical URL at which this index document is hosted |
-| `operator`                  | REQUIRED | Human-readable name of the index operator            |
-| `governance_url`            | REQUIRED | URL of the public governance document                |
-| `updated_at`                | REQUIRED | ISO 8601 timestamp of the last index update          |
-| `registries`                | REQUIRED | Array of registry entries                            |
-| `registries[].name`         | REQUIRED | Human-readable registry name                         |
-| `registries[].manifest_url` | REQUIRED | URL of the registry's signed manifest                |
-| `registries[].description`  | OPTIONAL | Short description of the registry's scope or focus   |
+| Field                                          | Required | Description                                          |
+|------------------------------------------------|----------|------------------------------------------------------|
+| `schema_version`                               | REQUIRED | Index format version; currently `1` (integer)        |
+| `index_uri`                                    | REQUIRED | Canonical URL at which this index document is hosted |
+| `operator`                                     | REQUIRED | Human-readable name of the index operator            |
+| `governance_url`                               | REQUIRED | URL of the public governance document                |
+| `updated_at`                                   | REQUIRED | ISO 8601 timestamp of the last index update          |
+| `registries`                                   | REQUIRED | Array of registry entries                            |
+| `registries[].name`                            | REQUIRED | Human-readable registry name                         |
+| `registries[].manifest_url`                    | REQUIRED | URL of the registry's signed manifest                |
+| `registries[].registry_signing_profile`        | REQUIRED | Expected signing identity for this registry's manifest |
+| `registries[].registry_signing_profile.issuer` | REQUIRED | OIDC issuer URL                                      |
+| `registries[].registry_signing_profile.subject`| REQUIRED | OIDC subject claim                                   |
+| `registries[].description`                     | OPTIONAL | Short description of the registry's scope or focus   |
 
 **Field notes:**
 
@@ -640,6 +733,12 @@ Minimum structure:
   responsibility; this spec requires it to exist, be public, and cover the listed topics.
 - `index_uri` MUST be the canonical URL at which this index is hosted. Clients MAY use this to detect index moves
   or substitution attacks.
+- `registries[].registry_signing_profile` establishes the expected manifest signing identity for registries
+  discovered through this index. Conforming clients SHOULD verify that the first-fetched manifest's
+  `registry_signing_profile` matches this value before accepting the registry. This closes the first-fetch trust
+  bootstrapping gap for discovered registries. For manually-added registries (not discovered through an index),
+  the signing identity is accepted from the manifest on first fetch — the End User's explicit add action is the
+  trust anchor. See [Signature Envelope](#signature-envelope).
 
 ### scan_status
 
