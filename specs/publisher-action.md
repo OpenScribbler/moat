@@ -11,7 +11,7 @@
 
 1. Detects source repository visibility. If `private` or `internal` and `allow-private-repo: true` is not set, exits immediately with a non-zero code and a clear error message. See Private Repository Guard.
 2. Discovers content items via two-tier model: canonical category directories (`skills/`, `subagents/`, `rules/`, `commands/`) or `moat.yml` if present.
-3. Computes content hashes using the MOAT algorithm (`moat_hash.py`). Errors (symlinks, empty directories) skip the item with a logged warning.
+3. Computes content hashes using the MOAT algorithm ([`reference/moat_hash.py`](../reference/moat_hash.py)). Errors (symlinks, empty directories) skip the item with a logged warning.
 4. Builds one attestation payload JSON per content item (schema below).
 5. Signs each payload with `cosign sign-blob` using Sigstore keyless OIDC. GitHub Actions provides the OIDC token automatically — no keys or secrets required.
 6. Rekor creates a transparency log entry. `cosign` returns a bundle file containing `logID` and `logIndex`.

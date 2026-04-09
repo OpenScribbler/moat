@@ -5,3 +5,6 @@ panel/
 .handoffs/
 .vscode/
 __pycache__/
+
+# Generated test artifacts (cosign bundles, blobs, identity metadata)
+reference/test_artifacts/

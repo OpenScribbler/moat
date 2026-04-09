@@ -130,6 +130,14 @@ interoperability testing. It is therefore not a conforming client and not a runt
 source-side attestations. This is normative for the Dual-Attested trust tier, but it is not required to run a registry
 or be a conforming client. Registries that want to support Dual-Attested content MUST be able to consume attestations
 
+### Reference implementations
+
+**[`reference/moat_hash.py`](reference/moat_hash.py)** — Python reference implementation of the MOAT content hashing
+algorithm. Conforming implementations in any language MUST produce identical output for all test vectors.
+
+**[`reference/generate_test_vectors.py`](reference/generate_test_vectors.py)** — Generates the canonical test vector
+suite used to validate conforming implementations of the content hashing algorithm.
+
 ---
 
 ## Why This Architecture
@@ -289,9 +297,9 @@ https://raw.githubusercontent.com/{owner}/{repo}/moat-attestation/moat-attestati
 
 ### Content Hashing
 
-The content hash identifies a content directory by canonical byte sequence using the normative `moat_hash.py` reference
-implementation. Resolved normalization rules, exclusion rules, and conformance expectations are defined by the
-reference implementation and its test vectors.
+The content hash identifies a content directory by canonical byte sequence using the normative
+[`reference/moat_hash.py`](reference/moat_hash.py) reference implementation. Resolved normalization rules, exclusion
+rules, and conformance expectations are defined by the reference implementation and its test vectors.
 
 ### Trust Anchor Model
 
@@ -403,7 +411,7 @@ These items are required for conformance. A conforming registry, a conforming cl
   `derived_from`, `scan_status`, and `signing_profile` (REQUIRED for Dual-Attested items; omitted for Signed and
   Unsigned). See [Registry Manifest](#registry-manifest).
 - **Content hashing algorithm** — deterministic, one-pass, Go dirhash-inspired. Defined by normative reference
-  implementation (`moat_hash.py`), not pseudocode.
+  implementation ([`reference/moat_hash.py`](reference/moat_hash.py)), not pseudocode.
 - **Hash format** — `<algorithm>:<hex>` with no length constraints.
 - **Algorithm requirements** — `sha256` is the REQUIRED algorithm; conforming implementations MUST support it.
   `sha512` is OPTIONAL. The following algorithms are FORBIDDEN and MUST NOT appear in content hashes: `sha1`,
@@ -463,9 +471,10 @@ These items are required for conformance. A conforming registry, a conforming cl
 
 ### Reference implementations (normative behavior, separate artifacts)
 
-- **`moat_hash.py`** — Python reference implementation. A conforming implementation produces identical output for all
+- **[`reference/moat_hash.py`](reference/moat_hash.py)** — Python reference implementation. A conforming implementation produces identical output for all
   test vectors. Two independent implementations in different languages must pass all test vectors before the spec
   advances beyond Draft.
+- **[`reference/generate_test_vectors.py`](reference/generate_test_vectors.py)** — Generates the canonical test vector suite used to validate conforming implementations.
 - **`moat-verify`** — Standalone verification script. Spec: [`specs/moat-verify.md`](specs/moat-verify.md)
 - **Publisher Action** — GitHub Actions workflow for source repos. Spec:
   [`specs/publisher-action.md`](specs/publisher-action.md)
@@ -497,7 +506,7 @@ optionally notify registries by webhook. Publisher revocations are warnings, not
 
 ## moat-verify
 
-`moat-verify` is a standalone Python 3.9+ verification tool. It imports `moat_hash.py` directly, requires `cosign` on
+`moat-verify` is a standalone Python 3.9+ verification tool. It imports [`reference/moat_hash.py`](reference/moat_hash.py) directly, requires `cosign` on
 PATH, and lets anyone verify MOAT-attested content without depending on a specific client implementation.
 
 `moat-verify` is a diagnostic verification tool. It is not a conforming client because it does not install or manage
@@ -646,40 +655,41 @@ Minimum structure:
       "type": "skill|subagent|rules|command",
       "registry": "https://...",
       "content_hash": "sha256:<hex>",
+      "trust_tier": "DUAL-ATTESTED|SIGNED|UNSIGNED",
       "attested_at": "RFC 3339 UTC",
       "pinned_at": "RFC 3339 UTC",
-      "attestation_bundle": {}
+      "attestation_bundle": {},
+      "signed_payload": {}
     }
   ],
   "revoked_hashes": []
 }
 ```
 
-| Field                          | Required | Description                                                         |
-|--------------------------------|----------|---------------------------------------------------------------------|
-| `moat_lockfile_version`        | REQUIRED | Schema version; currently `1`                                       |
-| `entries`                      | REQUIRED | Array of installed content records                                  |
-| `entries[].name`               | REQUIRED | Content item name as recorded in the registry manifest              |
-| `entries[].type`               | REQUIRED | Content type; closed set: `skill`, `subagent`, `rules`, `command`   |
-| `entries[].registry`           | REQUIRED | Registry manifest URL the item was installed from                   |
-| `entries[].content_hash`       | REQUIRED | `<algorithm>:<hex>` — normative identity of the installed item      |
-| `entries[].attested_at`        | REQUIRED | Registry's attestation timestamp (registry clock, not client clock) |
-| `entries[].pinned_at`          | REQUIRED | Local install timestamp (client clock; not externally verifiable)   |
-| `entries[].attestation_bundle` | REQUIRED | Full cosign bundle captured at install time                         |
-| `revoked_hashes`               | REQUIRED | Array of hard-blocked content hash strings; empty array if none     |
+| Field                          | Required | Description                                                                                           |
+|--------------------------------|----------|-------------------------------------------------------------------------------------------------------|
+| `moat_lockfile_version`        | REQUIRED | Schema version; currently `1`                                                                         |
+| `entries`                      | REQUIRED | Array of installed content records                                                                    |
+| `entries[].name`               | REQUIRED | Content item name as recorded in the registry manifest                                                |
+| `entries[].type`               | REQUIRED | Content type; closed set: `skill`, `subagent`, `rules`, `command`                                     |
+| `entries[].registry`           | REQUIRED | Registry manifest URL the item was installed from                                                     |
+| `entries[].content_hash`       | REQUIRED | `<algorithm>:<hex>` — normative identity of the installed item                                        |
+| `entries[].trust_tier`         | REQUIRED | Trust tier at install time: `DUAL-ATTESTED`, `SIGNED`, or `UNSIGNED`                                  |
+| `entries[].attested_at`        | REQUIRED | Registry's attestation timestamp (registry clock, not client clock)                                   |
+| `entries[].pinned_at`          | REQUIRED | Local install timestamp (client clock; not externally verifiable)                                     |
+| `entries[].attestation_bundle` | REQUIRED | Full cosign bundle captured at install time; `null` for `UNSIGNED` content                            |
+| `entries[].signed_payload`     | REQUIRED | The original payload passed to `cosign sign-blob` at attestation time; `null` for `UNSIGNED` content |
+| `revoked_hashes`               | REQUIRED | Array of hard-blocked content hash strings; empty array if none                                       |
 
 **Field notes:**
 
 - `entries[].attested_at` is the registry's clock, not the client's — do not build freshness logic on it.
-- `entries[].attestation_bundle` is the signature, signing certificate, and Rekor transparency log entry as a single
-  embedded JSON object. Conforming clients MUST populate this field at install time — it enables complete offline
-  re-verification of the original attestation without re-querying external services.
-- `entries[].type` is a closed set in the current version. Conforming clients MUST accept entries with unrecognized
-  type values without error — new types will be added in future versions.
-- `entries[].registry` MUST be treated as permanently stable once published. A URL change invalidates all lockfile
-  entries referencing it.
-- `revoked_hashes` entries MUST NOT be silently removed. Clearing a revoked hash requires deliberate End User action.
-  This prevents the remove-and-reinstall bypass: an attempt to reinstall a revoked hash is blocked by this record.
+- `entries[].trust_tier` records the trust tier as determined at install time. It does not update automatically if the registry changes the tier after installation.
+- `entries[].attestation_bundle` is the signature, signing certificate, and Rekor transparency log entry as a single embedded JSON object. Conforming clients MUST populate this field at install time — it is required for offline re-verification.
+- `entries[].signed_payload` is the verbatim content passed to `cosign sign-blob` at attestation time, stored exactly as-is. Conforming clients MUST populate this field — `cosign verify-blob --offline` requires the original signed artifact. JSON serialization differences invalidate the signature; storing verbatim is the only safe approach.
+- `entries[].type` is a closed set in the current version. Conforming clients MUST accept entries with unrecognized type values without error — new types will be added in future versions.
+- `entries[].registry` MUST be treated as permanently stable once published. A URL change invalidates all lockfile entries referencing it.
+- `revoked_hashes` entries MUST NOT be silently removed. Clearing a revoked hash requires deliberate End User action. This prevents the remove-and-reinstall bypass: an attempt to reinstall a revoked hash is blocked by this record.
 
 Conforming clients MAY add additional fields to entries but MUST include all fields listed above. A lockfile from one
 conforming client must be readable by another.
@@ -804,13 +814,6 @@ shipped as of this writing (April 2026). Tracking: Gitea PR
 [#5344](https://codeberg.org/forgejo/forgejo/pulls/5344) (closed 2025-02-02, no active successor). When either
 ships, the issuer will be `<instance-url>/api/actions/oidc` and the subject format will mirror GitHub's. Check
 these PRs before updating this table.
-
----
-
-## Issue Archive
-
-All 16 issues tracked against v0.4.0 are resolved or deferred. The full decision log — including rationale and claims
-for contentious decisions — is in [`docs/issues-archive.md`](docs/issues-archive.md).
 
 ---
 

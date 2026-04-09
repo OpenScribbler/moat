@@ -3,81 +3,27 @@
 **Status:** Draft
 **Part of:** [MOAT Specification](../moat-spec.md)
 **Language:** Python 3.9+
-**Dependencies:** `moat_hash.py` (imported as module), `cosign` CLI on PATH, stdlib only
+**Dependencies:** [`reference/moat_hash.py`](../reference/moat_hash.py) (imported as module), `cosign` CLI on PATH, stdlib only
 
 > `moat-verify` allows any End User to verify MOAT-attested content without depending on a specific client implementation.
 > It makes the trust model auditable end-to-end.
 
-> **Offline mode (`--lockfile`) — design pending stress test.**
->
-> A `--lockfile <path>` mode is planned to support verification of already-installed content without network
-> connectivity. Because the lockfile stores an `attestation_bundle`, offline mode can provide the same attestation
-> assurance as online verification for the original install state — re-hashing the local directory and verifying
-> the stored bundle without any external calls. What it cannot verify is current registry state (revocations,
-> superseding versions, trust tier changes).
->
-> **Interface under consideration:**
-> ```
-> moat-verify <directory> --lockfile <path> [--json]
-> ```
->
-> **Design questions that must be resolved before this is normative:**
->
-> 1. **Mutual exclusivity.** If both `--lockfile` and `--registry` are passed, is that exit 2 (input error), or
->    does one silently take precedence? Current lean: exit 2 with an explicit error — they represent different
->    trust paths and should not be combined silently.
->
-> 2. **No matching entry.** If the computed hash is not found in the lockfile, is that exit 1 (verification
->    failure — content not in lockfile) or exit 2 (input error — wrong lockfile for this directory)? Current lean:
->    exit 1, because "content not in lockfile" is a verification outcome, not an input error.
->
-> 3. **Multiple entries with same content hash.** If the lockfile has two entries with identical `content_hash`
->    values (same content, installed from two different registries), should both be reported or just the first
->    match? Current lean: report all matches — the End User should see that the content is attested by multiple sources.
->
-> 4. **Multiple entries with same name but different hashes.** If the lockfile has two entries with the same
->    `name` but different `content_hash` values (two versions installed), which entry does the tool use? Current
->    lean: verify against whichever entry's hash matches the computed hash; if neither matches, exit 1. Do not
->    pick by name alone.
->
-> 5. **`--source` combined with `--lockfile`.** Publisher attestation in online mode re-fetches
->    `moat-attestation.json` from the source URI. In offline mode there is no network call — publisher attestation
->    from a remote source URI is not possible. Current lean: `--source` is an error when combined with
->    `--lockfile` (exit 2). The `attestation_bundle` in the lockfile already contains the publisher attestation if
->    Dual-Attested content was installed; no separate `--source` flag is needed.
->
-> 6. **Exit code 3 applicability.** Exit code 3 covers infrastructure failures (Rekor unreachable, registry
->    unreachable). In offline mode there are no external calls. Does exit code 3 ever apply? Current lean: yes,
->    if the `attestation_bundle` itself is structurally invalid or the cosign verification of the bundle fails for
->    a reason other than hash mismatch — treat that as exit 3 (unexpected data from a stored artifact), not exit 1
->    (clean verification failure).
->
-> 7. **NOT-verified block content.** Online mode enumerates: registry trustworthiness, registry signing identity
->    legitimacy, publisher OIDC identity ownership, content safety. Offline mode has a different set. Current lean:
->    ```
->    What this script did NOT verify:
->      - Whether this content has been revoked since installation
->      - Whether a newer version supersedes this one
->      - Whether the registry's trust tier assignment has changed
->      - Whether the registry at <registry-url> is one you should trust
->      - Content safety, malicious behavior, or sandbox escape
->    ```
->
-> 8. **`attestation_bundle` verification mechanics.** Online mode calls `cosign verify-blob` against a live Rekor
->    entry. Offline mode must verify the stored bundle without a live Rekor query. The correct tool invocation
->    for offline bundle verification needs to be confirmed (likely `cosign verify-blob --bundle <bundle-file>` with
->    `--offline` flag or equivalent). This must be tested against real cosign behavior before being specified.
->
-> Do not add this mode to the normative spec until all eight questions are resolved and the behavior is confirmed
-> against a real lockfile and real cosign invocations.
 
 ---
 
 ## Interface
 
+`moat-verify` operates in two mutually exclusive modes. `--registry` and `--lockfile` MUST NOT be combined — they answer different questions and passing both is exit 2 with the message:
+
+> `--lockfile` verifies against your stored install snapshot; `--registry` verifies against current registry state. They answer different questions — run one at a time.
+
+### Online mode
+
 ```bash
 moat-verify <directory> --registry <url> [--source <uri>] [--json]
 ```
+
+Verifies against the current live registry state. Can detect revocations, trust tier changes, and current attestation status.
 
 | Argument           | Required | Description                                                                                                                                                                                                                                                                                                                                                                  |
 |--------------------|----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -86,29 +32,48 @@ moat-verify <directory> --registry <url> [--source <uri>] [--json]
 | `--source <uri>`   | No       | Source repository URI for publisher co-attestation. When absent, publisher tier is reported as `NOT REQUESTED` — not a failure. **Current scope: GitHub repository URIs only.** Passing a non-GitHub URI produces exit code 2 with: `Error: --source URI must be a GitHub repository (https://github.com/<owner>/<repo>). GitLab and other platforms are not yet supported.` |
 | `--json`           | No       | Emit machine-readable JSON to stdout in addition to human-readable report.                                                                                                                                                                                                                                                                                                   |
 
+### Offline mode
+
+```bash
+moat-verify <directory> --lockfile <path> [--json]
+```
+
+Verifies against the stored install snapshot. Proves "this content was valid when installed" — cannot detect revocations, tier changes, or current registry state. See [Required "NOT Verified" Block](#required-not-verified-block) for the full list of what offline mode cannot cover.
+
+| Argument            | Required | Description                                                                        |
+|---------------------|----------|------------------------------------------------------------------------------------|
+| `<directory>`       | Yes      | Path to content directory to verify.                                               |
+| `--lockfile <path>` | Yes      | Path to the MOAT lockfile written by the conforming client at install time.        |
+| `--json`            | No       | Emit machine-readable JSON to stdout in addition to human-readable report.         |
+
+`--source` is not valid in offline mode — passing it with `--lockfile` is exit 2. Publisher attestation from install time is already captured in the lockfile's `attestation_bundle` for Dual-Attested content. If the content was installed as Signed (no publisher bundle), exit 2 MUST include: *"Content was installed as Signed — no publisher attestation bundle is available."*
+
 ---
 
 ## Exit Codes
 
-| Code | Meaning                                                                                                     |
-|------|-------------------------------------------------------------------------------------------------------------|
-| `0`  | All requested verifications passed.                                                                         |
-| `1`  | Verification failed (hash not in manifest, Rekor entry invalid, content hash mismatch).                     |
-| `2`  | Input error (directory not found, invalid arguments, unsupported `--source` URI, unknown `schema_version`). |
-| `3`  | Infrastructure failure (registry unreachable, Rekor unreachable, malformed manifest from remote).           |
+| Code | Online mode                                                                                           | Offline mode                                                                                                                       |
+|------|-------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------|
+| `0`  | All verifications passed.                                                                             | All verifications passed.                                                                                                          |
+| `1`  | Verification failed: hash not in manifest, Rekor entry invalid, content hash mismatch.               | Verification failed: hash not in lockfile, content hash mismatch, bundle signature validation failed.                              |
+| `2`  | Input error: bad directory, invalid arguments, unsupported `--source` URI, unknown `schema_version`. | Input error: bad directory, lockfile not found or malformed, `--source` + `--lockfile` combined, `--registry` + `--lockfile` combined, unknown `moat_lockfile_version`. |
+| `3`  | Infrastructure failure: registry unreachable, Rekor unreachable, malformed manifest from remote.     | Corrupt stored artifact: `attestation_bundle` structurally invalid, or cosign signature error not attributable to hash mismatch. Recovery: re-run with `--registry`. |
 
-Exit code 2 indicates the End User gave invalid input or the tool encountered an unrecognized protocol value — the End
-User can fix it.
-Exit code 3 indicates an external system was unavailable or returned unexpected data — the End User may need to retry or
-investigate the registry.
+**Exit code 2** means the End User gave invalid input — they can fix it by correcting their invocation or providing valid files.
+
+**Exit code 3** means something outside the End User's control produced bad data. In online mode, an external service failed. In offline mode, the stored attestation bundle is corrupt. Recovery requires re-verifying with `--registry`.
+
+**Mapping cosign exit codes (offline mode):** `cosign verify-blob` returns exit 1 for both hash mismatch and invalid signature. moat-verify MUST inspect cosign's stderr to determine the correct exit code:
+- `invalid signature when validating ASN.1 encoded signature` in stderr → moat-verify exit 3
+- Any other non-zero cosign exit → moat-verify exit 1
 
 ---
 
-## Verification Steps
+## Online Verification Steps
 
 ### Step 1: Compute content hash
 
-Apply the MOAT content hashing algorithm (`moat_hash.py::content_hash()`) to `<directory>`.
+Apply the MOAT content hashing algorithm ([`reference/moat_hash.py`](../reference/moat_hash.py)`::content_hash()`) to `<directory>`.
 
 Fail with exit code 2 if: directory does not exist or is not a directory; directory contains symlinks; directory is
 empty after VCS directory exclusion.
@@ -231,6 +196,95 @@ owner of the source repository. That decision belongs to the End User.**
 
 ---
 
+## Offline Verification Steps (`--lockfile` mode)
+
+### Step 1: Compute content hash
+
+Identical to [online Step 1](#step-1-compute-content-hash). Apply [`reference/moat_hash.py`](../reference/moat_hash.py)`::content_hash()` to `<directory>`. Same failure conditions and output format.
+
+### Step 2: Parse lockfile
+
+Load and validate the lockfile at `--lockfile <path>`.
+
+Fail with exit code 2 if: file not found or not readable; content is not valid JSON; top-level field `moat_lockfile_version` is absent or unrecognized; top-level field `entries` is absent or not an array.
+
+Output:
+```
+Lockfile: <path> (version: <moat_lockfile_version>, <N> entries)
+```
+
+### Step 3: Look up content hash
+
+Search all entries in `entries` for a matching `content_hash`.
+
+**No match:** Exit 1.
+```
+[✗] Hash not found in lockfile
+    Computed:  sha256:<hex>
+    Lockfile:  <path>
+
+    This means either: the content was modified after installation, or
+    this lockfile does not correspond to this directory.
+    moat-verify cannot distinguish between these cases.
+```
+
+**Multiple entries with the same `content_hash`** (same content attested by multiple registries): verify all matching entries (Step 4 for each). Report each separately. Exit code is the worst outcome — exit 1 if any attestation fails.
+
+**Multiple entries with the same `name` but different `content_hash` values:** match by hash, not by name.
+- Computed hash matches one entry → proceed with that entry.
+- Computed hash matches no entries → exit 1 (same message as no match above).
+- Two entries share identical `content_hash` values → exit 2, malformed lockfile.
+
+On match:
+```
+[✓] Hash found in lockfile
+    Name:       <name>
+    Type:       <type>
+    Registry:   <registry>
+    Attested:   <attested_at>
+    Trust tier: <trust_tier>
+```
+
+### Step 4: Verify attestation bundle (offline)
+
+**If `trust_tier` is `UNSIGNED`:** Skip. Record trust result as `UNSIGNED`.
+
+**Otherwise:**
+
+Write the entry's `attestation_bundle` to a temporary file. Write the entry's `signed_payload` to a second temporary file. Run:
+
+```
+cosign verify-blob \
+  --bundle <bundle-temp> \
+  --offline \
+  --certificate-identity-regexp .* \
+  --certificate-oidc-issuer-regexp .* \
+  <payload-temp>
+```
+
+Cleanup both temporary files regardless of outcome.
+
+**cosign exit 0:**
+```
+[✓] Attestation bundle verified (offline)
+    Signer: <certificate-subject> (<certificate-issuer>)
+    Note:   Rekor entry logged at install time — not re-queried
+```
+
+**cosign exit non-0 with `invalid signature when validating ASN.1 encoded signature` in stderr:** Exit 3.
+```
+[✗] Attestation bundle is corrupt
+    The attestation_bundle stored in the lockfile cannot be verified.
+    This is not a content integrity failure — the stored bundle itself is damaged.
+    Recovery: re-run with --registry <url> to verify against current registry state.
+```
+
+**cosign exit non-0 with any other error:** Exit 1.
+
+**`moat-verify` MUST report the actual OIDC identity found — it MUST NOT decide whether that identity is legitimate. That decision belongs to the End User.**
+
+---
+
 ## Trust Result
 
 | Conditions                                                    | Result          |
@@ -244,7 +298,9 @@ owner of the source repository. That decision belongs to the End User.**
 
 ## Required "NOT Verified" Block
 
-At the end of every run — including failures — `moat-verify` MUST output:
+At the end of every run — including failures — `moat-verify` MUST output the NOT-verified block appropriate to the mode used. Implementations that omit this block do not conform. Its purpose is to prevent End Users from mistaking cryptographic verification for a safety or freshness guarantee.
+
+### Online mode
 
 ```
 What this script did NOT verify:
@@ -254,16 +310,30 @@ What this script did NOT verify:
   - Content safety, malicious behavior, or sandbox escape
 ```
 
-Implementations that omit this block do not conform. Its purpose is to prevent End Users from mistaking cryptographic
-verification for a safety guarantee.
+### Offline mode
+
+```
+This verification reflects content state at install time only.
+
+What this script did NOT verify:
+  - Whether this content has been revoked since installation
+  - Whether the registry's trust tier assignment has changed
+  - Whether the registry signing identity is still the current operator
+  - Whether a newer version supersedes this one
+  - Whether the registry at <registry-url> is one you should trust
+  - Content safety, malicious behavior, or sandbox escape
+```
 
 ---
 
 ## JSON Output (`--json`)
 
+### Online mode
+
 ```json
 {
   "schema_version": 1,
+  "mode": "online",
   "content_hash": "sha256:abc123...",
   "registry": "https://example.com/moat-manifest.json",
   "result": "SIGNED",
@@ -296,6 +366,38 @@ verification for a safety guarantee.
 }
 ```
 
-`steps` values: `true` = passed, `false` = failed, `null` = not attempted. `publisher_rekor_verified` is `null`
-when `--source` was not provided. `manifest_bundle_verified` covers the registry-level Rekor check (Step 2);
-`item_rekor_verified` covers the per-item Rekor check (Step 4).
+`steps` values: `true` = passed, `false` = failed, `null` = not attempted. `publisher_rekor_verified` is `null` when `--source` was not provided. `manifest_bundle_verified` covers the registry-level Rekor check (Step 2); `item_rekor_verified` covers the per-item Rekor check (Step 4).
+
+### Offline mode
+
+```json
+{
+  "schema_version": 1,
+  "mode": "offline",
+  "content_hash": "sha256:abc123...",
+  "lockfile": "/path/to/moat.lock",
+  "result": "SIGNED",
+  "steps": {
+    "hash_computed": true,
+    "lockfile_parsed": true,
+    "hash_found_in_lockfile": true,
+    "bundle_verified": true
+  },
+  "bundle_attestation": {
+    "signer_subject": "repo:owner/repo:ref:refs/heads/main",
+    "signer_issuer": "https://token.actions.githubusercontent.com",
+    "verified_offline": true
+  },
+  "not_verified": [
+    "revocation status since installation",
+    "registry trust tier changes since installation",
+    "registry signing identity currency",
+    "superseding versions",
+    "registry trustworthiness",
+    "content safety"
+  ],
+  "error": null
+}
+```
+
+`steps` values: `true` = passed, `false` = failed, `null` = not attempted. `bundle_verified` is `null` when `trust_tier` in the lockfile entry is `UNSIGNED`. `mode` field distinguishes online and offline runs in automated pipelines.
