@@ -200,10 +200,11 @@ The spec defines what a conforming client must do on install and sync:
   doing so widens the replay window beyond what the protocol's freshness guarantees are designed around.
 - On manifest sync: check all installed content hashes against the updated `revocations` array; apply hard-block for
   registry revocations and warn-on-use for publisher revocations (see Revocation mechanism above)
-- **Private content isolation:** Conforming clients MUST NOT automatically index or submit content from private source
-  repositories to public registries. When a client operation would route private content to a public registry, it
-  MUST require explicit End User confirmation and MUST surface the source repository's visibility before proceeding.
-  Silently publishing private content to a public registry is a conformance failure.
+- **Private content isolation:** Conforming clients MUST NOT automatically index or submit content from private or
+  internal source repositories to public registries. When a client operation would route such content to a public
+  registry, it MUST require explicit End User confirmation and MUST surface the source repository's visibility before
+  proceeding. This is a design requirement for client implementors — there is no external audit mechanism, but
+  violating it constitutes a failure to meet the spec's intent.
 
 The conforming client is the component responsible for trust decisions at install or load time; the runtime consumes
 content only after that step.
