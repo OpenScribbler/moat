@@ -81,8 +81,8 @@ moat-verify <directory> --registry <url> [--source <uri>] [--json]
 | Argument | Required | Description |
 |---|---|---|
 | `<directory>` | Yes | Path to content directory to verify. |
-| `--registry <url>` | Yes | Manifest URL of the registry to verify against — the `manifest_uri` from the registry manifest. The user decides which registries to trust — `moat-verify` does not evaluate registry trustworthiness. |
-| `--source <uri>` | No | Source repository URI for publisher co-attestation. When absent, publisher tier is reported as `NOT REQUESTED` — not a failure. **v1 scope: GitHub repository URIs only.** Passing a non-GitHub URI produces exit code 2 with: `Error: --source URI must be a GitHub repository (https://github.com/<owner>/<repo>). GitLab and other platforms are not supported in v1.` |
+| `--registry <url>` | Yes | Manifest URL of the registry to verify against — the `manifest_uri` from the registry manifest. The End User decides which registries to trust — `moat-verify` does not evaluate registry trustworthiness. |
+| `--source <uri>` | No | Source repository URI for publisher co-attestation. When absent, publisher tier is reported as `NOT REQUESTED` — not a failure. **Current scope: GitHub repository URIs only.** Passing a non-GitHub URI produces exit code 2 with: `Error: --source URI must be a GitHub repository (https://github.com/<owner>/<repo>). GitLab and other platforms are not yet supported.` |
 | `--json` | No | Emit machine-readable JSON to stdout in addition to human-readable report. |
 
 ---
@@ -204,7 +204,7 @@ Publisher attestation: NOT REQUESTED
 
 If `--source <uri>` provided:
 
-Fetch `<source-uri>/raw/main/moat-attestation.json`. v1 scope: GitHub repository URIs only.
+Fetch `<source-uri>/raw/main/moat-attestation.json`. Current scope: GitHub repository URIs only.
 
 Fail (exit 1) if: source URI unreachable; `moat-attestation.json` missing or malformed; no matching `content_hash` entry.
 
@@ -213,7 +213,7 @@ Verify the Rekor entry using the same procedure as Step 4, plus: verify certific
 https://github.com/<owner>/<repo>/.github/workflows/moat.yml@refs/heads/<branch>
 ```
 
-**`moat-verify` MUST report the actual OIDC identity found — it MUST NOT decide whether this identity is the legitimate owner of the source repository. That decision belongs to the user.**
+**`moat-verify` MUST report the actual OIDC identity found — it MUST NOT decide whether this identity is the legitimate owner of the source repository. That decision belongs to the End User.**
 
 ```
 [✓] Publisher Rekor attestation verified

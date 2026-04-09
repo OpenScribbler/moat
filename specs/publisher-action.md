@@ -1,7 +1,7 @@
 # Publisher Action Specification
 
-**Status:** Pre-spec (extracted from [moat-revised-outline.md](../docs/moat-revised-outline.md))
-**Part of:** [MOAT](../docs/moat-revised-outline.md)
+**Status:** Draft
+**Part of:** [MOAT Specification](../moat-spec.md)
 
 > The Publisher Action is the primary adoption mechanism for the `Dual-Attested` trust tier. Any source repo adopts it with a single workflow file — no key management, no MOAT-specific knowledge required.
 
@@ -10,7 +10,7 @@
 ## What It Does (on push)
 
 1. Detects source repository visibility. If `private` or `internal` and `allow-private-repo: true` is not set, exits immediately with a non-zero code and a clear error message. See Private Repository Guard.
-2. Discovers content items via two-tier model: canonical category directories (`skills/`, `agents/`, `rules/`, `commands/`) or `moat.yml` if present.
+2. Discovers content items via two-tier model: canonical category directories (`skills/`, `subagents/`, `rules/`, `commands/`) or `moat.yml` if present.
 3. Computes content hashes using the MOAT algorithm (`moat_hash.py`). Errors (symlinks, empty directories) skip the item with a logged warning.
 4. Builds one attestation payload JSON per content item (schema below).
 5. Signs each payload with `cosign sign-blob` using Sigstore keyless OIDC. GitHub Actions provides the OIDC token automatically — no keys or secrets required.
@@ -67,7 +67,7 @@ Location: `moat-attestation` branch root. One file per repo. The file is never p
 
 ```json
 {
-  "schema_version": "1",
+  "schema_version": 1,
   "attested_at": "2026-04-07T14:00:00Z",
   "private_repo": false,
   "items": [
@@ -90,7 +90,7 @@ Location: `moat-attestation` branch root. One file per repo. The file is never p
 
 Publishers can post signed Rekor revocation entries without waiting for their registry to update. To revoke: add an entry to `moat-attestation.json` revocations and trigger the action. It posts a signed Rekor revocation entry and optionally notifies the registry via webhook.
 
-Publisher revocations are **warnings, not hard blocks.** The registry is the gating authority for hard blocks. This prevents abuse (compromised publisher accounts triggering mass revocations). See [main spec](../docs/moat-revised-outline.md) for full client behavior rules.
+Publisher revocations are **warnings, not hard blocks.** The registry is the gating authority for hard blocks. This prevents abuse (compromised publisher accounts triggering mass revocations). See [main spec](../moat-spec.md) for full client behavior rules.
 
 ---
 
@@ -136,7 +136,7 @@ Badge asserts per-hash attestation status. Clients can read `moat-attestation.js
 Source repository visibility falls into three states. The action MUST detect visibility at runtime and apply the
 corresponding behavior:
 
-| Visibility | GitHub.com / GHES | GitLab (v1.1 target) | Action behavior |
+| Visibility | GitHub.com / GHES | GitLab (planned future version) | Action behavior |
 |---|---|---|---|
 | `public` | `GITHUB_REPOSITORY_VISIBILITY=public` | `CI_PROJECT_VISIBILITY=public` | Proceed normally |
 | `private` | `GITHUB_REPOSITORY_VISIBILITY=private` | `CI_PROJECT_VISIBILITY=private` | Require `allow-private-repo: true` |
@@ -185,5 +185,5 @@ Downstream enforcement does not depend on publisher comprehension.
 
 ## Scope
 
-**v1:** GitHub Actions only.
-**v1.1 target:** GitLab CI.
+**Current version:** GitHub Actions only.
+**Planned future version:** GitLab CI.

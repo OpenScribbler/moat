@@ -340,11 +340,11 @@ expiry — is deferred to a future version. The prerequisite is registry infrast
 creates a hard liveness dependency on the registry's CI pipeline, and a CI outage means the registry's entire
 catalog goes dark for all clients. That trade-off is appropriate for registry operators with dedicated
 infrastructure and monitoring; it is not appropriate to mandate for the hobbyist and small-team operators
-that MOAT v1 targets.
+that the current version targets.
 
 ### Signature Envelope
 
-The normative signing mechanism for MOAT v1 is Sigstore keyless OIDC signing via Fulcio/Rekor.
+The normative signing mechanism for this version of MOAT is Sigstore keyless OIDC signing via Fulcio/Rekor.
 
 **Signing input:** The registry CI signs the manifest JSON file with `cosign sign-blob`. The input to signing is
 the raw bytes of the manifest file as it will be served — after any transport-layer decompression, with no
@@ -427,7 +427,7 @@ These items are required for conformance. A conforming registry, a conforming cl
   renames their repository, the subject claim changes, and an attacker who claims the old name could produce
   matching attestations. Stable numeric ID claims (`repository_id` on GitHub Actions, `project_id` on GitLab)
   avoid this problem, but verification against numeric IDs requires tooling support beyond standard `cosign`
-  flags. This is a known limitation of the v1 Dual-Attested verification model.
+  flags. This is a known limitation of the current Dual-Attested verification model.
 
 - **Client verification protocol** — what a conforming client must check on install.
 - **Revocation mechanism** — `revocations` array in manifest (REQUIRED; empty if none). Each entry MUST include:
@@ -674,8 +674,8 @@ Minimum structure:
 - `entries[].attestation_bundle` is the signature, signing certificate, and Rekor transparency log entry as a single
   embedded JSON object. Conforming clients MUST populate this field at install time — it enables complete offline
   re-verification of the original attestation without re-querying external services.
-- `entries[].type` is a v1 closed set. Conforming clients MUST accept entries with unrecognized type values without
-  error — new types will be added in future spec versions.
+- `entries[].type` is a closed set in the current version. Conforming clients MUST accept entries with unrecognized
+  type values without error — new types will be added in future versions.
 - `entries[].registry` MUST be treated as permanently stable once published. A URL change invalidates all lockfile
   entries referencing it.
 - `revoked_hashes` entries MUST NOT be silently removed. Clearing a revoked hash requires deliberate End User action.
