@@ -161,51 +161,8 @@ The spec defines what a conforming client must do on install and sync:
 - Require explicit End User action to add a trusted registry
 - Verify the registry manifest using the declared signing profile
 - Verify content hashes against the manifest on install
-- Maintain a local lockfile of installed content hashes. Minimum conforming lockfile schema:
-
-  ```json
-  {
-    "moat_lockfile_version": 1,
-    "entries": [
-      {
-        "name": "string",
-        "type": "skill|subagent|rules|command",
-        "registry": "https://...",
-        "content_hash": "sha256:<hex>",
-        "attested_at": "RFC 3339 UTC",
-        "pinned_at": "RFC 3339 UTC",
-        "attestation_bundle": {}
-      }
-    ],
-    "revoked_hashes": []
-  }
-  ```
-
-  Field notes:
-  - `content_hash` is the normative identity for the installed item.
-  - `attested_at` is the registry's recorded attestation time, taken from the manifest item at install. It is the
-    registry's clock, not the client's — do not build freshness logic on it.
-  - `pinned_at` is the local install timestamp (client clock). It cannot be verified by a third party.
-  - `attestation_bundle` is the complete attestation artifact captured during installation — the signature, signing
-    certificate, and transparency log entry as a single embedded JSON object. For Sigstore-signed content this is the
-    cosign bundle. Conforming clients MUST populate this field at install time; the data is available as a byproduct
-    of the verification step that must already occur. This field enables complete offline re-verification of the
-    original attestation without re-querying external services.
-  - `type` is a v1 closed set of registered values (`skill`, `subagent`, `rules`, `command`). Conforming clients MUST
-    accept entries with unrecognized type values without error — new types are added in future spec versions.
-  - `registry` is a URL. Registries MUST treat their URL as permanently stable once published; a URL change
-    invalidates all lockfile entries that reference it.
-  - `revoked_hashes` is a REQUIRED top-level array of content hash strings for which a registry hard-block is in
-    effect. Conforming clients MUST add a content hash to this array when a registry revocation is received and MUST
-    refuse to install any hash present in this array. This field MUST be present even when empty. Entries MUST NOT be
-    silently removed — clearing a revoked hash requires deliberate End User action. This prevents the
-    remove-and-reinstall bypass: a user who removes revoked content and attempts to reinstall the same hash is blocked
-    by this record.
-
-  Conforming clients MAY add additional fields to entries but MUST include all seven entry fields. The top-level
-  `revoked_hashes` array is also required (empty array if no revocations are in effect). Lockfile interoperability
-  requires all conforming clients to use this schema — a lockfile from one conforming client must be readable by
-  another.
+- Maintain a local lockfile of installed content hashes. See [Lockfile](#lockfile) for the minimum conforming
+  schema, field definitions, and interoperability requirements.
 - Surface trust tier before install confirmation
 - Surface revocation source attribution and treat publisher revocations as warnings, registry revocations as the gating
   signal
@@ -407,11 +364,8 @@ These items are required for conformance. A conforming registry, a conforming cl
 - **Signature envelope format** — platform-agnostic signing model.
 - **Trust tier model** — Dual-Attested / Signed / Unsigned. Absence of Dual-Attested is NOT a negative signal.
 - **Publisher signing identity model** — For Dual-Attested items, the registry manifest entry MUST include a
-  `signing_profile` field declaring the publisher's expected CI signing identity:
-
-  ```json
-  { "issuer": "https://token.actions.githubusercontent.com", "subject": "repo:owner/repo:ref:refs/heads/main" }
-  ```
+  `signing_profile` field declaring the publisher's expected CI signing identity. See [signing_profile](#signing_profile)
+  for the format and known CI provider values.
 
   Signing identity is expressed as an OIDC issuer URL and subject claim — the values captured in the
   Rekor/Fulcio certificate at signing time. This model is provider-agnostic; any CI platform with OIDC support
@@ -425,22 +379,6 @@ These items are required for conformance. A conforming registry, a conforming cl
   matching attestations. Stable numeric ID claims (`repository_id` on GitHub Actions, `project_id` on GitLab)
   avoid this problem, but verification against numeric IDs requires tooling support beyond standard `cosign`
   flags. This is a known limitation of the v1 Dual-Attested verification model.
-
-  *Informative — known CI provider signing profiles:*
-
-  | Provider | Issuer | Subject format |
-  |----------|--------|----------------|
-  | GitHub Actions | `https://token.actions.githubusercontent.com` | `repo:{owner}/{repo}:ref:refs/heads/{branch}` |
-  | GitLab CI | `https://gitlab.com` | `project_path:{namespace}/{project}:ref_type:branch:ref:{branch}` |
-
-  Other providers with OIDC support: the issuer is the provider's OIDC endpoint URL; the subject format is
-  provider-defined. Consult the provider's OIDC documentation. Providers are added to this table when their
-  subject format is verified against a working Sigstore implementation. Forgejo/Codeberg Actions OIDC support
-  is not yet shipped as of this writing (April 2026). Tracking: Gitea PR
-  [#36988](https://github.com/go-gitea/gitea/pull/36988) (draft, opened 2026-03-25) and Forgejo PR
-  [#5344](https://codeberg.org/forgejo/forgejo/pulls/5344) (closed 2025-02-02, no active successor). When
-  either ships, the issuer will be `<instance-url>/api/actions/oidc` and the subject format will mirror
-  GitHub's. Check these PRs before updating this table.
 
 - **Client verification protocol** — what a conforming client must check on install.
 - **Revocation mechanism** — `revocations` array in manifest (REQUIRED; empty if none). Each entry MUST include:
@@ -471,24 +409,8 @@ These items are required for conformance. A conforming registry, a conforming cl
 - **Lineage model** — `derived_from` for forks and adaptations.
 - **Version semantics** — `version` is an optional display label; content hash is normative identity; `attested_at` for
   freshness.
-- **`scan_status` structure** — per-item manifest field. Schema:
-
-  ```json
-  {
-    "result": "clean|findings|not_scanned",
-    "scanner": [{ "name": "string", "version": "string" }],
-    "scanned_at": "ISO8601",
-    "findings_url": "https://..."
-  }
-  ```
-
-  Field rules:
-  - `result` is REQUIRED. `not_scanned` is valid.
-  - `scanner` and `scanned_at` are REQUIRED when `result` is `clean` or `findings`; omitted when `not_scanned`.
-  - `findings_url` is OPTIONAL; only present when `result` is `findings` and a public report exists.
-  - `scanner[].name` is a controlled value — registries MUST use the canonical name for well-known scanners
-    (e.g. `"snyk-mcp-scan"`, `"semgrep"`) to enable cross-registry aggregation. Additional fields within
-    scanner entries are permitted. Free-form scanner name strings defeat aggregation and do not conform.
+- **[`scan_status`](#scan_status) structure** — per-item manifest field. See [scan_status](#scan_status) for the
+  full schema and field rules.
 
 ### Reference implementations (normative behavior, separate artifacts)
 
@@ -555,24 +477,8 @@ available options without requiring manual URL entry. A community-owned index re
 
 ### Registry Index Format (normative)
 
-A valid registry index is a signed JSON document hosted at a stable URL. Minimum structure:
-
-```json
-{
-  "schema_version": "1",
-  "index_uri": "https://example.com/moat-index.json",
-  "operator": "Example Registry Index",
-  "governance_url": "https://example.com/moat-governance",
-  "updated_at": "2026-04-08T00:00:00Z",
-  "registries": [
-    {
-      "name": "Example Registry",
-      "manifest_url": "https://example.com/moat-manifest.json",
-      "description": "A registry of example skills"
-    }
-  ]
-}
-```
+A valid registry index is a signed JSON document hosted at a stable URL. See [Registry Index](#registry-index) for
+the minimum structure and field requirements.
 
 ### Index Operator Requirements (normative)
 
@@ -597,6 +503,158 @@ governs how clients handle them:
   be able to add registries by direct manifest URL without using an index at all.
 - Adding a registry discovered through an index requires the same explicit End User trust action required for all
   registries. The index shapes the discovery menu; it does not bypass the per-registry trust requirement.
+
+---
+
+## Data Formats
+
+All normative data formats used in the MOAT protocol are defined here. Conceptual and normative sections link to
+these definitions rather than embedding schemas inline.
+
+### Registry Manifest
+
+The registry manifest is the core artifact of MOAT — the signed document a registry publishes. Each per-item entry
+in the manifest carries the following fields:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | REQUIRED | Canonical identifier for the content item |
+| `display_name` | REQUIRED | Human-readable name |
+| `type` | REQUIRED | One of: `skill`, `subagent`, `rules`, `command` |
+| `content_hash` | REQUIRED | `<algorithm>:<hex>` — normative identity of the content |
+| `source_uri` | REQUIRED | Source repository URI |
+| `attested_at` | REQUIRED | Registry attestation timestamp (RFC 3339 UTC) |
+| `derived_from` | OPTIONAL | Source URI of the item this was forked or derived from |
+| `version` | OPTIONAL | Display label only; `content_hash` is normative identity |
+| `scan_status` | OPTIONAL | See [scan_status](#scan_status) |
+| `signing_profile` | REQUIRED for Dual-Attested | See [signing_profile](#signing_profile) |
+| `private_repo` | REQUIRED | `true` if sourced from a private or internal repository |
+
+The manifest also contains a top-level `revocations` array (REQUIRED; empty array if none). Each revocation entry
+MUST include `content_hash`, `reason`, and `details_url` (REQUIRED for registry revocations; OPTIONAL for publisher
+revocations). See the Revocation mechanism in [Normative core](#normative-core).
+
+> A formal JSON Schema for the registry manifest will be published when the spec advances beyond Draft status and is
+> confirmed by at least two independent implementations.
+
+### Lockfile
+
+The lockfile is maintained by a conforming client to record all installed content. Minimum conforming schema:
+
+```json
+{
+  "moat_lockfile_version": 1,
+  "entries": [
+    {
+      "name": "string",
+      "type": "skill|subagent|rules|command",
+      "registry": "https://...",
+      "content_hash": "sha256:<hex>",
+      "attested_at": "RFC 3339 UTC",
+      "pinned_at": "RFC 3339 UTC",
+      "attestation_bundle": {}
+    }
+  ],
+  "revoked_hashes": []
+}
+```
+
+Field notes:
+
+- `content_hash` is the normative identity for the installed item.
+- `attested_at` is the registry's recorded attestation time, taken from the manifest item at install. It is the
+  registry's clock, not the client's — do not build freshness logic on it.
+- `pinned_at` is the local install timestamp (client clock). It cannot be verified by a third party.
+- `attestation_bundle` is the complete attestation artifact captured during installation — the signature, signing
+  certificate, and transparency log entry as a single embedded JSON object. For Sigstore-signed content this is the
+  cosign bundle. Conforming clients MUST populate this field at install time; the data is available as a byproduct
+  of the verification step that must already occur. This field enables complete offline re-verification of the
+  original attestation without re-querying external services.
+- `type` is a v1 closed set of registered values (`skill`, `subagent`, `rules`, `command`). Conforming clients MUST
+  accept entries with unrecognized type values without error — new types are added in future spec versions.
+- `registry` is a URL. Registries MUST treat their URL as permanently stable once published; a URL change
+  invalidates all lockfile entries that reference it.
+- `revoked_hashes` is a REQUIRED top-level array of content hash strings for which a registry hard-block is in
+  effect. Conforming clients MUST add a content hash to this array when a registry revocation is received and MUST
+  refuse to install any hash present in this array. This field MUST be present even when empty. Entries MUST NOT be
+  silently removed — clearing a revoked hash requires deliberate End User action. This prevents the
+  remove-and-reinstall bypass: a user who removes revoked content and attempts to reinstall the same hash is blocked
+  by this record.
+
+Conforming clients MAY add additional fields to entries but MUST include all seven entry fields. The top-level
+`revoked_hashes` array is also required (empty array if no revocations are in effect). Lockfile interoperability
+requires all conforming clients to use this schema — a lockfile from one conforming client must be readable by
+another.
+
+### Registry Index
+
+A valid registry index is a signed JSON document hosted at a stable URL. Minimum structure:
+
+```json
+{
+  "schema_version": "1",
+  "index_uri": "https://example.com/moat-index.json",
+  "operator": "Example Registry Index",
+  "governance_url": "https://example.com/moat-governance",
+  "updated_at": "2026-04-08T00:00:00Z",
+  "registries": [
+    {
+      "name": "Example Registry",
+      "manifest_url": "https://example.com/moat-manifest.json",
+      "description": "A registry of example skills"
+    }
+  ]
+}
+```
+
+### scan_status
+
+Per-item manifest field indicating the scan result for a content item.
+
+```json
+{
+  "result": "clean|findings|not_scanned",
+  "scanner": [{ "name": "string", "version": "string" }],
+  "scanned_at": "ISO8601",
+  "findings_url": "https://..."
+}
+```
+
+Field rules:
+
+- `result` is REQUIRED. `not_scanned` is valid.
+- `scanner` and `scanned_at` are REQUIRED when `result` is `clean` or `findings`; omitted when `not_scanned`.
+- `findings_url` is OPTIONAL; only present when `result` is `findings` and a public report exists.
+- `scanner[].name` is a controlled value — registries MUST use the canonical name for well-known scanners
+  (e.g. `"snyk-mcp-scan"`, `"semgrep"`) to enable cross-registry aggregation. Additional fields within scanner
+  entries are permitted. Free-form scanner name strings defeat aggregation and do not conform.
+
+### signing_profile
+
+The `signing_profile` field declares a publisher's expected CI signing identity for Dual-Attested items. Format:
+
+```json
+{ "issuer": "https://token.actions.githubusercontent.com", "subject": "repo:owner/repo:ref:refs/heads/main" }
+```
+
+Signing identity is expressed as an OIDC issuer URL and subject claim — the values captured in the Rekor/Fulcio
+certificate at signing time.
+
+*Informative — known CI provider signing profiles:*
+
+| Provider | Issuer | Subject format |
+|----------|--------|----------------|
+| GitHub Actions | `https://token.actions.githubusercontent.com` | `repo:{owner}/{repo}:ref:refs/heads/{branch}` |
+| GitLab CI | `https://gitlab.com` | `project_path:{namespace}/{project}:ref_type:branch:ref:{branch}` |
+
+Other providers with OIDC support: the issuer is the provider's OIDC endpoint URL; the subject format is
+provider-defined. Consult the provider's OIDC documentation. Providers are added to this table when their subject
+format is verified against a working Sigstore implementation. Forgejo/Codeberg Actions OIDC support is not yet
+shipped as of this writing (April 2026). Tracking: Gitea PR
+[#36988](https://github.com/go-gitea/gitea/pull/36988) (draft, opened 2026-03-25) and Forgejo PR
+[#5344](https://codeberg.org/forgejo/forgejo/pulls/5344) (closed 2025-02-02, no active successor). When either
+ships, the issuer will be `<instance-url>/api/actions/oidc` and the subject format will mirror GitHub's. Check
+these PRs before updating this table.
 
 ---
 
