@@ -513,8 +513,26 @@ these definitions rather than embedding schemas inline.
 
 ### Registry Manifest
 
-The registry manifest is the core artifact of MOAT — the signed document a registry publishes. Each per-item entry
-in the manifest carries the following fields:
+The registry manifest is the signed document a registry publishes — the central trust artifact conforming clients
+verify on every install and sync.
+
+The following shows what a single per-item entry looks like in the manifest:
+
+Minimum structure:
+
+```json
+{
+  "name": "my-skill",
+  "display_name": "My Skill",
+  "type": "skill",
+  "content_hash": "sha256:abc123...",
+  "source_uri": "https://github.com/owner/repo",
+  "attested_at": "2026-04-08T00:00:00Z",
+  "private_repo": false,
+  "scan_status": { "result": "clean", "scanner": [{ "name": "semgrep", "version": "1.0" }], "scanned_at": "2026-04-07T00:00:00Z" },
+  "signing_profile": { "issuer": "https://token.actions.githubusercontent.com", "subject": "repo:owner/repo:ref:refs/heads/main" }
+}
+```
 
 | Field | Required | Description |
 |-------|----------|-------------|
@@ -524,22 +542,24 @@ in the manifest carries the following fields:
 | `content_hash` | REQUIRED | `<algorithm>:<hex>` — normative identity of the content |
 | `source_uri` | REQUIRED | Source repository URI |
 | `attested_at` | REQUIRED | Registry attestation timestamp (RFC 3339 UTC) |
+| `private_repo` | REQUIRED | `true` if sourced from a private or internal repository |
 | `derived_from` | OPTIONAL | Source URI of the item this was forked or derived from |
 | `version` | OPTIONAL | Display label only; `content_hash` is normative identity |
 | `scan_status` | OPTIONAL | See [scan_status](#scan_status) |
 | `signing_profile` | REQUIRED for Dual-Attested | See [signing_profile](#signing_profile) |
-| `private_repo` | REQUIRED | `true` if sourced from a private or internal repository |
 
 The manifest also contains a top-level `revocations` array (REQUIRED; empty array if none). Each revocation entry
 MUST include `content_hash`, `reason`, and `details_url` (REQUIRED for registry revocations; OPTIONAL for publisher
 revocations). See the Revocation mechanism in [Normative core](#normative-core).
 
-> A formal JSON Schema for the registry manifest will be published when the spec advances beyond Draft status and is
-> confirmed by at least two independent implementations.
+> The full top-level manifest format — registry identity, signing envelope, and signature fields — will be formally
+> defined when the spec advances beyond Draft status.
 
 ### Lockfile
 
-The lockfile is maintained by a conforming client to record all installed content. Minimum conforming schema:
+The lockfile is maintained by a conforming client to record all installed content and enforce revocation blocks.
+
+Minimum structure:
 
 ```json
 {
@@ -559,36 +579,41 @@ The lockfile is maintained by a conforming client to record all installed conten
 }
 ```
 
-Field notes:
+| Field | Required | Description |
+|-------|----------|-------------|
+| `moat_lockfile_version` | REQUIRED | Schema version; currently `1` |
+| `entries` | REQUIRED | Array of installed content records |
+| `entries[].name` | REQUIRED | Content item name as recorded in the registry manifest |
+| `entries[].type` | REQUIRED | Content type; closed set: `skill`, `subagent`, `rules`, `command` |
+| `entries[].registry` | REQUIRED | Registry manifest URL the item was installed from |
+| `entries[].content_hash` | REQUIRED | `<algorithm>:<hex>` — normative identity of the installed item |
+| `entries[].attested_at` | REQUIRED | Registry's attestation timestamp (registry clock, not client clock) |
+| `entries[].pinned_at` | REQUIRED | Local install timestamp (client clock; not externally verifiable) |
+| `entries[].attestation_bundle` | REQUIRED | Full cosign bundle captured at install time |
+| `revoked_hashes` | REQUIRED | Array of hard-blocked content hash strings; empty array if none |
 
-- `content_hash` is the normative identity for the installed item.
-- `attested_at` is the registry's recorded attestation time, taken from the manifest item at install. It is the
-  registry's clock, not the client's — do not build freshness logic on it.
-- `pinned_at` is the local install timestamp (client clock). It cannot be verified by a third party.
-- `attestation_bundle` is the complete attestation artifact captured during installation — the signature, signing
-  certificate, and transparency log entry as a single embedded JSON object. For Sigstore-signed content this is the
-  cosign bundle. Conforming clients MUST populate this field at install time; the data is available as a byproduct
-  of the verification step that must already occur. This field enables complete offline re-verification of the
-  original attestation without re-querying external services.
-- `type` is a v1 closed set of registered values (`skill`, `subagent`, `rules`, `command`). Conforming clients MUST
-  accept entries with unrecognized type values without error — new types are added in future spec versions.
-- `registry` is a URL. Registries MUST treat their URL as permanently stable once published; a URL change
-  invalidates all lockfile entries that reference it.
-- `revoked_hashes` is a REQUIRED top-level array of content hash strings for which a registry hard-block is in
-  effect. Conforming clients MUST add a content hash to this array when a registry revocation is received and MUST
-  refuse to install any hash present in this array. This field MUST be present even when empty. Entries MUST NOT be
-  silently removed — clearing a revoked hash requires deliberate End User action. This prevents the
-  remove-and-reinstall bypass: a user who removes revoked content and attempts to reinstall the same hash is blocked
-  by this record.
+**Field notes:**
 
-Conforming clients MAY add additional fields to entries but MUST include all seven entry fields. The top-level
-`revoked_hashes` array is also required (empty array if no revocations are in effect). Lockfile interoperability
-requires all conforming clients to use this schema — a lockfile from one conforming client must be readable by
-another.
+- `entries[].attested_at` is the registry's clock, not the client's — do not build freshness logic on it.
+- `entries[].attestation_bundle` is the signature, signing certificate, and Rekor transparency log entry as a single
+  embedded JSON object. Conforming clients MUST populate this field at install time — it enables complete offline
+  re-verification of the original attestation without re-querying external services.
+- `entries[].type` is a v1 closed set. Conforming clients MUST accept entries with unrecognized type values without
+  error — new types will be added in future spec versions.
+- `entries[].registry` MUST be treated as permanently stable once published. A URL change invalidates all lockfile
+  entries referencing it.
+- `revoked_hashes` entries MUST NOT be silently removed. Clearing a revoked hash requires deliberate End User action.
+  This prevents the remove-and-reinstall bypass: an attempt to reinstall a revoked hash is blocked by this record.
+
+Conforming clients MAY add additional fields to entries but MUST include all fields listed above. A lockfile from one
+conforming client must be readable by another.
 
 ### Registry Index
 
-A valid registry index is a signed JSON document hosted at a stable URL. Minimum structure:
+A registry index lists known registries and their manifest URLs, enabling conforming clients to present users with
+available options without requiring manual URL entry.
+
+Minimum structure:
 
 ```json
 {
@@ -607,9 +632,32 @@ A valid registry index is a signed JSON document hosted at a stable URL. Minimum
 }
 ```
 
+| Field | Required | Description |
+|-------|----------|-------------|
+| `schema_version` | REQUIRED | Index format version; currently `"1"` |
+| `index_uri` | REQUIRED | Canonical URL at which this index document is hosted |
+| `operator` | REQUIRED | Human-readable name of the index operator |
+| `governance_url` | REQUIRED | URL of the public governance document |
+| `updated_at` | REQUIRED | ISO 8601 timestamp of the last index update |
+| `registries` | REQUIRED | Array of registry entries |
+| `registries[].name` | REQUIRED | Human-readable registry name |
+| `registries[].manifest_url` | REQUIRED | URL of the registry's signed manifest |
+| `registries[].description` | OPTIONAL | Short description of the registry's scope or focus |
+
+**Field notes:**
+
+- `governance_url` MUST reference a publicly accessible document covering: inclusion criteria, removal policy,
+  incident response process, dispute resolution, and signing key management. The content is the operator's
+  responsibility; this spec requires it to exist, be public, and cover the listed topics.
+- `index_uri` MUST be the canonical URL at which this index is hosted. Clients MAY use this to detect index moves
+  or substitution attacks.
+
 ### scan_status
 
-Per-item manifest field indicating the scan result for a content item.
+`scan_status` is an optional per-item manifest field that records the result of a security scan performed by the
+registry on a content item.
+
+Minimum structure:
 
 ```json
 {
@@ -620,27 +668,39 @@ Per-item manifest field indicating the scan result for a content item.
 }
 ```
 
-Field rules:
+| Field | Required | Description |
+|-------|----------|-------------|
+| `result` | REQUIRED | One of: `clean`, `findings`, `not_scanned` |
+| `scanner` | REQUIRED when `result` is `clean` or `findings` | Array of scanner objects; omitted when `not_scanned` |
+| `scanned_at` | REQUIRED when `result` is `clean` or `findings` | ISO 8601 scan timestamp; omitted when `not_scanned` |
+| `findings_url` | OPTIONAL | URL to a public findings report; only present when `result` is `findings` |
 
-- `result` is REQUIRED. `not_scanned` is valid.
-- `scanner` and `scanned_at` are REQUIRED when `result` is `clean` or `findings`; omitted when `not_scanned`.
-- `findings_url` is OPTIONAL; only present when `result` is `findings` and a public report exists.
-- `scanner[].name` is a controlled value — registries MUST use the canonical name for well-known scanners
-  (e.g. `"snyk-mcp-scan"`, `"semgrep"`) to enable cross-registry aggregation. Additional fields within scanner
-  entries are permitted. Free-form scanner name strings defeat aggregation and do not conform.
+**Field notes:**
+
+- `scanner[].name` MUST be the canonical name for well-known scanners (e.g. `"snyk-mcp-scan"`, `"semgrep"`) to
+  enable cross-registry aggregation. Additional fields within scanner entries are permitted. Free-form name strings
+  defeat aggregation and do not conform.
 
 ### signing_profile
 
-The `signing_profile` field declares a publisher's expected CI signing identity for Dual-Attested items. Format:
+`signing_profile` declares a publisher's expected CI signing identity on Dual-Attested manifest entries. Conforming
+clients MUST verify the Rekor certificate's OIDC issuer and subject match this field.
+
+Minimum structure:
 
 ```json
-{ "issuer": "https://token.actions.githubusercontent.com", "subject": "repo:owner/repo:ref:refs/heads/main" }
+{
+  "issuer": "https://token.actions.githubusercontent.com",
+  "subject": "repo:owner/repo:ref:refs/heads/main"
+}
 ```
 
-Signing identity is expressed as an OIDC issuer URL and subject claim — the values captured in the Rekor/Fulcio
-certificate at signing time.
+| Field | Required | Description |
+|-------|----------|-------------|
+| `issuer` | REQUIRED | OIDC issuer URL from the CI provider |
+| `subject` | REQUIRED | OIDC subject claim as produced by the CI provider's token |
 
-*Informative — known CI provider signing profiles:*
+*Informative — known CI provider values:*
 
 | Provider | Issuer | Subject format |
 |----------|--------|----------------|
