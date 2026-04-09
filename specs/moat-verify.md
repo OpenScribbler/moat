@@ -97,8 +97,10 @@ moat-verify <directory> --registry <url> [--source <uri>] [--json]
 | `2`  | Input error (directory not found, invalid arguments, unsupported `--source` URI, unknown `schema_version`). |
 | `3`  | Infrastructure failure (registry unreachable, Rekor unreachable, malformed manifest from remote).           |
 
-Exit code 2 indicates the End User gave invalid input or the tool encountered an unrecognized protocol value — the End User can fix it.
-Exit code 3 indicates an external system was unavailable or returned unexpected data — the End User may need to retry or investigate the registry.
+Exit code 2 indicates the End User gave invalid input or the tool encountered an unrecognized protocol value — the End
+User can fix it.
+Exit code 3 indicates an external system was unavailable or returned unexpected data — the End User may need to retry or
+investigate the registry.
 
 ---
 
@@ -252,7 +254,8 @@ What this script did NOT verify:
   - Content safety, malicious behavior, or sandbox escape
 ```
 
-Implementations that omit this block do not conform. Its purpose is to prevent users from mistaking cryptographic verification for a safety guarantee.
+Implementations that omit this block do not conform. Its purpose is to prevent End Users from mistaking cryptographic
+verification for a safety guarantee.
 
 ---
 
