@@ -57,7 +57,7 @@ MOAT involves six distinct actors. They are not interchangeable.
 conforming client. MOAT requires clients to surface trust tier and revocation state clearly so the End
 User can make an informed decision.
 
-**Publisher** - Creates content and keeps it in a source repository. A publisher may adopt the Publisher Action to
+**Publisher** - Creates content and keeps it in a source repository. A publisher may adopt the [Publisher Action](specs/publisher-action.md) to
 produce source-side attestations, but MOAT does not require the publisher to run a registry or implement client
 behavior.
 
@@ -73,7 +73,7 @@ trust signals before install or use. A conforming client is not an AI agent runt
 installation. AI agent runtimes are outside the MOAT protocol boundary. MOAT does not define runtime behavior,
 sandboxing, permission enforcement, or execution semantics.
 
-**moat-verify** - A standalone verification tool that audits the MOAT trust chain for a content item. It verifies, but
+**[moat-verify](specs/moat-verify.md)** - A standalone verification tool that audits the MOAT trust chain for a content item. It verifies, but
 does not install, manage, or execute content. It is therefore not a conforming client and not a runtime.
 
 ### Use Cases
@@ -94,7 +94,7 @@ hashes, maintain a lockfile, surface trust signals, and enforce revocation behav
 **AI Agent Runtime** - Loads or executes already-installed content after a conforming client has completed verification
 and placement. It appears here to make the boundary explicit: MOAT intentionally defines no runtime behavior for it.
 
-**moat-verify** - Lets any reader independently audit the trust chain for a specific content item without installing or
+**[moat-verify](specs/moat-verify.md)** - Lets any reader independently audit the trust chain for a specific content item without installing or
 executing it. Its use case is diagnosis, validation, and interoperability testing rather than installation or runtime
 management.
 
@@ -254,12 +254,12 @@ skills/
 subagents/
 ```
 
-The Publisher Action uses a two-tier discovery model:
+The [Publisher Action](specs/publisher-action.md) uses a two-tier discovery model:
 
 - **Tier 1:** Canonical category directories
 - **Tier 2:** `moat.yml` for custom layouts; when present it overrides Tier 1
 
-`moat-attestation.json` is a reserved filename. The Publisher Action writes this file to a dedicated
+`moat-attestation.json` is a reserved filename. The [Publisher Action](specs/publisher-action.md) writes this file to a dedicated
 `moat-attestation` branch — it is never present in the source branch and is therefore never included in
 content hashing. Publishers MUST NOT create files named `moat-attestation.json` anywhere in their source
 branch; such files have no protocol meaning and their presence is a conformance error.
@@ -307,7 +307,7 @@ they serve different roles:
 - **Per-item Rekor entry:** proves this specific `content_hash` was attested at a logged point in time. Verified for
   each item being installed or verified.
 
-A conforming verifier such as `moat-verify` MUST verify the manifest signature AND MUST verify the per-item Rekor entry
+A conforming verifier such as [`moat-verify`](specs/moat-verify.md) MUST verify the manifest signature AND MUST verify the per-item Rekor entry
 for each item under verification. Rekor unavailability is a hard failure — there is no fallback to
 manifest-signature-only when Rekor is offline. This is a deliberate design choice: silent degradation to an
 unverified-transparency state creates a downgrade path attackers can exploit.
@@ -388,7 +388,7 @@ attribution conflicts are surfaced to End Users; they are not automatic hard blo
 ### Normative core
 
 These items are required for conformance. A conforming registry, a conforming client, and a conforming verifier such as
-`moat-verify` all implement exactly these.
+[`moat-verify`](specs/moat-verify.md) all implement exactly these.
 
 - **Content type registry** — normative list of current types (`skill`, `subagent`, `rules`, `command`), category
   directory names, and deferred types (`hook`, `mcp`).
@@ -551,8 +551,7 @@ guarantee.
 ## Discovery
 
 A registry index lists known registries and their manifest URLs, allowing conforming clients to present users with
-available options without requiring manual URL entry. A community-owned index repo can serve this role, with Syllago
-shipping one default discovery source.
+available options without requiring manual URL entry. A community-owned index repo can serve this role.
 
 ### Registry Index Format (normative)
 
