@@ -13,14 +13,12 @@ Dependencies: moat_hash.py (same directory), cosign CLI on PATH, stdlib only
 
 See: specs/moat-verify.md for the normative specification.
 
-Implementation note (online Step 4/5 payload assumption):
-  The spec defines moat-verify's verification steps but does not specify the exact
-  format the registry uses when signing per-item Rekor entries. This implementation
-  assumes the registry signs the content_hash string directly (e.g. "sha256:abc123")
-  via `cosign sign-blob`. If the registry uses a JSON envelope, cosign verify-blob
-  will fail on payload mismatch (exit 1), which is the correct behaviour — do not
-  suppress that failure. The Rekor entry data-hash comparison still catches tampering
-  regardless of payload format.
+Per-item registry attestation payload (normative, moat-spec.md §Signature Envelope):
+  The registry signs a canonical JSON payload for each content item:
+    {"content_hash":"sha256:<hex>"}
+  UTF-8, no trailing newline, no extra whitespace. This is reproducible from the
+  manifest entry alone — moat-verify reconstructs it from the computed content_hash.
+  The Rekor entry's hashedrekord data hash must equal sha256(canonical_payload).
 """
 
 import argparse
@@ -423,17 +421,22 @@ def _online_step3(manifest: dict, content_hash: str) -> dict:
     raise _Exit(EXIT_FAIL)
 
 
+def _canonical_payload(content_hash: str) -> bytes:
+    """
+    The normative per-item attestation payload (moat-spec.md §Signature Envelope).
+    Format: {"content_hash":"sha256:<hex>"}  — UTF-8, no whitespace, no trailing newline.
+    """
+    return json.dumps({"content_hash": content_hash}, separators=(",", ":"), sort_keys=True).encode("utf-8")
+
+
 def _verify_rekor_entry(log_index: int, content_hash: str) -> tuple[str, str]:
     """
     Shared Rekor verification logic used by online Step 4 and Step 5.
 
     1. Fetch the Rekor entry at log_index.
-    2. Verify data hash in the entry matches sha256(content_hash).
-    3. Reconstruct bundle, run cosign verify-blob with content_hash as payload.
+    2. Reconstruct canonical payload, compute sha256, compare to Rekor data hash.
+    3. Reconstruct bundle, run cosign verify-blob with the canonical payload file.
     4. Return (subject, issuer) from the verified certificate.
-
-    Payload assumption: the signer ran `cosign sign-blob` on a file whose content
-    is the content_hash string (e.g. "sha256:abc123"). See module docstring.
     """
     entry = _fetch_rekor_entry(log_index)
     body  = _decode_rekor_body(entry)
@@ -447,8 +450,9 @@ def _verify_rekor_entry(log_index: int, content_hash: str) -> tuple[str, str]:
     if not data_hash_hex:
         raise _Exit(EXIT_INFRA, "Rekor entry missing data.hash.value")
 
-    # Verify: sha256(content_hash_string) should equal the Rekor entry's data hash
-    expected = hashlib.sha256(content_hash.encode("utf-8")).hexdigest()
+    # Reconstruct the canonical payload and verify its hash matches the Rekor entry
+    payload_bytes = _canonical_payload(content_hash)
+    expected = hashlib.sha256(payload_bytes).hexdigest()
     if data_hash_hex != expected:
         raise _Exit(
             EXIT_FAIL,
@@ -462,9 +466,9 @@ def _verify_rekor_entry(log_index: int, content_hash: str) -> tuple[str, str]:
 
     with tempfile.TemporaryDirectory() as tmpdir:
         bundle_tmp  = Path(tmpdir) / "item.sigstore.json"
-        payload_tmp = Path(tmpdir) / "payload.txt"
+        payload_tmp = Path(tmpdir) / "payload"
         bundle_tmp.write_text(json.dumps(bundle))
-        payload_tmp.write_text(content_hash)
+        payload_tmp.write_bytes(payload_bytes)
 
         result = _run_cosign([
             "verify-blob",

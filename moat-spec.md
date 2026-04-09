@@ -364,6 +364,27 @@ served at `{manifest_uri}.sigstore`. This path is normative — conforming regis
 and conforming clients MUST fetch it from there. The bundle MUST be served at the same availability level as the
 manifest itself. A bundle at an ephemeral URL will produce verification failures when it expires.
 
+**Per-item attestation payload:** For Signed and Dual-Attested items, the registry MUST create a per-item Rekor
+entry at attestation time by signing a canonical payload with `cosign sign-blob`. The canonical payload format is:
+
+```json
+{"content_hash":"sha256:<hex>"}
+```
+
+Serialization rules (normative):
+- UTF-8 encoding, no BOM
+- No trailing newline
+- No whitespace inside or outside the JSON object
+- Exactly the key `"content_hash"` with the `<algorithm>:<hex>` value from the manifest entry
+
+The `rekor_log_index` in each manifest entry is the log index returned by Rekor for this per-item signing
+operation. Conforming clients MUST store both the cosign bundle and this canonical payload as `attestation_bundle`
+and `signed_payload` in the lockfile entry — `cosign verify-blob --offline` requires the original signed bytes.
+
+This format is minimal by design: it attests exactly one fact (this content hash was signed) and is reproducible
+from the manifest entry alone. Verifiers reconstruct the payload from the `content_hash` field and verify the
+signature without storing extra registry context in the Rekor record.
+
 **Manifest verification flow:**
 
 1. Fetch the manifest at `manifest_uri`
