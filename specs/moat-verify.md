@@ -1,7 +1,7 @@
 # moat-verify Specification
 
-**Status:** Pre-spec (extracted from [moat-revised-outline.md](../docs/moat-revised-outline.md))
-**Part of:** [MOAT](../docs/moat-revised-outline.md)
+**Status:** Draft
+**Part of:** [MOAT Specification](../moat-spec.md)
 **Language:** Python 3.9+
 **Dependencies:** `moat_hash.py` (imported as module), `cosign` CLI on PATH, stdlib only
 
@@ -81,7 +81,7 @@ moat-verify <directory> --registry <url> [--source <uri>] [--json]
 | Argument | Required | Description |
 |---|---|---|
 | `<directory>` | Yes | Path to content directory to verify. |
-| `--registry <url>` | Yes | Base URL of registry to verify against. The user decides which registries to trust — `moat-verify` does not evaluate registry trustworthiness. |
+| `--registry <url>` | Yes | Manifest URL of the registry to verify against — the `manifest_uri` from the registry manifest. The user decides which registries to trust — `moat-verify` does not evaluate registry trustworthiness. |
 | `--source <uri>` | No | Source repository URI for publisher co-attestation. When absent, publisher tier is reported as `NOT REQUESTED` — not a failure. **v1 scope: GitHub repository URIs only.** Passing a non-GitHub URI produces exit code 2 with: `Error: --source URI must be a GitHub repository (https://github.com/<owner>/<repo>). GitLab and other platforms are not supported in v1.` |
 | `--json` | No | Emit machine-readable JSON to stdout in addition to human-readable report. |
 
@@ -114,16 +114,45 @@ Output:
 Content hash: sha256:<hex>
 ```
 
-### Step 2: Fetch registry manifest
+### Step 2: Fetch and verify registry manifest
 
-GET `<registry-url>/manifest.json`. MUST be valid JSON with a `schema_version` field.
+**Fetch:** GET the manifest at the URL provided via `--registry`. MUST be valid JSON with all required top-level
+fields present: `schema_version`, `manifest_uri`, `registry_signing_profile`, `content`, `revocations`.
 
-Fail with exit code 3 if: registry unreachable; HTTP status not 200; response not valid JSON; response is valid JSON but missing required fields.
-Fail with exit code 2 if: `schema_version` present but unknown.
+Fail with exit code 3 if: registry unreachable; HTTP status not 200; response not valid JSON; required top-level fields missing.
+Fail with exit code 2 if: `schema_version` present but unrecognized.
+
+If the manifest's `manifest_uri` does not match the `--registry` URL, surface as a warning but do not fail —
+CDN and proxy configurations may legitimately serve a manifest from a URL that differs from its declared canonical
+URI.
+
+**Verify manifest bundle:** Fetch the bundle at `{manifest_uri}.sigstore`. Verify:
+1. The bundle covers the exact bytes of the fetched manifest file
+2. The signing certificate's OIDC issuer and subject match `registry_signing_profile`
+3. The Rekor transparency log entry in the bundle is valid
+
+**Rekor unavailability is a hard failure — never a silent pass.** Exit code 3 (infrastructure failure).
+
+```
+[✗] Cannot verify manifest bundle — transparency log unreachable
+    Rekor URL: https://rekor.sigstore.dev
+    This is a hard failure. moat-verify will never pass without Rekor verification.
+```
+
+On success:
+
+```
+[✓] Registry manifest verified
+    Registry: <manifest_uri>
+    Name:     <name>
+    Operator: <operator>
+    Updated:  <updated_at>
+    Signer:   <registry_signing_profile.subject> (<registry_signing_profile.issuer>)
+```
 
 ### Step 3: Look up content hash
 
-Search manifest `items` array for an entry whose `content_hash` matches Step 1.
+Search manifest `content` array for an entry whose `content_hash` matches Step 1.
 
 Fail (exit 1) if no match:
 ```
@@ -140,28 +169,29 @@ If found:
     Type:    <item-type>
 ```
 
-### Step 4: Verify registry Rekor attestation
+### Step 4: Verify per-item Rekor attestation
 
-Read `attestation.rekor_log_id` from the matching manifest item.
+Read `rekor_log_index` from the matching manifest entry. If the entry has no `rekor_log_index`, the item is
+Unsigned — skip this step and record the trust result as `UNSIGNED` (see Trust Result).
 
 **Rekor unavailability MUST produce an explicit failure — never a silent pass.** Exit code 3 (infrastructure failure).
 
 ```
-[✗] Cannot verify Rekor attestation — transparency log unreachable
+[✗] Cannot verify per-item Rekor attestation — transparency log unreachable
     Rekor URL: https://rekor.sigstore.dev
     This is a hard failure. moat-verify will never pass without Rekor verification.
 ```
 
 Verification:
-1. Extract payload hash from entry. Compare to computed content hash. Fail if mismatch.
-2. Verify entry signature against embedded certificate using `cosign verify-blob`. Fail if verification fails.
-3. Extract signing identity from verified certificate.
+1. Fetch the Rekor entry at `rekor_log_index`. Fail with exit 3 if unreachable.
+2. Extract payload from the entry. Compare to computed content hash. Fail with exit 1 if mismatch.
+3. Verify entry signature against the embedded certificate using `cosign verify-blob`. Fail with exit 1 if verification fails.
+4. Extract OIDC signing identity from the verified certificate.
 
 ```
-[✓] Registry Rekor attestation verified
-    Log ID:    <rekor-log-id>
-    Log Index: <index>
-    Signer:    <certificate-subject>
+[✓] Per-item Rekor attestation verified
+    Log Index: <rekor_log_index>
+    Signer:    <certificate-subject> (<certificate-issuer>)
 ```
 
 ### Step 5: Publisher attestation (conditional on `--source`)
@@ -198,6 +228,7 @@ https://github.com/<owner>/<repo>/.github/workflows/moat.yml@refs/heads/<branch>
 
 | Conditions | Result |
 |---|---|
+| Step 4 skipped (no `rekor_log_index`), Step 5 `NOT REQUESTED` | `UNSIGNED` |
 | Step 4 passed, Step 5 `NOT REQUESTED` | `SIGNED` |
 | Steps 4 and 5 both passed | `DUAL-ATTESTED` |
 | Any step failed | `FAILED` |
@@ -224,21 +255,27 @@ Implementations that omit this block do not conform. Its purpose is to prevent u
 
 ```json
 {
-  "schema_version": "1",
+  "schema_version": 1,
   "content_hash": "sha256:abc123...",
-  "registry": "https://registry.example.com",
+  "registry": "https://example.com/moat-manifest.json",
   "result": "SIGNED",
   "steps": {
     "hash_computed": true,
     "manifest_fetched": true,
+    "manifest_bundle_verified": true,
     "hash_found_in_manifest": true,
-    "registry_rekor_verified": true,
+    "item_rekor_verified": true,
     "publisher_rekor_verified": null
   },
   "registry_attestation": {
-    "rekor_log_id": "24296fb24b8ad77a...",
     "rekor_log_index": 12345678,
-    "signer": "did:web:registry.example.com"
+    "signer_subject": "repo:owner/repo:ref:refs/heads/main",
+    "signer_issuer": "https://token.actions.githubusercontent.com"
+  },
+  "item_attestation": {
+    "rekor_log_index": 87654321,
+    "signer_subject": "repo:owner/repo:ref:refs/heads/main",
+    "signer_issuer": "https://token.actions.githubusercontent.com"
   },
   "publisher_attestation": null,
   "not_verified": [
@@ -251,4 +288,6 @@ Implementations that omit this block do not conform. Its purpose is to prevent u
 }
 ```
 
-`steps` values: `true` = passed, `false` = failed, `null` = not attempted. `publisher_rekor_verified` is `null` when `--source` was not provided.
+`steps` values: `true` = passed, `false` = failed, `null` = not attempted. `publisher_rekor_verified` is `null`
+when `--source` was not provided. `manifest_bundle_verified` covers the registry-level Rekor check (Step 2);
+`item_rekor_verified` covers the per-item Rekor check (Step 4).

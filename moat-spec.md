@@ -221,12 +221,12 @@ MOAT currently defines four normative content types, with two more deferred:
 
 | Type       | Category dir | Notes                                                         |
 |------------|--------------|---------------------------------------------------------------|
-| `skill`    | `skills/`    | Reusable instruction sets                                     |
-| `subagent` | `subagents/` | Specialized persona definitions with controlled tools/context |
-| `rules`    | `rules/`     | Behavior configuration files and rule bundles                 |
 | `command`  | `commands/`  | User-invoked slash commands                                   |
 | `hook`     | `hooks/`     | Deferred — directory reserved, type not yet normative         |
 | `mcp`      | `mcp/`       | Deferred — directory reserved, type not yet normative         |
+| `rules`    | `rules/`     | Behavior configuration files and rule bundles                 |
+| `skill`    | `skills/`    | Reusable instruction sets                                     |
+| `subagent` | `subagents/` | Specialized persona definitions with controlled tools/context |
 
 Each subdirectory within a category directory is one content item. The content hash covers that subdirectory as a unit.
 
@@ -593,32 +593,33 @@ Minimum structure:
 }
 ```
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `schema_version` | REQUIRED | Manifest format version; currently `1` (integer) |
-| `manifest_uri` | REQUIRED | Canonical URL at which this manifest is hosted. MUST be a stable path-based URL with no query parameters or fragments — the bundle URL is derived from it. Clients MAY use to detect substitution attacks. |
-| `name` | REQUIRED | Human-readable registry name |
-| `operator` | REQUIRED | Human-readable name of the registry operator. Display label only — changes do NOT trigger re-approval. |
-| `updated_at` | REQUIRED | ISO 8601 UTC timestamp of when this manifest was last generated. For display and activity monitoring only — the staleness check uses the client's last-fetch timestamp, not this field. |
-| `registry_signing_profile` | REQUIRED | The registry's CI signing identity. Conforming clients MUST track this per registry; changes on a subsequent fetch require End User re-approval before the manifest is accepted. See [Signature Envelope](#signature-envelope). |
-| `registry_signing_profile.issuer` | REQUIRED | OIDC issuer URL of the registry's CI provider |
-| `registry_signing_profile.subject` | REQUIRED | OIDC subject claim as produced by the registry's CI provider |
-| `content` | REQUIRED | Array of per-item entries |
-| `content[].name` | REQUIRED | Canonical identifier for the content item |
-| `content[].display_name` | REQUIRED | Human-readable name |
-| `content[].type` | REQUIRED | One of: `skill`, `subagent`, `rules`, `command` |
-| `content[].content_hash` | REQUIRED | `<algorithm>:<hex>` — normative identity of the content |
-| `content[].source_uri` | REQUIRED | Source repository URI |
-| `content[].attested_at` | REQUIRED | Registry attestation timestamp (RFC 3339 UTC) |
-| `content[].private_repo` | REQUIRED | `true` if sourced from a private or internal repository |
-| `content[].derived_from` | OPTIONAL | Source URI of the item this was forked or derived from |
-| `content[].version` | OPTIONAL | Display label only; `content_hash` is normative identity |
-| `content[].scan_status` | OPTIONAL | See [scan_status](#scan_status) |
-| `content[].signing_profile` | REQUIRED for Dual-Attested | See [signing_profile](#signing_profile) |
-| `revocations` | REQUIRED | Array of revocation entries; empty array if none |
-| `revocations[].content_hash` | REQUIRED | Hash of the revoked content item |
-| `revocations[].reason` | REQUIRED | One of: `malicious`, `compromised`, `deprecated`, `policy_violation` |
-| `revocations[].details_url` | REQUIRED for registry / OPTIONAL for publisher | URL to public revocation details |
+| Field                              | Required                                       | Description                                                                                                                                                                                                                     |
+|------------------------------------|------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `schema_version`                   | REQUIRED                                       | Manifest format version; currently `1` (integer)                                                                                                                                                                                |
+| `manifest_uri`                     | REQUIRED                                       | Canonical URL at which this manifest is hosted. MUST be a stable path-based URL with no query parameters or fragments — the bundle URL is derived from it. Clients MAY use to detect substitution attacks.                      |
+| `name`                             | REQUIRED                                       | Human-readable registry name                                                                                                                                                                                                    |
+| `operator`                         | REQUIRED                                       | Human-readable name of the registry operator. Display label only — changes do NOT trigger re-approval.                                                                                                                          |
+| `updated_at`                       | REQUIRED                                       | ISO 8601 UTC timestamp of when this manifest was last generated. For display and activity monitoring only — the staleness check uses the client's last-fetch timestamp, not this field.                                         |
+| `registry_signing_profile`         | REQUIRED                                       | The registry's CI signing identity. Conforming clients MUST track this per registry; changes on a subsequent fetch require End User re-approval before the manifest is accepted. See [Signature Envelope](#signature-envelope). |
+| `registry_signing_profile.issuer`  | REQUIRED                                       | OIDC issuer URL of the registry's CI provider                                                                                                                                                                                   |
+| `registry_signing_profile.subject` | REQUIRED                                       | OIDC subject claim as produced by the registry's CI provider                                                                                                                                                                    |
+| `content`                          | REQUIRED                                       | Array of per-item entries                                                                                                                                                                                                       |
+| `content[].name`                   | REQUIRED                                       | Canonical identifier for the content item                                                                                                                                                                                       |
+| `content[].display_name`           | REQUIRED                                       | Human-readable name                                                                                                                                                                                                             |
+| `content[].type`                   | REQUIRED                                       | One of: `skill`, `subagent`, `rules`, `command`                                                                                                                                                                                 |
+| `content[].content_hash`           | REQUIRED                                       | `<algorithm>:<hex>` — normative identity of the content                                                                                                                                                                         |
+| `content[].source_uri`             | REQUIRED                                       | Source repository URI                                                                                                                                                                                                           |
+| `content[].attested_at`            | REQUIRED                                       | Registry attestation timestamp (RFC 3339 UTC)                                                                                                                                                                                   |
+| `content[].private_repo`           | REQUIRED                                       | `true` if sourced from a private or internal repository                                                                                                                                                                         |
+| `content[].rekor_log_index`        | REQUIRED for Signed + Dual-Attested            | Integer index of the registry's Rekor transparency log entry attesting this content item. Absent for Unsigned items — its absence is the Unsigned tier signal.                                                                  |
+| `content[].derived_from`           | OPTIONAL                                       | Source URI of the item this was forked or derived from                                                                                                                                                                          |
+| `content[].version`                | OPTIONAL                                       | Display label only; `content_hash` is normative identity                                                                                                                                                                        |
+| `content[].scan_status`            | OPTIONAL                                       | See [scan_status](#scan_status)                                                                                                                                                                                                 |
+| `content[].signing_profile`        | REQUIRED for Dual-Attested                     | See [signing_profile](#signing_profile)                                                                                                                                                                                         |
+| `revocations`                      | REQUIRED                                       | Array of revocation entries; empty array if none                                                                                                                                                                                |
+| `revocations[].content_hash`       | REQUIRED                                       | Hash of the revoked content item                                                                                                                                                                                                |
+| `revocations[].reason`             | REQUIRED                                       | One of: `malicious`, `compromised`, `deprecated`, `policy_violation`                                                                                                                                                            |
+| `revocations[].details_url`        | REQUIRED for registry / OPTIONAL for publisher | URL to public revocation details                                                                                                                                                                                                |
 
 **Field notes:**
 
