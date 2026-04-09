@@ -368,20 +368,41 @@ manifest itself. A bundle at an ephemeral URL will produce verification failures
 entry at attestation time by signing a canonical payload with `cosign sign-blob`. The canonical payload format is:
 
 ```json
-{"content_hash":"sha256:<hex>"}
+{"_version":1,"content_hash":"sha256:<hex>"}
 ```
 
 Serialization rules (normative):
 - UTF-8 encoding, no BOM
 - No trailing newline
 - No whitespace inside or outside the JSON object
-- Exactly the key `"content_hash"` with the `<algorithm>:<hex>` value from the manifest entry
+- Keys in lexicographic order (`_version` sorts before `content_hash`; underscore ASCII 95 < 'c' ASCII 99)
+- Exactly two keys: `"_version"` (integer `1`) and `"content_hash"` with the `<algorithm>:<hex>` value from the manifest entry
+
+Python canonical form:
+```python
+payload = json.dumps(
+    {"_version": 1, "content_hash": content_hash},
+    separators=(",", ":"),
+    sort_keys=True,
+).encode("utf-8")
+```
+
+**Test vector:**
+
+| Field          | Value                                                                                        |
+|----------------|----------------------------------------------------------------------------------------------|
+| Input hash     | `sha256:3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b`                  |
+| Payload bytes  | `{"_version":1,"content_hash":"sha256:3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b"}` |
+| SHA-256 of payload | `b7d70330da474c9d32efe29dd4e23c4a0901a7ca222e12bdbc84d17e4e5f69a4`                  |
 
 The `rekor_log_index` in each manifest entry is the log index returned by Rekor for this per-item signing
 operation. Conforming clients MUST store both the cosign bundle and this canonical payload as `attestation_bundle`
 and `signed_payload` in the lockfile entry — `cosign verify-blob --offline` requires the original signed bytes.
 
-This format is minimal by design: it attests exactly one fact (this content hash was signed) and is reproducible
+The `_version` field enables format evolution without ambiguity. Verifiers that encounter an unrecognized `_version`
+value MUST fail the verification rather than proceeding against an unknown payload schema.
+
+This format attests exactly one fact (this content hash was signed at this schema version) and is reproducible
 from the manifest entry alone. Verifiers reconstruct the payload from the `content_hash` field and verify the
 signature without storing extra registry context in the Rekor record.
 
@@ -707,7 +728,7 @@ Minimum structure:
 - `entries[].attested_at` is the registry's clock, not the client's — do not build freshness logic on it.
 - `entries[].trust_tier` records the trust tier as determined at install time. It does not update automatically if the registry changes the tier after installation.
 - `entries[].attestation_bundle` is the signature, signing certificate, and Rekor transparency log entry as a single embedded JSON object. Conforming clients MUST populate this field at install time — it is required for offline re-verification.
-- `entries[].signed_payload` is the verbatim content passed to `cosign sign-blob` at attestation time, stored exactly as-is. Conforming clients MUST populate this field — `cosign verify-blob --offline` requires the original signed artifact. JSON serialization differences invalidate the signature; storing verbatim is the only safe approach.
+- `entries[].signed_payload` is the verbatim content passed to `cosign sign-blob` at attestation time, stored exactly as-is. Conforming clients MUST populate this field — `cosign verify-blob --offline` requires the original signed artifact. JSON serialization differences invalidate the signature; storing verbatim is the only safe approach. Before storing, conforming clients MUST confirm that `sha256(signed_payload.encode("utf-8"))` equals the `data.hash.value` field of the Rekor entry at `rekor_log_index`. If this check fails, the entry MUST NOT be written to the lockfile and the install MUST be aborted.
 - `entries[].type` is a closed set in the current version. Conforming clients MUST accept entries with unrecognized type values without error — new types will be added in future versions.
 - `entries[].registry` MUST be treated as permanently stable once published. A URL change invalidates all lockfile entries referencing it.
 - `revoked_hashes` entries MUST NOT be silently removed. Clearing a revoked hash requires deliberate End User action. This prevents the remove-and-reinstall bypass: an attempt to reinstall a revoked hash is blocked by this record.

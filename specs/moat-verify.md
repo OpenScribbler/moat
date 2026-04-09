@@ -153,13 +153,19 @@ Unsigned — skip this step and record the trust result as `UNSIGNED` (see Trust
 
 Verification:
 1. Fetch the Rekor entry at `rekor_log_index`. Fail with exit 3 if unreachable.
-2. Reconstruct the canonical per-item payload: `{"content_hash":"<computed-hash>"}` (UTF-8, no whitespace, no
-   trailing newline). Compute its SHA-256 and compare to the data hash in the Rekor entry's `hashedrekord` body.
-   Fail with exit 1 if mismatch — the Rekor entry does not attest the computed content hash.
+2. Reconstruct the canonical per-item payload: `{"_version":1,"content_hash":"<computed-hash>"}` (UTF-8,
+   no whitespace, no trailing newline, keys in lexicographic order). Compute its SHA-256 and compare to the
+   data hash in the Rekor entry's `hashedrekord` body. Fail with exit 1 if mismatch — the Rekor entry does
+   not attest the computed content hash. Implementations SHOULD check whether the space-padded form of this
+   payload matches and, if so, emit an informational hint in the failure message (does not change the exit code).
 3. Reconstruct a Sigstore bundle from the Rekor entry response and write the canonical payload to a temporary file.
    Verify entry signature against the embedded certificate using `cosign verify-blob`. Fail with exit 1 if
    verification fails.
 4. Extract OIDC signing identity from the verified certificate.
+5. Verify the signer identity matches the manifest's `registry_signing_profile`. The signing certificate's OIDC
+   issuer MUST equal `registry_signing_profile.issuer` and the subject MUST equal `registry_signing_profile.subject`.
+   Fail with exit 1 if either does not match — a different signing identity means this Rekor entry was not created
+   by the registry operator declared in the manifest.
 
 ```
 [✓] Per-item Rekor attestation verified

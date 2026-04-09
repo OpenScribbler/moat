@@ -79,7 +79,7 @@ print("lockfile written:", content_hash)
 ```
 
 > **Note:** This test bundle signs `test_blob.txt` (an arbitrary JSON payload). In production, the
-> `signed_payload` is the canonical per-item payload `{"content_hash":"sha256:<hex>"}`. The bundle
+> `signed_payload` is the canonical per-item payload `{"_version":1,"content_hash":"sha256:<hex>"}`. The bundle
 > used here pre-dates the format definition — see [Building a conforming lockfile](#building-a-conforming-lockfile).
 
 ### Run the tests
@@ -194,7 +194,7 @@ requires Rekor connectivity.
 2. The manifest signed with `cosign sign-blob`, bundle served at `<manifest-url>.sigstore`
 3. Each Signed/Dual-Attested item in the manifest must have:
    - A `rekor_log_index` pointing to the item's per-item Rekor entry
-   - That entry created by signing `{"content_hash":"sha256:<hex>"}` (canonical payload format)
+   - That entry created by signing `{"_version":1,"content_hash":"sha256:<hex>"}` (canonical payload format)
 
 ### Quick integration test with a local registry
 
@@ -214,7 +214,7 @@ print('content_hash:', h)
 ```bash
 # 2. Sign the per-item canonical payload
 CONTENT_HASH="sha256:<your-hash-here>"
-echo -n "{\"content_hash\":\"$CONTENT_HASH\"}" > /tmp/item-payload.json
+echo -n "{\"_version\":1,\"content_hash\":\"$CONTENT_HASH\"}" > /tmp/item-payload.json
 cosign sign-blob --bundle /tmp/item-bundle.sigstore.json /tmp/item-payload.json
 # Note the logIndex from cosign output → ITEM_LOG_INDEX
 ```
@@ -338,6 +338,18 @@ def build_lockfile_entry(content_dir: str, manifest_entry: dict, registry_url: s
     entry_uuid = next(iter(rekor_data))
     rekor_entry = rekor_data[entry_uuid]
 
+    # Confirm data hash before storing (normative MUST in moat-spec.md §Lockfile)
+    import base64
+    body = json.loads(base64.b64decode(rekor_entry["body"]))
+    rekor_data_hash = body["spec"]["data"]["hash"]["value"]
+    payload_hash = hashlib.sha256(payload_bytes).hexdigest()
+    if rekor_data_hash != payload_hash:
+        raise ValueError(
+            f"Rekor entry data hash mismatch — do not write lockfile entry.\n"
+            f"  Expected: {payload_hash}\n"
+            f"  Rekor:    {rekor_data_hash}"
+        )
+
     # Build a Sigstore bundle from the Rekor entry
     # (see _build_bundle() in reference/moat_verify.py for the reconstruction logic)
     bundle = build_bundle_from_rekor_entry(rekor_entry)  # your implementation
@@ -356,33 +368,53 @@ def build_lockfile_entry(content_dir: str, manifest_entry: dict, registry_url: s
 ```
 
 **Key invariant:** `sha256(signed_payload.encode("utf-8"))` must equal the `data.hash.value` in the
-Rekor entry at `rekor_log_index`. If it does not, `cosign verify-blob --offline` will fail on
-re-verification.
+Rekor entry at `rekor_log_index`. Conforming clients MUST verify this before writing the lockfile entry —
+do not store a `signed_payload` you haven't confirmed against the Rekor record. If it does not match,
+`cosign verify-blob --offline` will fail on re-verification.
 
 ---
 
 ## Per-item payload format summary
 
-| Field            | Value                                        |
-|------------------|----------------------------------------------|
-| Encoding         | UTF-8, no BOM                                |
-| JSON form        | `{"content_hash":"sha256:<hex>"}`            |
-| Trailing newline | None                                         |
-| Whitespace       | None (compact serialization)                 |
-| Key order        | `sort_keys=True` (trivially satisfied, one key) |
+| Field            | Value                                                                  |
+|------------------|------------------------------------------------------------------------|
+| Encoding         | UTF-8, no BOM                                                          |
+| JSON form        | `{"_version":1,"content_hash":"sha256:<hex>"}`                         |
+| Trailing newline | None                                                                   |
+| Whitespace       | None (compact serialization)                                           |
+| Key order        | `sort_keys=True` (`_version` sorts before `content_hash`)              |
 
 Python canonical form:
 ```python
 payload = json.dumps(
-    {"content_hash": content_hash},
+    {"_version": 1, "content_hash": content_hash},
     separators=(",", ":"),
     sort_keys=True,
 ).encode("utf-8")
-# → b'{"content_hash":"sha256:<hex>"}'
+# → b'{"_version":1,"content_hash":"sha256:<hex>"}'
 ```
 
 This is the exact byte sequence the registry signs with `cosign sign-blob` and the exact byte
 sequence `moat-verify` reconstructs to verify the per-item Rekor entry.
+
+### Test vector
+
+Use this to validate your canonical payload implementation:
+
+| Field              | Value                                                                                        |
+|--------------------|----------------------------------------------------------------------------------------------|
+| Input hash         | `sha256:3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b`                  |
+| Payload bytes      | `{"_version":1,"content_hash":"sha256:3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b"}` |
+| SHA-256 of payload | `b7d70330da474c9d32efe29dd4e23c4a0901a7ca222e12bdbc84d17e4e5f69a4`                          |
+
+Quick verification:
+```python
+import json, hashlib
+h = "sha256:3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b"
+payload = json.dumps({"_version": 1, "content_hash": h}, separators=(",", ":"), sort_keys=True).encode("utf-8")
+assert hashlib.sha256(payload).hexdigest() == "b7d70330da474c9d32efe29dd4e23c4a0901a7ca222e12bdbc84d17e4e5f69a4"
+print("Test vector OK")
+```
 
 ---
 

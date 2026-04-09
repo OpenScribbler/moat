@@ -15,10 +15,16 @@ See: specs/moat-verify.md for the normative specification.
 
 Per-item registry attestation payload (normative, moat-spec.md §Signature Envelope):
   The registry signs a canonical JSON payload for each content item:
-    {"content_hash":"sha256:<hex>"}
-  UTF-8, no trailing newline, no extra whitespace. This is reproducible from the
-  manifest entry alone — moat-verify reconstructs it from the computed content_hash.
-  The Rekor entry's hashedrekord data hash must equal sha256(canonical_payload).
+    {"_version":1,"content_hash":"sha256:<hex>"}
+  UTF-8, no trailing newline, no extra whitespace. sort_keys=True (underscore < 'c').
+  This is reproducible from the manifest entry alone — moat-verify reconstructs it from
+  the computed content_hash. The Rekor entry's hashedrekord data hash must equal
+  sha256(canonical_payload).
+
+  Test vector:
+    Input:   sha256:3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b
+    Payload: {"_version":1,"content_hash":"sha256:3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b"}
+    SHA-256: b7d70330da474c9d32efe29dd4e23c4a0901a7ca222e12bdbc84d17e4e5f69a4
 """
 
 import argparse
@@ -424,9 +430,14 @@ def _online_step3(manifest: dict, content_hash: str) -> dict:
 def _canonical_payload(content_hash: str) -> bytes:
     """
     The normative per-item attestation payload (moat-spec.md §Signature Envelope).
-    Format: {"content_hash":"sha256:<hex>"}  — UTF-8, no whitespace, no trailing newline.
+    Format: {"_version":1,"content_hash":"sha256:<hex>"}  — UTF-8, no whitespace, no trailing newline.
+    sort_keys=True ensures _version (underscore, ASCII 95) sorts before content_hash ('c', ASCII 99).
     """
-    return json.dumps({"content_hash": content_hash}, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    return json.dumps(
+        {"_version": 1, "content_hash": content_hash},
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
 
 
 def _verify_rekor_entry(log_index: int, content_hash: str) -> tuple[str, str]:
@@ -454,12 +465,26 @@ def _verify_rekor_entry(log_index: int, content_hash: str) -> tuple[str, str]:
     payload_bytes = _canonical_payload(content_hash)
     expected = hashlib.sha256(payload_bytes).hexdigest()
     if data_hash_hex != expected:
+        # Diagnostic: check space-padded serialization (common implementation mistake)
+        padded = json.dumps(
+            {"_version": 1, "content_hash": content_hash},
+            sort_keys=True,
+        ).encode("utf-8")
+        if hashlib.sha256(padded).hexdigest() == data_hash_hex:
+            hint = (
+                "\n    Hint: The Rekor entry matches the space-padded form of this payload.\n"
+                "           The registry may have used json.dumps without separators=(',',':').\n"
+                "           Canonical form requires compact serialization (no spaces after ':' or ',')."
+            )
+        else:
+            hint = ""
         raise _Exit(
             EXIT_FAIL,
             f"[✗] Rekor entry data hash does not match computed content hash\n"
             f"    Log index:     {log_index}\n"
             f"    Computed hash: {content_hash}\n"
-            f"    Rekor payload: sha256:{data_hash_hex}",
+            f"    Expected:      sha256:{expected}\n"
+            f"    Rekor payload: sha256:{data_hash_hex}" + hint,
         )
 
     bundle = _build_bundle(entry, body)
@@ -492,16 +517,31 @@ def _verify_rekor_entry(log_index: int, content_hash: str) -> tuple[str, str]:
     return _extract_oidc(result.stdout, result.stderr)
 
 
-def _online_step4(item: dict, content_hash: str) -> tuple[str, str, int | None]:
+def _online_step4(item: dict, content_hash: str, signing_profile: dict) -> tuple[str, str, int | None]:
     """
     Verify per-item Rekor attestation.
     Returns (subject, issuer, log_index). subject="UNSIGNED" if no rekor_log_index.
+    Verifies signer identity matches registry_signing_profile (exit 1 on mismatch).
     """
     log_index: int | None = item.get("rekor_log_index")
     if log_index is None:
         return "UNSIGNED", "", None
 
     subject, issuer = _verify_rekor_entry(log_index, content_hash)
+
+    # Signer identity MUST match registry_signing_profile
+    expected_subject = signing_profile.get("subject", "")
+    expected_issuer  = signing_profile.get("issuer", "")
+    if expected_subject and subject != expected_subject:
+        print(f"[✗] Per-item signer identity does not match registry signing profile")
+        print(f"    Expected subject: {expected_subject}")
+        print(f"    Found subject:    {subject}")
+        raise _Exit(EXIT_FAIL)
+    if expected_issuer and issuer != expected_issuer:
+        print(f"[✗] Per-item signer identity does not match registry signing profile")
+        print(f"    Expected issuer: {expected_issuer}")
+        print(f"    Found issuer:    {issuer}")
+        raise _Exit(EXIT_FAIL)
 
     print(f"[✓] Per-item Rekor attestation verified")
     print(f"    Log Index: {log_index}")
@@ -789,7 +829,7 @@ def _run_online(directory: str, registry_url: str, source_uri: str | None, json_
             state["steps"]["item_rekor_verified"] = None
         else:
             state["steps"]["item_rekor_verified"] = False
-            i_subject, i_issuer, i_idx = _online_step4(item, content_hash)
+            i_subject, i_issuer, i_idx = _online_step4(item, content_hash, manifest.get("registry_signing_profile", {}))
             state["steps"]["item_rekor_verified"] = True
             state["item_attestation"] = {
                 "rekor_log_index": i_idx,
