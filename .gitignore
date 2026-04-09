@@ -1,2 +1,7 @@
 # Panel discussion artifacts (working documents, not spec content)
 panel/
+
+# Session artifacts
+.handoffs/
+.vscode/
+__pycache__/
