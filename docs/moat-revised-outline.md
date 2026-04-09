@@ -537,8 +537,54 @@ guarantee.
 
 ## Discovery
 
-A community-owned registry index repo can list known registries, with Syllago shipping one default discovery source.
-That creates a de facto trust root for discovery and therefore needs explicit governance before the spec advances.
+A registry index lists known registries and their manifest URLs, allowing conforming clients to present users with
+available options without requiring manual URL entry. A community-owned index repo can serve this role, with Syllago
+shipping one default discovery source.
+
+### Registry Index Format (normative)
+
+A valid registry index is a signed JSON document hosted at a stable URL. Minimum structure:
+
+```json
+{
+  "schema_version": "1",
+  "index_uri": "https://example.com/moat-index.json",
+  "operator": "Example Registry Index",
+  "governance_url": "https://example.com/moat-governance",
+  "updated_at": "2026-04-08T00:00:00Z",
+  "registries": [
+    {
+      "name": "Example Registry",
+      "manifest_url": "https://example.com/moat-manifest.json",
+      "description": "A registry of example skills"
+    }
+  ]
+}
+```
+
+### Index Operator Requirements (normative)
+
+- Registry indices MUST be signed using the same Sigstore keyless OIDC mechanism used for registry manifests. The
+  index signature MUST be logged to Rekor.
+- Index operators MUST publish a public governance document at the URL declared in `governance_url`. The document
+  MUST cover: inclusion criteria, removal policy, incident response process, dispute resolution, and signing key
+  management. The governance document content is the index operator's responsibility — this spec requires it to exist,
+  be public, and cover the listed topics; it does not dictate the specific policies.
+
+### Client Requirements for Registry Indices (normative)
+
+The operator that ships a default index source in a conforming client holds de facto discovery authority — their
+curation determines which registries users are offered. The spec cannot govern index operator decisions, but it
+governs how clients handle them:
+
+- Conforming clients MUST surface which registry index(es) they use for discovery before presenting registry options
+  to the End User.
+- Conforming clients MUST support user-configurable index sources. Users MUST be able to add, remove, or replace any
+  index source including any pre-configured defaults.
+- Conforming clients MUST NOT treat any registry index as an authoritative or exclusive discovery source. Users MUST
+  be able to add registries by direct manifest URL without using an index at all.
+- Adding a registry discovered through an index requires the same explicit End User trust action required for all
+  registries. The index shapes the discovery menu; it does not bypass the per-registry trust requirement.
 
 ---
 
@@ -549,9 +595,14 @@ That creates a de facto trust root for discovery and therefore needs explicit go
 catalogs should split into sub-registries. Pagination support is a MAY for future spec versions and client
 implementations. This is consistent with the static-file registry model and avoids protocol complexity in v1.
 
-**Issue 9: Registry index governance** If one index ships as the default discovery source, it becomes a legitimacy root
-whether named as such or not. Inclusion criteria, removal policy, incident response, namespace disputes, appeals, and
-signing all need explicit governance.
+~~**Issue 9: Registry index governance**~~ **Resolved.** The spec defines the registry index format (signed JSON,
+stable URL), requires index operators to sign the index via Rekor and publish a public governance document covering
+inclusion criteria, removal policy, incident response, dispute resolution, and signing key management. Governance
+document content is explicitly outside spec scope — that belongs to the index operator. The de facto trust root
+concern is addressed at the protocol layer: the index shapes the discovery menu but cannot bypass the per-registry
+explicit End User trust action that conforming clients already require. Client requirements: MUST surface which
+index(es) are in use, MUST support user-configurable sources, MUST allow removal of any default, MUST allow direct
+registry URL entry without using an index.
 
 ~~**Issue 10: Publisher authentication model**~~ **Deferred.** Publisher identity for the Dual-Attested tier is already
 handled by OIDC signing via Sigstore — the CI identity IS the publisher identity. Transport-layer auth for private
