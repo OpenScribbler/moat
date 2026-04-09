@@ -16,7 +16,8 @@ sidecar metadata format (`meta.yaml`). This version redefines MOAT as a registry
 content. The v0.3.0 specification is archived as [`archive/moat-spec-v0.3.0.md`](archive/moat-spec-v0.3.0.md).
 
 This draft has not been validated by any implementations. Before advancing beyond Draft status, the registry manifest
-format and content hashing algorithm MUST be confirmed by at least two independent implementations in different languages.
+format and content hashing algorithm MUST be confirmed by at least two independent implementations in different
+languages.
 
 > **Adoption status:** Zero adopters. No implementations exist beyond draft tooling concepts. This is a greenfield spec.
 > Design for correctness, not continuity.
@@ -49,54 +50,68 @@ MOAT does NOT define:
 - Per-file metadata within content items
 - Individual file attestation outside a registry context
 
+## Scope
+
+MOAT is scoped to registry-distributed content — attestation, install-time verification, lockfiles, and revocation signaling.
+
+**MOAT is not:**
+
+- A package manager
+- A central registry
+- A gating mechanism that forbids unsigned content
+- A replacement for tool-specific content formats
+- A metadata sidecar format
+- A per-file attestation system
+- A runtime execution or sandboxing spec for AI agent tools
+- A content-format spec
+
+**Out of scope:**
+
+- Informally shared standalone files
+- Per-file metadata inside content items
+- Content format definitions such as SKILL.md schemas
+- AI agent runtimes and execution environments
+- Runtime sandboxing or permission enforcement
+- Cross-item dependency graphs
+
+MOAT's trust guarantee covers the content directory as a unit. Dependencies outside that directory are outside the
+guarantee and need to be surfaced by companion specs and conforming clients.
+
+Runtime dependencies — external packages fetched at execution time, remote resources loaded by scripts, or any
+resource resolved outside the attested content directory — are outside MOAT's signing guarantee. Content that
+appears clean at install time may load untrusted resources at runtime. Conforming clients SHOULD surface this
+boundary explicitly to End Users at install time. Companion specs MAY require publishers to declare known external
+dependencies so clients can present them before the End User confirms an install.
+
 ## Actors
 
 MOAT involves six distinct actors. They are not interchangeable.
 
-**End User** - The human who chooses which registries to trust and who approves installs or use of content through a
-conforming client. MOAT requires clients to surface trust tier and revocation state clearly so the End
-User can make an informed decision.
+**End User** — The human who chooses which registries to trust and approves installs or use of content through a
+conforming client. This includes individual users and team or enterprise administrators enforcing local policy. MOAT
+requires clients to surface trust tier and revocation state clearly so the End User can make an informed decision.
 
-**Publisher** - Creates content and keeps it in a source repository. A publisher may adopt the [Publisher Action](specs/publisher-action.md) to
-produce source-side attestations, but MOAT does not require the publisher to run a registry or implement client
-behavior.
+**Publisher** — Creates content and keeps it in a source repository. Wants accurate source attribution, visible lineage
+for forks, and an optional low-friction way to co-attest content from the source repository. A publisher may adopt the
+[Publisher Action](specs/publisher-action.md) to produce source-side attestations, but MOAT does not require the
+publisher to run a registry or implement client behavior.
 
-**Registry Operator** - Runs a registry that crawls or ingests content from source repositories, computes content
+**Registry Operator** — Runs a registry that crawls or ingests content from source repositories, computes content
 hashes, signs registry metadata, and publishes a manifest for clients to consume. The Registry Operator is the party
-making the registry-level attestation.
+making the registry-level attestation and is responsible for curation in their own domain.
 
-**Conforming Client** - The install and management tool that implements MOAT's normative client behavior. A conforming
-client fetches manifests, verifies signatures and content hashes, maintains a lockfile, checks revocations, and surfaces
-trust signals before install or use. A conforming client is not an AI agent runtime.
+**Conforming Client** — The install and management tool that implements MOAT's normative client behavior. Fetches
+manifests, verifies signatures and content hashes, maintains a lockfile, checks revocations, and surfaces trust signals
+before install or use — consistently for the End User. A conforming client is not an AI agent runtime.
 
-**AI Agent Runtime** - A system such as Claude Code, Gemini, Cursor, or Windsurf that loads or executes content after
-installation. AI agent runtimes are outside the MOAT protocol boundary. MOAT does not define runtime behavior,
-sandboxing, permission enforcement, or execution semantics.
+**AI Agent Runtime** — A system such as Claude Code, Gemini, Cursor, or Windsurf that loads or executes
+already-installed content after a conforming client has completed verification and placement. AI agent runtimes are
+outside the MOAT protocol boundary. MOAT intentionally defines no runtime behavior, sandboxing, permission
+enforcement, or execution semantics for it; it appears here to make that boundary explicit.
 
-**[moat-verify](specs/moat-verify.md)** - A standalone verification tool that audits the MOAT trust chain for a content item. It verifies, but
-does not install, manage, or execute content. It is therefore not a conforming client and not a runtime.
-
-### Use Cases
-
-**End User** - Chooses which registries to trust and decides whether to install, load, or remove content based on the
-trust tier and revocation state surfaced by a conforming client. This includes individual users and team
-or enterprise administrators enforcing local policy.
-
-**Publisher** - Wants accurate source attribution, visible lineage for forks, and an optional low-friction way to
-co-attest content from the source repository.
-
-**Registry Operator** - Publishes a curated catalog with verifiable registry attestations that any conforming client can
-consume.
-
-**Conforming Client** - Implements install-time and sync-time protocol behavior: fetch manifest, verify signatures and
-hashes, maintain a lockfile, surface trust signals, and enforce revocation behavior consistently for the End User.
-
-**AI Agent Runtime** - Loads or executes already-installed content after a conforming client has completed verification
-and placement. It appears here to make the boundary explicit: MOAT intentionally defines no runtime behavior for it.
-
-**[moat-verify](specs/moat-verify.md)** - Lets any reader independently audit the trust chain for a specific content item without installing or
-executing it. Its use case is diagnosis, validation, and interoperability testing rather than installation or runtime
-management.
+**[moat-verify](specs/moat-verify.md)** — A standalone verification tool that lets any reader independently audit the
+MOAT trust chain for a content item without installing or executing it. Its use case is diagnosis, validation, and
+interoperability testing. It is therefore not a conforming client and not a runtime.
 
 ---
 
@@ -216,10 +231,10 @@ The [Publisher Action](specs/publisher-action.md) uses a two-tier discovery mode
 - **Tier 1:** Canonical category directories
 - **Tier 2:** `moat.yml` for custom layouts; when present it overrides Tier 1
 
-`moat-attestation.json` is a reserved filename. The [Publisher Action](specs/publisher-action.md) writes this file to a dedicated
-`moat-attestation` branch — it is never present in the source branch and is therefore never included in
-content hashing. Publishers MUST NOT create files named `moat-attestation.json` anywhere in their source
-branch; such files have no protocol meaning and their presence is a conformance error.
+`moat-attestation.json` is a reserved filename. The [Publisher Action](specs/publisher-action.md) writes this file to a
+dedicated `moat-attestation` branch — it is never present in the source branch and is therefore never included in
+content hashing. Publishers MUST NOT create files named `moat-attestation.json` anywhere in their source branch; such
+files have no protocol meaning and their presence is a conformance error.
 
 Registries discover publisher attestations at the canonical URL:
 
@@ -264,9 +279,9 @@ they serve different roles:
 - **Per-item Rekor entry:** proves this specific `content_hash` was attested at a logged point in time. Verified for
   each item being installed or verified.
 
-A conforming verifier such as [`moat-verify`](specs/moat-verify.md) MUST verify the manifest signature AND MUST verify the per-item Rekor entry
-for each item under verification. Rekor unavailability is a hard failure — there is no fallback to
-manifest-signature-only when Rekor is offline. This is a deliberate design choice: silent degradation to an
+A conforming verifier such as [`moat-verify`](specs/moat-verify.md) MUST verify the manifest signature AND MUST verify
+the per-item Rekor entry for each item under verification. Rekor unavailability is a hard failure — there is no fallback
+to manifest-signature-only when Rekor is offline. This is a deliberate design choice: silent degradation to an
 unverified-transparency state creates a downgrade path attackers can exploit.
 
 The Rekor instance URL is configurable. Organizations running a private Rekor-compatible instance satisfy the Rekor
@@ -301,34 +316,6 @@ that MOAT v1 targets.
 
 The core spec defines a platform-agnostic signing envelope. The normative signing profile for v1 is `sigstore`
 — keyless OIDC signing via Fulcio/Rekor.
-
----
-
-## Scope Boundary
-
-MOAT is scoped to **registry-distributed content**.
-
-Out of scope:
-
-- Informally shared standalone files
-- Per-file metadata inside content items
-- Content format definitions such as SKILL.md schemas
-- AI agent runtimes and execution environments
-- Runtime sandboxing or permission enforcement
-- Cross-item dependency graphs
-
-MOAT governs registry-distributed content, attestation, install-time verification, lockfiles, and revocation
-signaling. It does not define what an AI agent runtime does with already-installed content, and it does not define
-runtime sandboxing, permission enforcement, or execution semantics.
-
-MOAT's trust guarantee covers the content directory as a unit. Dependencies outside that directory are outside the
-guarantee and need to be surfaced by companion specs and conforming clients.
-
-Runtime dependencies — external packages fetched at execution time, remote resources loaded by scripts, or any
-resource resolved outside the attested content directory — are outside MOAT's signing guarantee. Content that
-appears clean at install time may load untrusted resources at runtime. Conforming clients SHOULD surface this
-boundary explicitly to End Users at install time. Companion specs MAY require publishers to declare known external
-dependencies so clients can present them before the End User confirms an install.
 
 ---
 
@@ -741,15 +728,3 @@ addressed in the version that introduces federation and private registry auth.
 
 **Full alignment map:** [`docs/owasp-alignment.md`](docs/owasp-alignment.md)
 
----
-
-## What This Is Not
-
-- Not a package manager
-- Not a central registry
-- Not a gating mechanism that forbids unsigned content
-- Not a replacement for tool-specific content formats
-- Not a metadata sidecar format
-- Not a per-file attestation system
-- Not a runtime execution or sandboxing spec for AI agent tools
-- Not a content-format spec
