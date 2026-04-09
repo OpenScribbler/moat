@@ -6,7 +6,7 @@ This file provides context and working principles for AI-assisted sessions on th
 
 ## What MOAT Is
 
-MOAT (Manifest for Open AI Tooling) gives people who install AI agent content a way to verify it hasn't been tampered with and came from who they think. Content covered includes: skills, sub-agents, rules, commands, hooks, and MCP configs.
+MOAT (Model for Origin Attestation and Trust) gives people who install AI agent content a way to verify it hasn't been tampered with and came from who they think. Content covered includes: skills, sub-agents, rules, commands, hooks, and MCP configs.
 
 That's the whole job. Not safety scoring. Not policy enforcement. Provenance and integrity.
 
