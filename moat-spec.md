@@ -516,44 +516,46 @@ these definitions rather than embedding schemas inline.
 The registry manifest is the signed document a registry publishes — the central trust artifact conforming clients
 verify on every install and sync.
 
-The following shows what a single per-item entry looks like in the manifest:
-
 Minimum structure:
 
 ```json
 {
-  "name": "my-skill",
-  "display_name": "My Skill",
-  "type": "skill",
-  "content_hash": "sha256:abc123...",
-  "source_uri": "https://github.com/owner/repo",
-  "attested_at": "2026-04-08T00:00:00Z",
-  "private_repo": false,
-  "scan_status": { "result": "clean", "scanner": [{ "name": "semgrep", "version": "1.0" }], "scanned_at": "2026-04-07T00:00:00Z" },
-  "signing_profile": { "issuer": "https://token.actions.githubusercontent.com", "subject": "repo:owner/repo:ref:refs/heads/main" }
+  "content": [
+    {
+      "name": "my-skill",
+      "display_name": "My Skill",
+      "type": "skill",
+      "content_hash": "sha256:abc123...",
+      "source_uri": "https://github.com/owner/repo",
+      "attested_at": "2026-04-08T00:00:00Z",
+      "private_repo": false
+    }
+  ],
+  "revocations": []
 }
 ```
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `name` | REQUIRED | Canonical identifier for the content item |
-| `display_name` | REQUIRED | Human-readable name |
-| `type` | REQUIRED | One of: `skill`, `subagent`, `rules`, `command` |
-| `content_hash` | REQUIRED | `<algorithm>:<hex>` — normative identity of the content |
-| `source_uri` | REQUIRED | Source repository URI |
-| `attested_at` | REQUIRED | Registry attestation timestamp (RFC 3339 UTC) |
-| `private_repo` | REQUIRED | `true` if sourced from a private or internal repository |
-| `derived_from` | OPTIONAL | Source URI of the item this was forked or derived from |
-| `version` | OPTIONAL | Display label only; `content_hash` is normative identity |
-| `scan_status` | OPTIONAL | See [scan_status](#scan_status) |
-| `signing_profile` | REQUIRED for Dual-Attested | See [signing_profile](#signing_profile) |
+| `content` | REQUIRED | Array of per-item entries |
+| `content[].name` | REQUIRED | Canonical identifier for the content item |
+| `content[].display_name` | REQUIRED | Human-readable name |
+| `content[].type` | REQUIRED | One of: `skill`, `subagent`, `rules`, `command` |
+| `content[].content_hash` | REQUIRED | `<algorithm>:<hex>` — normative identity of the content |
+| `content[].source_uri` | REQUIRED | Source repository URI |
+| `content[].attested_at` | REQUIRED | Registry attestation timestamp (RFC 3339 UTC) |
+| `content[].private_repo` | REQUIRED | `true` if sourced from a private or internal repository |
+| `content[].derived_from` | OPTIONAL | Source URI of the item this was forked or derived from |
+| `content[].version` | OPTIONAL | Display label only; `content_hash` is normative identity |
+| `content[].scan_status` | OPTIONAL | See [scan_status](#scan_status) |
+| `content[].signing_profile` | REQUIRED for Dual-Attested | See [signing_profile](#signing_profile) |
+| `revocations` | REQUIRED | Array of revocation entries; empty array if none |
+| `revocations[].content_hash` | REQUIRED | Hash of the revoked content item |
+| `revocations[].reason` | REQUIRED | One of: `malicious`, `compromised`, `deprecated`, `policy_violation` |
+| `revocations[].details_url` | REQUIRED for registry / OPTIONAL for publisher | URL to public revocation details |
 
-The manifest also contains a top-level `revocations` array (REQUIRED; empty array if none). Each revocation entry
-MUST include `content_hash`, `reason`, and `details_url` (REQUIRED for registry revocations; OPTIONAL for publisher
-revocations). See the Revocation mechanism in [Normative core](#normative-core).
-
-> The full top-level manifest format — registry identity, signing envelope, and signature fields — will be formally
-> defined when the spec advances beyond Draft status.
+> The top-level manifest fields covering registry identity, signing envelope, and signature are not yet formally
+> named. They will be defined when the spec advances beyond Draft status.
 
 ### Lockfile
 
@@ -579,18 +581,18 @@ Minimum structure:
 }
 ```
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `moat_lockfile_version` | REQUIRED | Schema version; currently `1` |
-| `entries` | REQUIRED | Array of installed content records |
-| `entries[].name` | REQUIRED | Content item name as recorded in the registry manifest |
-| `entries[].type` | REQUIRED | Content type; closed set: `skill`, `subagent`, `rules`, `command` |
-| `entries[].registry` | REQUIRED | Registry manifest URL the item was installed from |
-| `entries[].content_hash` | REQUIRED | `<algorithm>:<hex>` — normative identity of the installed item |
-| `entries[].attested_at` | REQUIRED | Registry's attestation timestamp (registry clock, not client clock) |
-| `entries[].pinned_at` | REQUIRED | Local install timestamp (client clock; not externally verifiable) |
-| `entries[].attestation_bundle` | REQUIRED | Full cosign bundle captured at install time |
-| `revoked_hashes` | REQUIRED | Array of hard-blocked content hash strings; empty array if none |
+| Field                          | Required | Description                                                         |
+|--------------------------------|----------|---------------------------------------------------------------------|
+| `moat_lockfile_version`        | REQUIRED | Schema version; currently `1`                                       |
+| `entries`                      | REQUIRED | Array of installed content records                                  |
+| `entries[].name`               | REQUIRED | Content item name as recorded in the registry manifest              |
+| `entries[].type`               | REQUIRED | Content type; closed set: `skill`, `subagent`, `rules`, `command`   |
+| `entries[].registry`           | REQUIRED | Registry manifest URL the item was installed from                   |
+| `entries[].content_hash`       | REQUIRED | `<algorithm>:<hex>` — normative identity of the installed item      |
+| `entries[].attested_at`        | REQUIRED | Registry's attestation timestamp (registry clock, not client clock) |
+| `entries[].pinned_at`          | REQUIRED | Local install timestamp (client clock; not externally verifiable)   |
+| `entries[].attestation_bundle` | REQUIRED | Full cosign bundle captured at install time                         |
+| `revoked_hashes`               | REQUIRED | Array of hard-blocked content hash strings; empty array if none     |
 
 **Field notes:**
 
@@ -632,17 +634,17 @@ Minimum structure:
 }
 ```
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `schema_version` | REQUIRED | Index format version; currently `"1"` |
-| `index_uri` | REQUIRED | Canonical URL at which this index document is hosted |
-| `operator` | REQUIRED | Human-readable name of the index operator |
-| `governance_url` | REQUIRED | URL of the public governance document |
-| `updated_at` | REQUIRED | ISO 8601 timestamp of the last index update |
-| `registries` | REQUIRED | Array of registry entries |
-| `registries[].name` | REQUIRED | Human-readable registry name |
-| `registries[].manifest_url` | REQUIRED | URL of the registry's signed manifest |
-| `registries[].description` | OPTIONAL | Short description of the registry's scope or focus |
+| Field                       | Required | Description                                          |
+|-----------------------------|----------|------------------------------------------------------|
+| `schema_version`            | REQUIRED | Index format version; currently `"1"`                |
+| `index_uri`                 | REQUIRED | Canonical URL at which this index document is hosted |
+| `operator`                  | REQUIRED | Human-readable name of the index operator            |
+| `governance_url`            | REQUIRED | URL of the public governance document                |
+| `updated_at`                | REQUIRED | ISO 8601 timestamp of the last index update          |
+| `registries`                | REQUIRED | Array of registry entries                            |
+| `registries[].name`         | REQUIRED | Human-readable registry name                         |
+| `registries[].manifest_url` | REQUIRED | URL of the registry's signed manifest                |
+| `registries[].description`  | OPTIONAL | Short description of the registry's scope or focus   |
 
 **Field notes:**
 
@@ -668,12 +670,12 @@ Minimum structure:
 }
 ```
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `result` | REQUIRED | One of: `clean`, `findings`, `not_scanned` |
-| `scanner` | REQUIRED when `result` is `clean` or `findings` | Array of scanner objects; omitted when `not_scanned` |
-| `scanned_at` | REQUIRED when `result` is `clean` or `findings` | ISO 8601 scan timestamp; omitted when `not_scanned` |
-| `findings_url` | OPTIONAL | URL to a public findings report; only present when `result` is `findings` |
+| Field          | Required                                        | Description                                                               |
+|----------------|-------------------------------------------------|---------------------------------------------------------------------------|
+| `result`       | REQUIRED                                        | One of: `clean`, `findings`, `not_scanned`                                |
+| `scanner`      | REQUIRED when `result` is `clean` or `findings` | Array of scanner objects; omitted when `not_scanned`                      |
+| `scanned_at`   | REQUIRED when `result` is `clean` or `findings` | ISO 8601 scan timestamp; omitted when `not_scanned`                       |
+| `findings_url` | OPTIONAL                                        | URL to a public findings report; only present when `result` is `findings` |
 
 **Field notes:**
 
@@ -695,9 +697,9 @@ Minimum structure:
 }
 ```
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `issuer` | REQUIRED | OIDC issuer URL from the CI provider |
+| Field     | Required | Description                                               |
+|-----------|----------|-----------------------------------------------------------|
+| `issuer`  | REQUIRED | OIDC issuer URL from the CI provider                      |
 | `subject` | REQUIRED | OIDC subject claim as produced by the CI provider's token |
 
 *Informative — known CI provider values:*
