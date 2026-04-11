@@ -3,7 +3,7 @@ schema_version: 1
 registry:
   name: moat-spec-registry
   operator: Holden Hewett
-  manifest_uri: https://raw.githubusercontent.com/OpenScribbler/moat/main/registry.json
+  manifest_uri: https://raw.githubusercontent.com/OpenScribbler/moat/moat-registry/registry.json
 
 sources:
   - uri: https://github.com/OpenScribbler/moat

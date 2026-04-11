@@ -36,7 +36,7 @@ schema_version: 1
 registry:
   name: my-registry            # lowercase letters, digits, hyphens only
   operator: Your Name
-  manifest_uri: https://raw.githubusercontent.com/<owner>/<repo>/main/registry.json
+  manifest_uri: https://raw.githubusercontent.com/<owner>/<repo>/moat-registry/registry.json
 
 sources:
   - uri: https://github.com/<owner>/<content-repo>
@@ -108,8 +108,10 @@ Manifest committed and pushed.
 
 ### Fetch registry.json
 
+The manifest lives on the `moat-registry` branch, not `main`:
+
 ```bash
-gh api repos/<owner>/<repo>/contents/registry.json \
+gh api "repos/<owner>/<repo>/contents/registry.json?ref=moat-registry" \
   --jq '.content' | base64 -d | python3 -m json.tool
 ```
 
@@ -157,10 +159,10 @@ The manifest's `.sigstore` bundle is committed alongside `registry.json`. Verify
 
 ```bash
 # Fetch both files
-gh api repos/<owner>/<repo>/contents/registry.json \
+gh api "repos/<owner>/<repo>/contents/registry.json?ref=moat-registry" \
   --jq '.content' | base64 -d > /tmp/registry.json
 
-gh api repos/<owner>/<repo>/contents/registry.json.sigstore \
+gh api "repos/<owner>/<repo>/contents/registry.json.sigstore?ref=moat-registry" \
   --jq '.content' | base64 -d > /tmp/registry.json.sigstore
 
 # Verify the bundle covers the manifest

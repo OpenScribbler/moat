@@ -3,11 +3,13 @@ name: MOAT Registry Action
 # ─────────────────────────────────────────────────────────────────────────────
 # TRIGGER CONFIGURATION
 #
-# IMPORTANT: Do NOT add `push` without a `paths` filter. The action commits
-# registry.json on every run — an unscoped push trigger would cause an
-# infinite loop. The `paths: ['registry.yml']` trigger is intentional: it
-# makes a registry.yml change (e.g., adding a revocation entry) immediately
-# trigger a run, which is the normative emergency revocation path.
+# The action pushes registry.json to the `moat-registry` branch, NOT to the
+# branch that triggered it. An unscoped `push` trigger on main is therefore
+# safe, but the `paths: ['registry.yml']` trigger is intentional: a config
+# change (e.g., adding a revocation) immediately kicks off a run — this is
+# the normative emergency revocation path.
+#
+# Do NOT add 'moat-registry' to the push branches list.
 # ─────────────────────────────────────────────────────────────────────────────
 on:
   schedule:
@@ -442,6 +444,58 @@ jobs:
               return bundle_path
 
 
+          def push_manifest(manifest_path, branch="moat-registry"):
+              """Push registry.json and registry.json.sigstore to the moat-registry branch."""
+              import shutil
+              bundle_path = Path(str(manifest_path) + ".sigstore")
+
+              with tempfile.TemporaryDirectory() as work_dir:
+                  work = Path(work_dir)
+
+                  # Fetch or create the branch
+                  result = subprocess.run(
+                      ["git", "fetch", "origin", branch],
+                      capture_output=True, text=True,
+                  )
+                  if result.returncode == 0:
+                      subprocess.run(
+                          ["git", "worktree", "add", str(work), f"origin/{branch}"],
+                          check=True, capture_output=True,
+                      )
+                  else:
+                      # Branch does not exist — create orphan worktree
+                      subprocess.run(
+                          ["git", "worktree", "add", "--orphan", "-b", branch, str(work)],
+                          check=True, capture_output=True,
+                      )
+
+                  shutil.copy(manifest_path, work / "registry.json")
+                  shutil.copy(bundle_path, work / "registry.json.sigstore")
+
+                  subprocess.run(
+                      ["git", "-C", str(work), "add",
+                       "registry.json", "registry.json.sigstore"],
+                      check=True, capture_output=True,
+                  )
+                  subprocess.run(
+                      ["git", "-C", str(work),
+                       "-c", "user.name=github-actions[bot]",
+                       "-c", "user.email=github-actions[bot]@users.noreply.github.com",
+                       "commit", "--allow-empty", "-m",
+                       "chore(moat): update registry manifest"],
+                      check=True, capture_output=True,
+                  )
+                  result = subprocess.run(
+                      ["git", "-C", str(work), "push", "origin",
+                       f"HEAD:{branch}", "--force-with-lease"],
+                      capture_output=True, text=True,
+                  )
+                  if result.returncode != 0:
+                      raise RuntimeError(f"git push failed:\n{result.stderr}")
+
+              subprocess.run(["git", "worktree", "prune"], capture_output=True)
+
+
           # ─── Manifest assembly ────────────────────────────────────────────────────────
 
           def build_registry_signing_profile():
@@ -636,17 +690,14 @@ jobs:
               sign_manifest(manifest_path)
               print("Manifest signed: registry.json.sigstore")
 
+              # Push to moat-registry branch (not main)
+              print("Pushing to moat-registry branch...")
+              push_manifest(manifest_path)
+              print("Done. moat-registry branch updated.")
+
           main()
           PYEOF
 
-      - name: Commit and push manifest
+      - name: Confirm manifest pushed
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add registry.json registry.json.sigstore
-          if git diff --staged --quiet; then
-            echo "No changes to manifest — nothing to commit."
-          else
-            git commit -m "chore(moat): update registry manifest"
-            git push
-          fi
+          echo "registry.json and registry.json.sigstore were pushed to the moat-registry branch by the Python step."

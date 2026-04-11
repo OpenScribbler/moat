@@ -36,7 +36,7 @@ schema_version: 1
 registry:
   name: my-registry
   operator: Your Name
-  manifest_uri: https://raw.githubusercontent.com/<owner>/<repo>/main/registry.json
+  manifest_uri: https://raw.githubusercontent.com/<owner>/<repo>/moat-registry/registry.json
 
 sources:
   - uri: https://github.com/<owner>/<repo>   # point at yourself
@@ -131,7 +131,7 @@ Confirm:
 ### Step 2 — Verify the registry manifest
 
 ```bash
-gh api repos/<owner>/<repo>/contents/registry.json \
+gh api "repos/<owner>/<repo>/contents/registry.json?ref=moat-registry" \
   --jq '.content' | base64 -d | python3 -m json.tool
 ```
 
@@ -143,10 +143,10 @@ Confirm:
 ### Step 3 — Verify the manifest signature
 
 ```bash
-gh api repos/<owner>/<repo>/contents/registry.json \
+gh api "repos/<owner>/<repo>/contents/registry.json?ref=moat-registry" \
   --jq '.content' | base64 -d > /tmp/registry.json
 
-gh api repos/<owner>/<repo>/contents/registry.json.sigstore \
+gh api "repos/<owner>/<repo>/contents/registry.json.sigstore?ref=moat-registry" \
   --jq '.content' | base64 -d > /tmp/registry.json.sigstore
 
 cosign verify-blob \
