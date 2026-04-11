@@ -4,7 +4,7 @@ All notable changes to the MOAT specification are documented in this file.
 
 ## [0.5.1] — 2026-04-10
 
-Spec fixes and implementation hardening following end-to-end testing of the Publisher Action and Registry Action workflows.
+Spec fixes and implementation hardening following end-to-end testing of the Publisher Action and Registry Action workflows. Editorial cleanup: broken links repaired, missing cross-references added.
 
 ### Added
 
@@ -18,6 +18,10 @@ Spec fixes and implementation hardening following end-to-end testing of the Publ
 - Publisher Action: was signing a richer payload (`_type`, `item_name`, `source_ref`, `attested_at`) that the Registry Action cannot verify at crawl time because `source_ref` and `attested_at` are unknowable when crawling. Fixed to sign the same canonical payload as the Registry Action. Both publisher-action.md and the reference workflow (`reference/moat.yml`) updated.
 - Registry Action: `git show origin/moat-attestation:moat-attestation.json` fails in a shallow clone because `git fetch origin moat-attestation` updates `FETCH_HEAD` but does not set up the remote-tracking ref. Fixed to use `git show FETCH_HEAD:moat-attestation.json` immediately after the fetch.
 - Publisher Action and Registry Action reference workflows: hardcoded `moat.yml` workflow filename in OIDC subject verification replaced with `publisher_workflow_ref` read from `moat-attestation.json`.
+- `moat-spec.md`: OWASP alignment links updated from `docs/guides/owasp-alignment.md` to `docs/owasp-alignment.md` following file move (two locations: header and OWASP Alignment section).
+- `moat-spec.md`: `specs/registry-action.md` added to Sub-specs header; was missing despite the spec existing since v0.5.0.
+- `moat-spec.md`: Reference implementation cross-reference listings (under Conforming Specs and What the Spec Defines) updated to include `moat_verify.py`, `moat.yml`, and `moat-registry.yml`; only `moat_hash.py` and `generate_test_vectors.py` were listed previously.
+- `README.md`: Added Reference Implementations and Guides sections; `docs/guides/cosign-offline.md` was missing entirely; guides were previously only listed as inline links in the repo structure table.
 
 ## [0.5.0] — 2026-04-10
 

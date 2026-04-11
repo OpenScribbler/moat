@@ -1,6 +1,6 @@
 # Model for Origin Attestation and Trust (MOAT) Specification
 
-**Version:** 0.5.0 (Draft)
+**Version:** 0.5.1 (Draft)
 **Status:** Draft
 **Date:** 2026-04-08
 **Editor:** Holden Hewett
