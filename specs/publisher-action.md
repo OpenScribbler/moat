@@ -29,28 +29,12 @@
 Each content item produces one payload. This is what gets signed and recorded in Rekor.
 
 ```json
-{
-  "_type": "https://moatspec.org/attestation/v1",
-  "item_name": "summarizer-skill",
-  "item_type": "skill",
-  "content_hash": "sha256:abc123...",
-  "source_uri": "https://github.com/alice/my-skills",
-  "source_ref": "abc123def456...",
-  "attested_at": "2026-04-07T14:00:00Z"
-}
+{"_version":1,"content_hash":"sha256:abc123..."}
 ```
 
-**Field definitions:**
+Serialization rules: UTF-8, no BOM, no trailing newline, no insignificant whitespace, lexicographic key order. This is identical to the canonical payload the Registry Action signs for the same item. Both the Publisher Action and Registry Action sign the same payload bytes — they are distinguished by the OIDC subject in the Rekor certificate, not by payload content.
 
-| Field | Description |
-|---|---|
-| `_type` | URI identifying this as a MOAT attestation payload. Versioned with schema version. |
-| `item_name` | The content item's `name` (basename of content directory, or `name` from `moat.yml`). |
-| `item_type` | One of the normative content type identifiers: `skill`, `subagent`, `rules`, `command`. |
-| `content_hash` | MOAT content hash in `<alg>:<hex>` format. |
-| `source_uri` | Source repository URI (`https://github.com/$GITHUB_REPOSITORY`). |
-| `source_ref` | Full commit SHA (`$GITHUB_SHA`). Branch name excluded — branch refs drift; commit SHAs do not. |
-| `attested_at` | RFC 3339 UTC timestamp of when the action signed. |
+**Why the same payload?** A richer payload (with `item_name`, `source_ref`, `attested_at`, etc.) cannot be verified by the Registry Action at crawl time because `source_ref` and `attested_at` are unknown to the registry — they cannot be reconstructed. The OIDC certificate already encodes the repository, workflow path, and ref at signing time; a richer payload would duplicate that data without adding verifiability.
 
 **Rekor entry:** `cosign sign-blob` creates a `hashedrekord` entry. The certificate subject encodes the GitHub Actions OIDC identity:
 
@@ -58,7 +42,7 @@ Each content item produces one payload. This is what gets signed and recorded in
 https://github.com/{owner}/{repo}/.github/workflows/moat.yml@refs/heads/main
 ```
 
-This identity is what registries and `moat-verify` use to confirm the attestation came from a legitimate Publisher Action run on the claimed source repository.
+This identity is what registries and `moat-verify` use to confirm the attestation came from a legitimate Publisher Action run on the claimed source repository. The Rekor certificate's `sub` claim encodes the repository, workflow path, and ref — no additional provenance fields in the payload are needed or verified.
 
 ---
 
@@ -75,6 +59,7 @@ Location: `moat-attestation` branch root. One file per repo. The file is never p
     {
       "name": "summarizer-skill",
       "content_hash": "sha256:abc123...",
+      "source_ref": "abc123def456...",
       "rekor_log_id": "24296fb24b8ad77a...",
       "rekor_log_index": 12345678
     }
@@ -84,6 +69,8 @@ Location: `moat-attestation` branch root. One file per repo. The file is never p
 ```
 
 **`private_repo` field:** REQUIRED. `true` when the action ran on a `private` or `internal` repository; `false` for `public`. This annotation is visible to registries and conforming clients — they MAY use it to isolate, flag, or reject attestations from private repositories. Attestations created before this field was added will not have it; conforming registries SHOULD treat absent `private_repo` as unknown visibility rather than assuming public.
+
+**`source_ref` field (per item):** OPTIONAL. Full commit SHA at the time of attestation. Stored in `moat-attestation.json` as informational context only — it is not part of the signed payload and MUST NOT be used in trust decisions. The Rekor certificate's encoded ref is authoritative for provenance; `source_ref` here is for human auditing and tooling convenience.
 
 ---
 
