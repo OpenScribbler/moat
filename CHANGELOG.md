@@ -46,6 +46,43 @@ Registry Action specification and manifest format additions. Introduces the norm
 - Publisher Action Conforming Specs entry: completed truncated sentence ("MUST be able to consume attestations produced by the Publisher Action").
 - Actor count: corrected "six distinct actors" to "five distinct actors".
 
+## [0.4.0] — 2026-04-06 (Draft)
+
+Complete architectural rewrite. MOAT is redefined from a per-item sidecar metadata format (`meta.yaml`) to a registry distribution protocol. The v0.3.0 spec is archived; this version is not backwards-compatible with any prior version.
+
+### Changed
+
+- **Core architecture:** The registry manifest replaces `meta.yaml` as the core artifact. Registries produce provenance; publishers do nothing by default.
+- **Trust unit:** Shifted from per-item creator signing to registry-level signing. The registry is now the trust anchor conforming clients verify.
+- **Content hashing algorithm:** JCS canonical JSON + meta_hash replaced by dirhash-style algorithm — sort → hash → concatenate → hash. Defined by normative reference implementation (`moat_hash.py`).
+- **Signing model:** Registry signs the manifest; publisher co-signing is optional (produces Dual-Attested tier). SSH signing profile removed entirely.
+- **Identity semantics:** Version is now an optional display label; content hash is the normative identity. `attested_at` replaces `published_at` for freshness semantics.
+- **Name fields:** `name` is now an ASCII machine identifier; `display_name` (optional) is the UTF-8 human label. Prior 128-character Unicode `name` limit dropped.
+- **Source field:** `source_repo` (git-specific format) replaced by `source_uri` (any valid URI).
+- **Name expansion:** "Metadata for Origin, Authorship, and Trust" → "Model for Origin Attestation and Trust" (MOAT acronym preserved).
+
+### Added
+
+- Registry manifest format — signed JSON document: registry identity, `registry_signing_profile`, `content` array with per-item hashes, `revocations` array.
+- Three-tier trust model: `Dual-Attested` (registry + independent publisher Rekor entry), `Signed` (registry + Rekor), `Unsigned`.
+- Publisher Action — optional GitHub Actions workflow for source-repo co-signing; produces Dual-Attested content with no key management.
+- Registry index format — discovery mechanism for listing known registries.
+- Content type taxonomy — `skill`, `subagent`, `rules`, `command`; canonical category directories; two-tier discovery (`moat.yml` override).
+- Revocation mechanism — `revocations` array in manifest with reason codes.
+- Fork and lineage model — `derived_from` field for forks and adaptations.
+- Lockfile concept — conforming client artifact for recording installed content hashes.
+- `reference/moat_hash.py` — Python reference implementation of the content hashing algorithm.
+
+### Removed
+
+- `meta.yaml` per-item sidecar format (archived as `moat-spec-v0.3.0-archived.md`).
+- JCS canonical JSON / meta_hash algorithm and YAML-to-JSON type mapping.
+- `generated_by` field — unverifiable, ages poorly.
+- `source_commit` field — git-specific, redundant with content hash.
+- 64-character hash length limit — replaced by `<algorithm>:<hex>` prefixed format with no length constraint.
+
+---
+
 ## [0.3.0] — 2026-04-04
 
 Security hardening release based on 5-agent adversarial review (31 findings, 29 revision items). Elevates multiple informative recommendations to normative requirements and adds 7 new security considerations.
