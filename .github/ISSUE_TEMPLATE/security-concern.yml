@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        **For vulnerabilities that could be actively exploited, please email security@moatspec.org instead of opening a public issue.**
+        **For vulnerabilities that could be actively exploited, please email openscribbler.dev@pm.me instead of opening a public issue.**
   - type: input
     id: section
     attributes:

@@ -1,7 +1,7 @@
 # moat-verify Specification
 
 **Version:** 0.1.0 (Draft)
-**Requires:** moat-spec.md ≥ 0.4.0
+**Requires:** moat-spec.md ≥ 0.5.0
 **Part of:** [MOAT Specification](../moat-spec.md)
 **Language:** Python 3.9+
 **Dependencies:** [`reference/moat_hash.py`](../reference/moat_hash.py) (imported as module), `cosign` CLI on PATH, stdlib only

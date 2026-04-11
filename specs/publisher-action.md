@@ -1,7 +1,7 @@
 # Publisher Action Specification
 
 **Version:** 0.1.0 (Draft)
-**Requires:** moat-spec.md ≥ 0.4.0
+**Requires:** moat-spec.md ≥ 0.5.0
 **Part of:** [MOAT Specification](../moat-spec.md)
 
 > The Publisher Action is the primary adoption mechanism for the `Dual-Attested` trust tier. Any source repo adopts it with a single workflow file — no key management, no MOAT-specific knowledge required.
