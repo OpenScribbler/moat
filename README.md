@@ -85,7 +85,7 @@ Registries maintain a `revocations` array in the manifest. Four reason codes: `m
 | `moat-spec.md` | Core specification |
 | `specs/` | Sub-specifications: moat-verify, Publisher Action, Registry Action |
 | `reference/` | Reference implementations and test artifacts |
-| `docs/` | Supporting documentation |
+| `docs/guides/` | Guides: [Publisher](docs/guides/publisher.md), [Registry](docs/guides/registry.md), [Self-Publishing](docs/guides/self-publishing.md), [moat-verify testing](docs/guides/moat-verify.md) |
 | `archive/` | Previous spec versions |
 
 ---

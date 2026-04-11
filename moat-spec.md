@@ -7,7 +7,7 @@
 **License:** Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 **Repository:** https://github.com/OpenScribbler/moat
 **Sub-specs:** [`specs/publisher-action.md`](specs/publisher-action.md), [`specs/moat-verify.md`](specs/moat-verify.md)
-**OWASP alignment:** [`docs/owasp-alignment.md`](docs/owasp-alignment.md)
+**OWASP alignment:** [`docs/guides/owasp-alignment.md`](docs/guides/owasp-alignment.md)
 
 ### Document Status
 
@@ -918,5 +918,5 @@ Remaining gaps — CICD-SEC-8 (federation), API2:2023 (publisher authentication)
 are tracked as deferred features (Issues 10 and 11). These gaps are acknowledged v0.5.0 limitations; they will be
 addressed in the version that introduces federation and private registry auth.
 
-**Full alignment map:** [`docs/owasp-alignment.md`](docs/owasp-alignment.md)
+**Full alignment map:** [`docs/guides/owasp-alignment.md`](docs/guides/owasp-alignment.md)
 
