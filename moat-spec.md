@@ -6,8 +6,8 @@
 **Editor:** Holden Hewett
 **License:** Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 **Repository:** https://github.com/OpenScribbler/moat
-**Sub-specs:** [`specs/publisher-action.md`](specs/publisher-action.md), [`specs/moat-verify.md`](specs/moat-verify.md)
-**OWASP alignment:** [`docs/guides/owasp-alignment.md`](docs/guides/owasp-alignment.md)
+**Sub-specs:** [`specs/publisher-action.md`](specs/publisher-action.md), [`specs/registry-action.md`](specs/registry-action.md), [`specs/moat-verify.md`](specs/moat-verify.md)
+**OWASP alignment:** [`docs/owasp-alignment.md`](docs/owasp-alignment.md)
 
 ### Document Status
 
@@ -154,6 +154,15 @@ repository is a self-publishing operator.
 
 **[`reference/moat_hash.py`](reference/moat_hash.py)** — Python reference implementation of the MOAT content hashing
 algorithm. Conforming implementations in any language MUST produce identical output for all test vectors.
+
+**[`reference/moat_verify.py`](reference/moat_verify.py)** — Python reference implementation of `moat-verify` —
+standalone verification tool supporting online (`--registry`) and offline (`--lockfile`) modes.
+
+**[`reference/moat.yml`](reference/moat.yml)** — Publisher Action workflow template. Drop into `.github/workflows/`
+to produce source-side attestations and qualify for the Dual-Attested tier.
+
+**[`reference/moat-registry.yml`](reference/moat-registry.yml)** — Registry Action workflow template. Drop into
+`.github/workflows/` to run a MOAT registry.
 
 **[`reference/generate_test_vectors.py`](reference/generate_test_vectors.py)** — Generates the canonical test vector
 suite used to validate conforming implementations of the content hashing algorithm.
@@ -558,10 +567,10 @@ These items are required for conformance. A conforming registry, a conforming cl
 - **[`reference/moat_hash.py`](reference/moat_hash.py)** — Python reference implementation. A conforming implementation produces identical output for all
   test vectors. Two independent implementations in different languages must pass all test vectors before the spec
   advances beyond Draft.
+- **[`reference/moat_verify.py`](reference/moat_verify.py)** — `moat-verify` reference implementation (Python). Spec: [`specs/moat-verify.md`](specs/moat-verify.md)
+- **[`reference/moat.yml`](reference/moat.yml)** — Publisher Action workflow template. Spec: [`specs/publisher-action.md`](specs/publisher-action.md)
+- **[`reference/moat-registry.yml`](reference/moat-registry.yml)** — Registry Action workflow template. Spec: [`specs/registry-action.md`](specs/registry-action.md)
 - **[`reference/generate_test_vectors.py`](reference/generate_test_vectors.py)** — Generates the canonical test vector suite used to validate conforming implementations.
-- **`moat-verify`** — Standalone verification script. Spec: [`specs/moat-verify.md`](specs/moat-verify.md)
-- **Publisher Action** — GitHub Actions workflow for source repos. Spec:
-  [`specs/publisher-action.md`](specs/publisher-action.md)
 
 ### Informative profiles
 
@@ -918,5 +927,5 @@ Remaining gaps — CICD-SEC-8 (federation), API2:2023 (publisher authentication)
 are tracked as deferred features (Issues 10 and 11). These gaps are acknowledged v0.5.0 limitations; they will be
 addressed in the version that introduces federation and private registry auth.
 
-**Full alignment map:** [`docs/guides/owasp-alignment.md`](docs/guides/owasp-alignment.md)
+**Full alignment map:** [`docs/owasp-alignment.md`](docs/owasp-alignment.md)
 
