@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
-  "attested_at": "2026-04-11T05:59:09Z",
+  "attested_at": "2026-04-11T06:31:27Z",
   "publisher_workflow_ref": ".github/workflows/moat.yml@refs/heads/main",
   "private_repo": false,
   "items": [
     {
       "name": "hello-moat",
       "content_hash": "sha256:ced209e4d93eb328c5e1eb416499c275ac8081e9985a4baf2df152c70e29ecf3",
-      "source_ref": "6adb828b4569f79295a84e65a429ef9e49caaed2",
+      "source_ref": "59c5028af78fdd080ac6891a5037a7c8b58e0bee",
       "rekor_log_id": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d",
-      "rekor_log_index": 1277297839
+      "rekor_log_index": 1277444179
     }
   ],
   "revocations": []
