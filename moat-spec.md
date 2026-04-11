@@ -1,8 +1,8 @@
 # Model for Origin Attestation and Trust (MOAT) Specification
 
-**Version:** 0.5.1 (Draft)
+**Version:** 0.5.2 (Draft)
 **Status:** Draft
-**Date:** 2026-04-08
+**Date:** 2026-04-11
 **Editor:** Holden Hewett
 **License:** Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 **Repository:** https://github.com/OpenScribbler/moat
@@ -394,53 +394,9 @@ served at `{manifest_uri}.sigstore`. This path is normative — conforming regis
 and conforming clients MUST fetch it from there. The bundle MUST be served at the same availability level as the
 manifest itself. A bundle at an ephemeral URL will produce verification failures when it expires.
 
-**Per-item attestation payload:** For Signed and Dual-Attested items, the registry MUST create a per-item Rekor
-entry at attestation time by signing a canonical payload with `cosign sign-blob`. The canonical payload format is:
-
-```json
-{"_version":1,"content_hash":"sha256:<hex>"}
-```
-
-Serialization rules (normative):
-- UTF-8 encoding, no BOM
-- No trailing newline
-- No whitespace inside or outside the JSON object
-- Keys in lexicographic order (`_version` sorts before `content_hash`; underscore ASCII 95 < 'c' ASCII 99)
-- Exactly two keys: `"_version"` (integer `1`) and `"content_hash"` with the `<algorithm>:<hex>` value from the manifest entry
-
-Python canonical form:
-```python
-payload = json.dumps(
-    {"_version": 1, "content_hash": content_hash},
-    separators=(",", ":"),
-    sort_keys=True,
-).encode("utf-8")
-```
-
-**Test vector:**
-
-| Field          | Value                                                                                        |
-|----------------|----------------------------------------------------------------------------------------------|
-| Input hash     | `sha256:3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b`                  |
-| Payload bytes  | `{"_version":1,"content_hash":"sha256:3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b"}` |
-| SHA-256 of payload | `b7d70330da474c9d32efe29dd4e23c4a0901a7ca222e12bdbc84d17e4e5f69a4`                  |
-
-The `rekor_log_index` in each manifest entry is the log index returned by Rekor for this per-item signing
-operation. Conforming clients MUST store both the cosign bundle and this canonical payload as `attestation_bundle`
-and `signed_payload` in the lockfile entry — `cosign verify-blob --offline` requires the original signed bytes.
-
-The `_version` field enables format evolution without ambiguity. Verifiers that encounter an unrecognized `_version`
-value MUST fail the verification rather than proceeding against an unknown payload schema.
-
-This format attests exactly one fact (this content hash was signed at this schema version) and is reproducible
-from the manifest entry alone. Verifiers reconstruct the payload from the `content_hash` field and verify the
-signature without storing extra registry context in the Rekor record.
-
-The Publisher Action uses this same canonical payload format for its source-side Rekor entries. Signing identical
-payload bytes is what enables the Registry Action to verify publisher attestations at crawl time — the Registry
-Action independently computes `content_hash`, reconstructs the payload, and confirms the stored entry hash
-matches. Publisher and registry entries are distinguished by the OIDC subject in the Rekor certificate (different
-workflow file paths), not by payload content. See [Publisher Action](specs/publisher-action.md#attestation-payload-schema-normative) for the publisher-side signing requirement.
+**Per-item attestation:** For Signed and Dual-Attested items, the registry MUST create a per-item Rekor entry at
+attestation time by signing a canonical payload with `cosign sign-blob`. See [Attestation Payload](#attestation-payload)
+for the canonical format, serialization rules, and test vector.
 
 **Manifest verification flow:**
 
@@ -912,6 +868,57 @@ shipped as of this writing (April 2026). Tracking: Gitea PR
 [#5344](https://codeberg.org/forgejo/forgejo/pulls/5344) (closed 2025-02-02, no active successor). When either
 ships, the issuer will be `<instance-url>/api/actions/oidc` and the subject format will mirror GitHub's. Check
 these PRs before updating this table.
+
+### Attestation Payload
+
+The canonical payload signed by both the Registry Action and the Publisher Action to create per-item Rekor
+entries. Signing identical payload bytes for the same content hash is what enables the Registry Action to verify
+publisher attestations at crawl time — Publisher and Registry entries for the same item are distinguished by the
+OIDC subject in the Rekor certificate (different workflow file paths), not by payload content.
+
+Minimum structure:
+
+```json
+{"_version":1,"content_hash":"sha256:<hex>"}
+```
+
+Serialization rules (normative):
+- UTF-8 encoding, no BOM
+- No trailing newline
+- No whitespace inside or outside the JSON object
+- Keys in lexicographic order (`_version` sorts before `content_hash`; underscore ASCII 95 < 'c' ASCII 99)
+- Exactly two keys: `"_version"` (integer `1`) and `"content_hash"` with the `<algorithm>:<hex>` value from the manifest entry
+
+Python canonical form:
+```python
+payload = json.dumps(
+    {"_version": 1, "content_hash": content_hash},
+    separators=(",", ":"),
+    sort_keys=True,
+).encode("utf-8")
+```
+
+**Test vector:**
+
+| Field | Value |
+|---|---|
+| Input hash | `sha256:3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b` |
+| Payload bytes | `{"_version":1,"content_hash":"sha256:3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b"}` |
+| SHA-256 of payload | `b7d70330da474c9d32efe29dd4e23c4a0901a7ca222e12bdbc84d17e4e5f69a4` |
+
+**Field notes:**
+
+- `rekor_log_index` in each manifest entry is the log index returned by Rekor for this per-item signing operation.
+  Conforming clients MUST store both the cosign bundle and this canonical payload as `attestation_bundle` and
+  `signed_payload` in the lockfile entry — `cosign verify-blob --offline` requires the original signed bytes.
+- `_version` enables format evolution without ambiguity. Verifiers that encounter an unrecognized `_version` value
+  MUST fail the verification rather than proceeding against an unknown payload schema.
+- This format attests exactly one fact (this content hash was signed at this schema version) and is reproducible
+  from the manifest entry alone. Verifiers reconstruct the payload from the `content_hash` field and verify the
+  signature without storing extra registry context in the Rekor record.
+
+See [Publisher Action](specs/publisher-action.md#attestation-payload-schema-normative) for the publisher-side
+signing requirement.
 
 ---
 

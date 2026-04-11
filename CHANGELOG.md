@@ -2,6 +2,17 @@
 
 All notable changes to the MOAT specification are documented in this file.
 
+## [0.5.2] — 2026-04-11 (Draft)
+
+Structural reorganization: move Attestation Payload out of Trust Model and into Data Formats. No normative content changed.
+
+### Changed
+
+- `moat-spec.md` §Trust Model — `### Signature Envelope`: per-item attestation payload block (canonical format, serialization rules, Python canonical form, test vector, field notes) extracted to new `### Attestation Payload` section in Data Formats. Replaced with a short summary paragraph and cross-reference. Trust Model section now contains only policy and procedure content, consistent with all other Trust Model subsections.
+- `moat-spec.md` §Data Formats — added `### Attestation Payload` section with the canonical payload format, serialization rules, Python canonical form, test vector, and field notes for `rekor_log_index`, `_version`, and the publisher/registry shared-format rationale.
+
+---
+
 ## [0.5.1] — 2026-04-10
 
 Spec fixes and implementation hardening following end-to-end testing of the Publisher Action and Registry Action workflows. Editorial cleanup: broken links repaired, missing cross-references added.
