@@ -3,6 +3,7 @@ panel/
 
 # Session artifacts
 .handoffs/
+.develop/
 .vscode/
 __pycache__/
 
