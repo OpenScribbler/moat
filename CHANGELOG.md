@@ -2,6 +2,17 @@
 
 All notable changes to the MOAT specification are documented in this file.
 
+## [0.5.3] — 2026-04-11 (Draft)
+
+Removed redundant `## Publisher Action` and `## moat-verify` top-level summary sections. Both were duplicating content already present in `## Conforming specs` (descriptions and links) and the respective sub-specs (operational details). No normative content removed.
+
+### Removed
+
+- `## Publisher Action` — summary and link duplicated by `## Conforming specs`; operational details belong in `specs/publisher-action.md`
+- `## moat-verify` — summary and link duplicated by `## Conforming specs`; usage flags, verification flow, and output requirements belong in `specs/moat-verify.md`
+
+---
+
 ## [0.5.2] — 2026-04-11 (Draft)
 
 Structural reorganization: move Attestation Payload out of Trust Model and into Data Formats. No normative content changed.

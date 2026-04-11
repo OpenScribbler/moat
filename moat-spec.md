@@ -1,6 +1,6 @@
 # Model for Origin Attestation and Trust (MOAT) Specification
 
-**Version:** 0.5.2 (Draft)
+**Version:** 0.5.3 (Draft)
 **Status:** Draft
 **Date:** 2026-04-11
 **Editor:** Holden Hewett
@@ -531,49 +531,6 @@ These items are required for conformance. A conforming registry, a conforming cl
 ### Informative profiles
 
 - **Sigstore profile** — keyless OIDC signing via Fulcio/Rekor.
-
----
-
-## Publisher Action
-
-The Publisher Action is the primary adoption mechanism for the `Dual-Attested` tier. Any source repo adds a single
-workflow file — no key management, no MOAT-specific knowledge required.
-
-The Publisher Action is publisher-side CI tooling. It is not a registry, not a conforming client, and not an AI
-agent runtime.
-
-On push, it discovers content items, computes content hashes, signs each with `cosign sign-blob` via Sigstore keyless
-OIDC, and writes `moat-attestation.json` to the `moat-attestation` branch with Rekor references. Pushing to a
-dedicated branch avoids main branch protection rules and eliminates commit churn on the source branch.
-
-Publisher revocation also flows through this action: publishers add a revocation entry, trigger the workflow, and
-optionally notify registries by webhook. Publisher revocations are warnings, not hard blocks.
-
-**Full specification:** [`specs/publisher-action.md`](specs/publisher-action.md)
-
----
-
-## moat-verify
-
-`moat-verify` is a standalone Python 3.9+ verification tool. It imports [`reference/moat_hash.py`](reference/moat_hash.py) directly, requires `cosign` on
-PATH, and lets anyone verify MOAT-attested content without depending on a specific client implementation.
-
-`moat-verify` is a diagnostic verification tool. It is not a conforming client because it does not install or manage
-content, and it is not a runtime because it does not execute content.
-
-Usage:
-
-```bash
-moat-verify <directory> --registry <url> [--source <uri>] [--json]
-```
-
-Verification flow: compute content hash → fetch registry manifest → look up hash → verify registry Rekor attestation →
-optionally verify publisher Rekor attestation. Rekor unavailability is always a hard failure, never a silent pass.
-
-Every run ends with a required "NOT verified" block so readers do not mistake cryptographic verification for a safety
-guarantee.
-
-**Full specification:** [`specs/moat-verify.md`](specs/moat-verify.md)
 
 ---
 
