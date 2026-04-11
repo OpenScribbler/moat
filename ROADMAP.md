@@ -1,6 +1,6 @@
 # MOAT Roadmap
 
-**Current status:** v0.5.0 Draft — spec complete, pending review and reference implementations.
+**Current status:** v0.5.1 Draft — spec complete, pending review and reference implementations.
 
 This document tracks planned work across three tracks: spec evolution, reference implementations, and infrastructure. Items within each track are ordered by dependency, not priority.
 
@@ -16,9 +16,9 @@ The spec is currently at Draft status. Two gates must be cleared before it advan
 
 ---
 
-## v0.5.0
+## Deferred items
 
-Items explicitly deferred from v0.4.0 with documented rationale. These are scope decisions, not open questions.
+Explicitly deferred with documented rationale. These are scope decisions, not open questions.
 
 ### Content types
 
@@ -32,7 +32,7 @@ The `expires_at` field is now defined as OPTIONAL in the manifest format. Regist
 
 Making `expires_at` REQUIRED for all conforming registries remains deferred: the field creates a hard liveness dependency on the registry's CI pipeline, and a CI outage would take down the registry's entire catalog. The prerequisite is that registries have demonstrated reliable, automated manifest rotation before this dependency is mandated.
 
-*Influenced by:* TUF's freshness semantics (anti-replay, anti-freeze). See [CLAUDE.md](CLAUDE.md) — Influences section.
+*Influenced by:* TUF's freshness semantics (anti-replay, anti-freeze). See the Influences section in [moat-spec.md](moat-spec.md).
 
 ### Platform support
 
@@ -52,7 +52,7 @@ Forgejo/Codeberg Actions OIDC support is not yet shipped upstream as of April 20
 
 ---
 
-## Longer-term (post-v0.5.0)
+## Longer-term
 
 Larger features with broader design implications. These are not scoped to a specific version.
 
@@ -81,22 +81,22 @@ Separate from spec versioning. These are concrete software artifacts required by
 |---|---|---|---|
 | `reference/moat_hash.py` | [moat-spec.md §Reference implementations](moat-spec.md) | ✅ Complete | Python reference for content hashing |
 | `reference/generate_test_vectors.py` | [moat-spec.md §Reference implementations](moat-spec.md) | ✅ Complete | Generates canonical test vectors |
-| `reference/test_offline_verify.py` | [docs/cosign-offline-test.md](docs/cosign-offline-test.md) | ✅ Complete | Empirical cosign offline verification tests |
+| `reference/test_offline_verify.py` | [docs/guides/cosign-offline.md](docs/guides/cosign-offline.md) | ✅ Complete | Empirical cosign offline verification tests |
+| `reference/moat_verify.py` | [specs/moat-verify.md](specs/moat-verify.md) | ✅ Complete | Python reference for moat-verify |
+| `reference/moat.yml` | [specs/publisher-action.md](specs/publisher-action.md) | ✅ Complete | Publisher Action workflow template |
+| `reference/moat-registry.yml` | [specs/registry-action.md](specs/registry-action.md) | ✅ Complete | Registry Action workflow template |
 | Second content hashing implementation | [moat-spec.md](moat-spec.md) | ❌ Required for Draft advancement | Any language; must pass all test vectors |
-| `moat-verify` Python script | [specs/moat-verify.md](specs/moat-verify.md) | ❌ Required for Draft advancement | Spec complete; implementation does not exist |
-| Publisher Action workflow (`moat.yml`) | [specs/publisher-action.md](specs/publisher-action.md) | ❌ Not started | GitHub Actions workflow; spec complete |
-| Registry Action workflow (`moat-registry.yml`) | [specs/registry-action.md](specs/registry-action.md) | ❌ Not started | GitHub Actions workflow; spec complete |
 
 ---
 
 ## Infrastructure
 
 **moatspec.org website**
-Full plan in [`docs/website-plan.md`](docs/website-plan.md). Astro + Starlight, four phases: project setup, content migration, blog, deploy. Hosting TBD (Vercel, Netlify, or GitHub Pages). Domain registration pending.
+Astro + Starlight, four phases: project setup, content migration, blog, deploy. Hosting TBD (Vercel, Netlify, or GitHub Pages). Domain registration pending.
 
 ---
 
-## Acknowledged limitations (v0.5.0)
+## Acknowledged limitations
 
 These are explicitly out of scope for MOAT, documented in the spec, and will not be addressed regardless of version. Listed here to prevent them from being re-raised as gaps.
 
