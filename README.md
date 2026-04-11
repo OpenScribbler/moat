@@ -111,7 +111,7 @@ Registries maintain a `revocations` array in the manifest. Four reason codes: `m
 |---|---|
 | `moat-spec.md` | Core specification |
 | `specs/` | Sub-specifications: moat-verify, Publisher Action, Registry Action |
-| `reference/` | Reference implementations: `moat_hash.py`, `moat_verify.py`, `moat.yml`, `moat-registry.yml`; test artifacts |
+| `reference/` | Reference implementations: `moat_hash.py`, `moat_verify.py`, `moat.yml`, `moat-registry.yml`; test artifacts; `skills/hello-moat` test skill |
 | `docs/guides/` | Guides: publisher, registry, self-publishing, moat-verify, cosign-offline |
 | `archive/` | Previous spec versions |
 
