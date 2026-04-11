@@ -37,6 +37,33 @@ MOAT does **not** define the internal format of content items. Skills, hooks, ru
 
 ---
 
+## Reference Implementations
+
+Concrete implementations conformers can use directly or follow as authoritative examples.
+
+| File | Description |
+|---|---|
+| [`reference/moat_hash.py`](reference/moat_hash.py) | Content hashing — canonical SHA-256 normalization algorithm (Python) |
+| [`reference/moat_verify.py`](reference/moat_verify.py) | `moat-verify` — standalone verification tool, online and offline modes (Python) |
+| [`reference/moat.yml`](reference/moat.yml) | Publisher Action workflow template — drop into `.github/workflows/` |
+| [`reference/moat-registry.yml`](reference/moat-registry.yml) | Registry Action workflow template — drop into `.github/workflows/` |
+
+---
+
+## Guides
+
+Step-by-step documentation for each reference implementation. Guides cover setup, first run, and verification.
+
+| Guide | Description |
+|---|---|
+| [`docs/guides/publisher.md`](docs/guides/publisher.md) | Publisher Action setup — adds co-signing to a source repository; companion to `reference/moat.yml` |
+| [`docs/guides/registry.md`](docs/guides/registry.md) | Registry Action setup — runs a MOAT registry; companion to `reference/moat-registry.yml` |
+| [`docs/guides/self-publishing.md`](docs/guides/self-publishing.md) | Self-publishing — running both actions from one repository |
+| [`docs/guides/moat-verify.md`](docs/guides/moat-verify.md) | Testing `moat-verify` — online (`--registry`) and offline (`--lockfile`) modes; companion to `reference/moat_verify.py` |
+| [`docs/guides/cosign-offline.md`](docs/guides/cosign-offline.md) | cosign offline verification — empirical test guide for `--lockfile` implementers |
+
+---
+
 ## Core Concepts
 
 ### Registry Manifest
@@ -84,8 +111,8 @@ Registries maintain a `revocations` array in the manifest. Four reason codes: `m
 |---|---|
 | `moat-spec.md` | Core specification |
 | `specs/` | Sub-specifications: moat-verify, Publisher Action, Registry Action |
-| `reference/` | Reference implementations and test artifacts |
-| `docs/guides/` | Guides: [Publisher](docs/guides/publisher.md), [Registry](docs/guides/registry.md), [Self-Publishing](docs/guides/self-publishing.md), [moat-verify testing](docs/guides/moat-verify.md) |
+| `reference/` | Reference implementations: `moat_hash.py`, `moat_verify.py`, `moat.yml`, `moat-registry.yml`; test artifacts |
+| `docs/guides/` | Guides: publisher, registry, self-publishing, moat-verify, cosign-offline |
 | `archive/` | Previous spec versions |
 
 ---
