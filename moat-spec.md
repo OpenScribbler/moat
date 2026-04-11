@@ -1,6 +1,6 @@
 # Model for Origin Attestation and Trust (MOAT) Specification
 
-**Version:** 0.4.0 (Draft)
+**Version:** 0.5.0 (Draft)
 **Status:** Draft
 **Date:** 2026-04-08
 **Editor:** Holden Hewett
@@ -92,7 +92,7 @@ so clients can present them before the End User confirms an install.
 
 ## Actors
 
-MOAT involves six distinct actors. They are not interchangeable.
+MOAT involves five distinct actors. They are not interchangeable.
 
 **End User** — The human who chooses which registries to trust and approves installs or use of content through a
 conforming client. This includes individual users and team or enterprise administrators enforcing local policy. MOAT
@@ -116,6 +116,20 @@ already-installed content after a conforming client has completed verification a
 outside the MOAT protocol boundary. MOAT intentionally defines no runtime behavior, sandboxing, permission
 enforcement, or execution semantics for it; it appears here to make that boundary explicit.
 
+> **Informative note — role combinations:** The actors above are roles, not individuals or organizations. A
+> single person or team may occupy multiple roles simultaneously:
+>
+> - **Publisher only** — Creates content; relies on a third-party registry to distribute and attest it.
+> - **Registry Operator only** — Indexes and attests content from external publishers; does not create content.
+> - **Publisher + Registry Operator (self-publishing)** — Creates and distributes their own content from a
+>   single repository. The Publisher Action and Registry Action run from the same repo, producing two distinct
+>   Rekor entries under two distinct OIDC identities (one per workflow file path). This is valid Dual-Attested —
+>   the independence comes from the OIDC subject binding, not from organizational separation. The manifest's
+>   `self_published` field discloses this configuration to End Users.
+> - **Publisher + Registry Operator + Conforming Client** — A team that creates content, operates a registry,
+>   and ships a client that installs from it. Common in closed-ecosystem tools. MOAT's trust model still applies:
+>   the End User retains the ability to verify all attestations independently.
+
 ## Conforming specs
 
 MOAT is a protocol specification, not an implementation. It defines normative behavior for conforming clients and
@@ -129,6 +143,12 @@ interoperability testing. It is therefore not a conforming client and not a runt
 **[Publisher Action](specs/publisher-action.md)** — A GitHub Actions workflow that publishers can adopt to generate
 source-side attestations. This is normative for the Dual-Attested trust tier, but it is not required to run a registry
 or be a conforming client. Registries that want to support Dual-Attested content MUST be able to consume attestations
+produced by the Publisher Action.
+
+**[Registry Action](specs/registry-action.md)** — A GitHub Actions workflow that registry operators adopt to crawl
+publisher sources, compute content hashes, determine trust tiers, sign the manifest, and publish it. This is the
+normative mechanism for producing a MOAT registry manifest. A publisher who also runs the Registry Action from the same
+repository is a self-publishing operator.
 
 ### Reference implementations
 
@@ -343,12 +363,13 @@ computed against the client's own last-fetch timestamp — not against `updated_
 is recent but which the client fetched 25 hours ago is stale; a manifest whose `updated_at` is seven days old but
 which the client fetched two hours ago is not.
 
-Explicit manifest expiry with an `expires_at` field — where clients hard-reject manifests past their declared
-expiry — is deferred to a future version. The prerequisite is registry infrastructure maturity: `expires_at`
-creates a hard liveness dependency on the registry's CI pipeline, and a CI outage means the registry's entire
-catalog goes dark for all clients. That trade-off is appropriate for registry operators with dedicated
-infrastructure and monitoring; it is not appropriate to mandate for the hobbyist and small-team operators
-that the current version targets.
+Registries MAY include an `expires_at` field (RFC 3339 UTC) in the manifest. If present, conforming clients
+MUST reject manifests where the current time is past `expires_at`. Requiring `expires_at` for all conforming
+registries is deferred to a future version: the field creates a hard liveness dependency on the registry's CI
+pipeline, and a CI outage means the registry's entire catalog goes dark for all clients. That trade-off is
+appropriate for registry operators with dedicated infrastructure and monitoring; it is not appropriate to mandate
+for hobbyist and small-team operators that the current version targets. Operators who want to enforce strict
+freshness for their consumers MAY opt in by setting `expires_at`.
 
 ### Signature Envelope
 
@@ -422,8 +443,10 @@ confirmation. See [Trust Anchor Model](#trust-anchor-model).
 - For registries discovered through a Registry Index: the index entry's `registry_signing_profile` establishes
   the expected signing identity before the manifest is fetched. Conforming clients SHOULD confirm the manifest's
   declared `registry_signing_profile` matches the index entry before accepting.
-- For manually-added registries: the signing identity declared in the manifest is accepted on first fetch. The
-  End User's explicit action to add the registry is the trust bootstrap.
+- For manually-added registries: the signing identity declared in the manifest is accepted on first fetch
+  (trust-on-first-use). The End User's explicit action to add the registry is the trust bootstrap. Conforming
+  clients MUST store the accepted `registry_signing_profile` and apply re-approval requirements on all
+  subsequent fetches.
 - On subsequent fetches: if `registry_signing_profile` has changed, conforming clients MUST require End User
   re-approval before accepting the manifest. `operator` and `name` changes do NOT trigger re-approval.
 
@@ -484,6 +507,19 @@ These items are required for conformance. A conforming registry, a conforming cl
   `content_hash`, `reason`, and `details_url` (REQUIRED for registry revocations; OPTIONAL for publisher
   revocations). Reason values (informational only — they do NOT determine client behavior): `malicious`,
   `compromised`, `deprecated`, `policy_violation`. Unknown future reason values MUST be accepted without error.
+
+  **Reason code meanings (informational — for display to End Users and security operators):**
+
+  | Reason | Meaning | Urgency signal |
+  |---|---|---|
+  | `malicious` | Content has been identified as having malicious behavior (e.g., prompt injection, exfiltration, destructive side effects) | High — surface prominently |
+  | `compromised` | The publisher's account, signing key, or distribution channel is believed compromised; content may not be malicious but cannot be trusted as authentic | High — surface prominently |
+  | `deprecated` | Publisher has formally deprecated this content in favor of a successor; no security concern | Low — may be surfaced passively |
+  | `policy_violation` | Content was removed for registry policy reasons; security posture unspecified | Informational |
+
+  Conforming clients SHOULD surface reason descriptions in user-facing output. The urgency signal is advisory —
+  it informs how prominently a client presents the revocation to the End User, not whether the enforcement
+  behavior applies.
 
   **Client behavior is determined by revocation source, not reason code.** Normative behavior when syncing a
   manifest update that adds a revocation entry for already-installed content:
@@ -625,6 +661,7 @@ Minimum structure:
   "name": "Example Registry",
   "operator": "Example Operator",
   "updated_at": "2026-04-09T00:00:00Z",
+  "self_published": false,
   "registry_signing_profile": {
     "issuer": "https://token.actions.githubusercontent.com",
     "subject": "repo:owner/repo:ref:refs/heads/main"
@@ -650,7 +687,9 @@ Minimum structure:
 | `manifest_uri`                     | REQUIRED                                       | Canonical URL at which this manifest is hosted. MUST be a stable path-based URL with no query parameters or fragments — the bundle URL is derived from it. Clients MAY use to detect substitution attacks.                      |
 | `name`                             | REQUIRED                                       | Human-readable registry name                                                                                                                                                                                                    |
 | `operator`                         | REQUIRED                                       | Human-readable name of the registry operator. Display label only — changes do NOT trigger re-approval.                                                                                                                          |
-| `updated_at`                       | REQUIRED                                       | ISO 8601 UTC timestamp of when this manifest was last generated. For display and activity monitoring only — the staleness check uses the client's last-fetch timestamp, not this field.                                         |
+| `updated_at`                       | REQUIRED                                       | RFC 3339 UTC timestamp of when this manifest was last generated. For display and activity monitoring only — the staleness check uses the client's last-fetch timestamp, not this field.                                         |
+| `expires_at`                       | OPTIONAL                                       | RFC 3339 UTC timestamp after which conforming clients MUST reject this manifest. See [Freshness Guarantee and Replay Scope](#freshness-guarantee-and-replay-scope).                                                             |
+| `self_published`                   | OPTIONAL                                       | `true` if the registry operator and publisher are the same entity (same repository runs both Publisher Action and Registry Action). Absent is equivalent to `false`. Conforming clients SHOULD surface this to End Users when `true`. |
 | `registry_signing_profile`         | REQUIRED                                       | The registry's CI signing identity. Conforming clients MUST track this per registry; changes on a subsequent fetch require End User re-approval before the manifest is accepted. See [Signature Envelope](#signature-envelope). |
 | `registry_signing_profile.issuer`  | REQUIRED                                       | OIDC issuer URL of the registry's CI provider                                                                                                                                                                                   |
 | `registry_signing_profile.subject` | REQUIRED                                       | OIDC subject claim as produced by the registry's CI provider                                                                                                                                                                    |
@@ -667,10 +706,12 @@ Minimum structure:
 | `content[].version`                | OPTIONAL                                       | Display label only; `content_hash` is normative identity                                                                                                                                                                        |
 | `content[].scan_status`            | OPTIONAL                                       | See [scan_status](#scan_status)                                                                                                                                                                                                 |
 | `content[].signing_profile`        | REQUIRED for Dual-Attested                     | See [signing_profile](#signing_profile)                                                                                                                                                                                         |
+| `content[].attestation_hash_mismatch` | OPTIONAL                                    | `true` if the registry's computed hash for this item differed from the hash recorded in the publisher's `moat-attestation.json`. Present only when a mismatch was detected; absent otherwise. Indicates that the publisher's attestation does not cover the current content. |
 | `revocations`                      | REQUIRED                                       | Array of revocation entries; empty array if none                                                                                                                                                                                |
 | `revocations[].content_hash`       | REQUIRED                                       | Hash of the revoked content item                                                                                                                                                                                                |
 | `revocations[].reason`             | REQUIRED                                       | One of: `malicious`, `compromised`, `deprecated`, `policy_violation`                                                                                                                                                            |
 | `revocations[].details_url`        | REQUIRED for registry / OPTIONAL for publisher | URL to public revocation details                                                                                                                                                                                                |
+| `revocations[].source`             | OPTIONAL                                       | Revocation source: `"registry"` or `"publisher"`. Absent defaults to `"registry"` (fail-closed). Determines client behavioral class — see [Revocation Mechanism](#revocation-mechanism).                                        |
 
 **Field notes:**
 
@@ -770,7 +811,7 @@ Minimum structure:
 | `index_uri`                                    | REQUIRED | Canonical URL at which this index document is hosted |
 | `operator`                                     | REQUIRED | Human-readable name of the index operator            |
 | `governance_url`                               | REQUIRED | URL of the public governance document                |
-| `updated_at`                                   | REQUIRED | ISO 8601 timestamp of the last index update          |
+| `updated_at`                                   | REQUIRED | RFC 3339 UTC timestamp of the last index update      |
 | `registries`                                   | REQUIRED | Array of registry entries                            |
 | `registries[].name`                            | REQUIRED | Human-readable registry name                         |
 | `registries[].manifest_url`                    | REQUIRED | URL of the registry's signed manifest                |
@@ -813,7 +854,7 @@ Minimum structure:
 |----------------|-------------------------------------------------|---------------------------------------------------------------------------|
 | `result`       | REQUIRED                                        | One of: `clean`, `findings`, `not_scanned`                                |
 | `scanner`      | REQUIRED when `result` is `clean` or `findings` | Array of scanner objects; omitted when `not_scanned`                      |
-| `scanned_at`   | REQUIRED when `result` is `clean` or `findings` | ISO 8601 scan timestamp; omitted when `not_scanned`                       |
+| `scanned_at`   | REQUIRED when `result` is `clean` or `findings` | RFC 3339 UTC scan timestamp; omitted when `not_scanned`                   |
 | `findings_url` | OPTIONAL                                        | URL to a public findings report; only present when `result` is `findings` |
 
 **Field notes:**
@@ -868,7 +909,7 @@ MOAT is validated against six OWASP standards: CI/CD Security Top 10 (critical),
 Core coverage: ASI04, CICD-SEC-9, AST01, AST02, LLM03:2025, A03:2025, and A08:2025.
 
 Remaining gaps — CICD-SEC-8 (federation), API2:2023 (publisher authentication), API7:2023 (SSRF in federation) —
-are tracked as deferred features (Issues 10 and 11). These gaps are acknowledged v0.4.0 limitations; they will be
+are tracked as deferred features (Issues 10 and 11). These gaps are acknowledged v0.5.0 limitations; they will be
 addressed in the version that introduces federation and private registry auth.
 
 **Full alignment map:** [`docs/owasp-alignment.md`](docs/owasp-alignment.md)

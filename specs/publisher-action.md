@@ -50,7 +50,7 @@ Each content item produces one payload. This is what gets signed and recorded in
 | `content_hash` | MOAT content hash in `<alg>:<hex>` format. |
 | `source_uri` | Source repository URI (`https://github.com/$GITHUB_REPOSITORY`). |
 | `source_ref` | Full commit SHA (`$GITHUB_SHA`). Branch name excluded — branch refs drift; commit SHAs do not. |
-| `attested_at` | ISO 8601 UTC timestamp of when the action signed. |
+| `attested_at` | RFC 3339 UTC timestamp of when the action signed. |
 
 **Rekor entry:** `cosign sign-blob` creates a `hashedrekord` entry. The certificate subject encodes the GitHub Actions OIDC identity:
 

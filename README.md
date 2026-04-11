@@ -4,7 +4,7 @@ A protocol for publishing AI agent content through signed registries with crypto
 
 | | |
 |---|---|
-| **Version** | 0.4.0 (Draft) |
+| **Version** | 0.5.0 (Draft) |
 | **Status** | Draft — spec complete; reference implementations in progress |
 | **Specification** | [`moat-spec.md`](moat-spec.md) |
 | **Changelog** | [`CHANGELOG.md`](CHANGELOG.md) |
@@ -33,6 +33,7 @@ MOAT does **not** define the internal format of content items. Skills, hooks, ru
 | [`moat-spec.md`](moat-spec.md) | Core specification — registry manifest format, content hashing, signing, lockfile, revocation |
 | [`specs/moat-verify.md`](specs/moat-verify.md) | `moat-verify` — reference verification tool specification |
 | [`specs/publisher-action.md`](specs/publisher-action.md) | Publisher Action — GitHub Actions workflow specification for source-repo attestation |
+| [`specs/registry-action.md`](specs/registry-action.md) | Registry Action — GitHub Actions workflow specification for registry manifest publishing |
 
 ---
 
@@ -60,6 +61,17 @@ Absence of Dual-Attested is **not** a negative signal. Signed is the standard; D
 
 An optional GitHub Actions workflow any source repo adds to produce the `Dual-Attested` tier. On push, it auto-detects AI content, computes content hashes, and signs via Sigstore keyless OIDC — no key management, no MOAT-specific knowledge required.
 
+### Registry Action
+
+A GitHub Actions workflow that turns any repo into a MOAT registry. On a daily schedule (and immediately on config changes), it crawls source repositories, computes content hashes, determines trust tiers, signs the manifest, and commits it — no key management, no MOAT-specific knowledge required. A publisher who runs both the Publisher Action and the Registry Action from the same repository is a self-publishing operator producing valid `Dual-Attested` content.
+
+### Role Combinations
+
+Publishers, registry operators, and conforming clients are roles, not separate organizations. A single team may occupy multiple roles:
+
+- **Publisher + Registry Operator** — Self-publishing: runs both the Publisher Action and Registry Action from one repository. Valid `Dual-Attested` — independence comes from distinct OIDC identities per workflow, not organizational separation.
+- **Publisher + Registry Operator + Client** — Closed ecosystem: creates content, distributes it, and ships the install tool. MOAT's verification model still applies end-to-end.
+
 ### Revocation
 
 Registries maintain a `revocations` array in the manifest. Four reason codes: `malicious`, `compromised`, `deprecated`, `policy_violation`. Clients block installs for security reasons and warn for informational ones. Cross-registry hash matching means a revocation from one trusted registry surfaces for content installed from any registry.
@@ -71,7 +83,7 @@ Registries maintain a `revocations` array in the manifest. Four reason codes: `m
 | Path | Contents |
 |---|---|
 | `moat-spec.md` | Core specification |
-| `specs/` | Sub-specifications: moat-verify, Publisher Action |
+| `specs/` | Sub-specifications: moat-verify, Publisher Action, Registry Action |
 | `reference/` | Reference implementations and test artifacts |
 | `docs/` | Supporting documentation |
 | `archive/` | Previous spec versions |

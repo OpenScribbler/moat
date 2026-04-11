@@ -1,6 +1,6 @@
 # MOAT Roadmap
 
-**Current status:** v0.4.0 Draft — spec complete, pending review and reference implementations.
+**Current status:** v0.5.0 Draft — spec complete, pending review and reference implementations.
 
 This document tracks planned work across three tracks: spec evolution, reference implementations, and infrastructure. Items within each track are ordered by dependency, not priority.
 
@@ -28,7 +28,9 @@ Directories (`hooks/`, `mcp/`) are reserved in the canonical layout. The content
 ### Freshness and anti-rollback
 
 **Manifest expiry (`expires_at`)**
-Explicit manifest expiry — where conforming clients hard-reject manifests past their declared expiry — is deferred pending registry infrastructure maturity. `expires_at` creates a hard liveness dependency on the registry's CI pipeline. A CI outage would take down the registry's entire catalog. The prerequisite is that registries have demonstrated reliable, automated manifest rotation before this dependency is baked into the protocol.
+The `expires_at` field is now defined as OPTIONAL in the manifest format. Registries that want strict freshness enforcement for their consumers may opt in by setting it; conforming clients MUST reject manifests past their declared expiry when the field is present.
+
+Making `expires_at` REQUIRED for all conforming registries remains deferred: the field creates a hard liveness dependency on the registry's CI pipeline, and a CI outage would take down the registry's entire catalog. The prerequisite is that registries have demonstrated reliable, automated manifest rotation before this dependency is mandated.
 
 *Influenced by:* TUF's freshness semantics (anti-replay, anti-freeze). See [CLAUDE.md](CLAUDE.md) — Influences section.
 
@@ -83,6 +85,7 @@ Separate from spec versioning. These are concrete software artifacts required by
 | Second content hashing implementation | [moat-spec.md](moat-spec.md) | ❌ Required for Draft advancement | Any language; must pass all test vectors |
 | `moat-verify` Python script | [specs/moat-verify.md](specs/moat-verify.md) | ❌ Required for Draft advancement | Spec complete; implementation does not exist |
 | Publisher Action workflow (`moat.yml`) | [specs/publisher-action.md](specs/publisher-action.md) | ❌ Not started | GitHub Actions workflow; spec complete |
+| Registry Action workflow (`moat-registry.yml`) | [specs/registry-action.md](specs/registry-action.md) | ❌ Not started | GitHub Actions workflow; spec complete |
 
 ---
 
@@ -93,7 +96,7 @@ Full plan in [`docs/website-plan.md`](docs/website-plan.md). Astro + Starlight, 
 
 ---
 
-## Acknowledged limitations (v0.4.0)
+## Acknowledged limitations (v0.5.0)
 
 These are explicitly out of scope for MOAT, documented in the spec, and will not be addressed regardless of version. Listed here to prevent them from being re-raised as gaps.
 

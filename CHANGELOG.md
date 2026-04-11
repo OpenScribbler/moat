@@ -2,6 +2,29 @@
 
 All notable changes to the MOAT specification are documented in this file.
 
+## [0.5.0] — 2026-04-10
+
+Registry Action specification and manifest format additions. Introduces the normative mechanism for producing a MOAT registry manifest and adds four new manifest fields. Standardizes all timestamp formats to RFC 3339 UTC.
+
+### Added
+
+- `specs/registry-action.md` — Registry Action specification: the normative GitHub Actions workflow for producing MOAT registry manifests. Covers `registry.yml` config format, trust tier determination procedure (including publisher Rekor verification algorithm), per-item signing, revocation handling, self-publishing mechanics, and private repository guard.
+- Actors section: informative note on role combinations — publisher-only, registry-operator-only, self-publishing (publisher + registry operator), and closed-ecosystem (publisher + registry operator + client).
+- Conforming Specs section: Registry Action entry.
+- Manifest format — `expires_at` (OPTIONAL): RFC 3339 UTC timestamp; conforming clients MUST reject manifests past their declared expiry when the field is present. Making `expires_at` REQUIRED for all registries remains deferred pending infrastructure maturity.
+- Manifest format — `self_published` (OPTIONAL): `true` when the registry operator and publisher are the same entity. Conforming clients SHOULD surface this to End Users.
+- Manifest format — `revocations[].source` (OPTIONAL): `"registry"` or `"publisher"`; absent defaults to `"registry"` (fail-closed). Machine-readable discriminant for the hard-block vs. warning behavioral distinction.
+- Manifest format — `content[].attestation_hash_mismatch` (OPTIONAL): `true` when the registry's computed hash differed from the publisher's `moat-attestation.json` hash. Surfaces publisher attestation/content divergence to clients.
+- Revocation section: reason code meanings table — describes what `malicious`, `compromised`, `deprecated`, and `policy_violation` mean in practice and the urgency signal each carries for End User display.
+
+### Changed
+
+- Signing identity trust model: manual-add registry path now explicitly named as trust-on-first-use (TOFU). Added normative requirement that conforming clients MUST store the accepted `registry_signing_profile` and apply re-approval on all subsequent fetches.
+- Freshness section: `expires_at` moved from "deferred to a future version" to an opt-in OPTIONAL field with normative enforcement semantics. Deferral is now specifically scoped to making the field REQUIRED.
+- All protocol timestamp fields standardized to RFC 3339 UTC (previously inconsistent — some fields used "ISO 8601 UTC", others used "RFC 3339 UTC"). Fields affected: manifest `updated_at`, `attested_at`, `expires_at`, registry index `updated_at`, `scan_status.scanned_at`, publisher-action `attested_at`.
+- Publisher Action Conforming Specs entry: completed truncated sentence ("MUST be able to consume attestations produced by the Publisher Action").
+- Actor count: corrected "six distinct actors" to "five distinct actors".
+
 ## [0.3.0] — 2026-04-04
 
 Security hardening release based on 5-agent adversarial review (31 findings, 29 revision items). Elevates multiple informative recommendations to normative requirements and adds 7 new security considerations.
