@@ -1,3 +1,7 @@
+# Registry Action configuration for the moat-spec repo.
+# This file is read by .github/workflows/moat-registry.yml on every run.
+# Changes here trigger an immediate registry rebuild (emergency revocation path).
+# For the reusable workflow template, see reference/moat-registry.yml.
 schema_version: 1
 
 registry:
