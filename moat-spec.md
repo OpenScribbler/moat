@@ -427,6 +427,12 @@ This format attests exactly one fact (this content hash was signed at this schem
 from the manifest entry alone. Verifiers reconstruct the payload from the `content_hash` field and verify the
 signature without storing extra registry context in the Rekor record.
 
+The Publisher Action uses this same canonical payload format for its source-side Rekor entries. Signing identical
+payload bytes is what enables the Registry Action to verify publisher attestations at crawl time — the Registry
+Action independently computes `content_hash`, reconstructs the payload, and confirms the stored entry hash
+matches. Publisher and registry entries are distinguished by the OIDC subject in the Rekor certificate (different
+workflow file paths), not by payload content. See [Publisher Action](specs/publisher-action.md#attestation-payload-schema-normative) for the publisher-side signing requirement.
+
 **Manifest verification flow:**
 
 1. Fetch the manifest at `manifest_uri`

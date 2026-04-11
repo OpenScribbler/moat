@@ -2,6 +2,23 @@
 
 All notable changes to the MOAT specification are documented in this file.
 
+## [0.5.1] — 2026-04-10
+
+Spec fixes and implementation hardening following end-to-end testing of the Publisher Action and Registry Action workflows.
+
+### Added
+
+- `moat-attestation.json` — `publisher_workflow_ref` (OPTIONAL): workflow path and ref recorded by the Publisher Action from `GITHUB_WORKFLOW_REF` at signing time (e.g., `.github/workflows/moat.yml@refs/heads/main`). Registry Actions read this field to derive the expected OIDC subject for publisher Rekor verification — no hardcoded filename assumption required. Absent means the attestation predates this field; conforming registries MUST fall back to `.github/workflows/moat.yml@refs/heads/main`.
+- `moat-spec.md` §Per-item attestation payload: clarified that the Publisher Action uses the same canonical payload format (`{"_version":1,"content_hash":"sha256:<hex>"}`) as the Registry Action. Both are distinguished by OIDC subject in the Rekor certificate, not by payload content. Added rationale: the canonical format is required because `hashedrekord` Rekor entries store only the payload hash, so verifiers must reconstruct exact payload bytes independently.
+- `specs/publisher-action.md`: `publisher_workflow_ref` field documentation; updated step 5 of "What It Does" to explain that workflow path is auto-recorded in `moat-attestation.json`; updated "Workflow filename and branch" section to reflect configurable filename with `moat.yml` as the recommended default.
+- `specs/registry-action.md`: Updated publisher Rekor verification step 4 to describe reading `publisher_workflow_ref` from `moat-attestation.json` with fallback to `moat.yml` default.
+
+### Fixed
+
+- Publisher Action: was signing a richer payload (`_type`, `item_name`, `source_ref`, `attested_at`) that the Registry Action cannot verify at crawl time because `source_ref` and `attested_at` are unknowable when crawling. Fixed to sign the same canonical payload as the Registry Action. Both publisher-action.md and the reference workflow (`reference/moat.yml`) updated.
+- Registry Action: `git show origin/moat-attestation:moat-attestation.json` fails in a shallow clone because `git fetch origin moat-attestation` updates `FETCH_HEAD` but does not set up the remote-tracking ref. Fixed to use `git show FETCH_HEAD:moat-attestation.json` immediately after the fetch.
+- Publisher Action and Registry Action reference workflows: hardcoded `moat.yml` workflow filename in OIDC subject verification replaced with `publisher_workflow_ref` read from `moat-attestation.json`.
+
 ## [0.5.0] — 2026-04-10
 
 Registry Action specification and manifest format additions. Introduces the normative mechanism for producing a MOAT registry manifest and adds four new manifest fields. Standardizes all timestamp formats to RFC 3339 UTC.

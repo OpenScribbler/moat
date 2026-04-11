@@ -14,7 +14,7 @@
 2. Discovers content items via two-tier model: canonical category directories (`skills/`, `subagents/`, `rules/`, `commands/`) or `moat.yml` if present.
 3. Computes content hashes using the MOAT algorithm ([`reference/moat_hash.py`](../reference/moat_hash.py)). Errors (symlinks, empty directories) skip the item with a logged warning.
 4. Builds one attestation payload JSON per content item (schema below).
-5. Signs each payload with `cosign sign-blob` using Sigstore keyless OIDC. GitHub Actions provides the OIDC token automatically — no keys or secrets required.
+5. Signs each payload with `cosign sign-blob` using Sigstore keyless OIDC. GitHub Actions provides the OIDC token automatically — no keys or secrets required. The workflow path and branch are encoded into the OIDC certificate at signing time and recorded automatically in `publisher_workflow_ref` in `moat-attestation.json`. Registries read this field to derive the expected OIDC subject for publisher verification — no manual filename configuration is needed.
 6. Rekor creates a transparency log entry. `cosign` returns a bundle file containing `logID` and `logIndex`.
 7. Writes/updates `moat-attestation.json` with Rekor references for each attested item, including the `private_repo` field.
 8. Pushes `moat-attestation.json` to the `moat-attestation` branch with commit message `chore(moat): update attestation`. If the branch does not exist, the action creates it. The `moat-attestation` branch is never merged into the source branch — it contains only attestation data.
@@ -44,6 +44,8 @@ https://github.com/{owner}/{repo}/.github/workflows/moat.yml@refs/heads/main
 
 This identity is what registries and `moat-verify` use to confirm the attestation came from a legitimate Publisher Action run on the claimed source repository. The Rekor certificate's `sub` claim encodes the repository, workflow path, and ref — no additional provenance fields in the payload are needed or verified.
 
+**Workflow filename and branch:** The Publisher Action may use any valid workflow filename. At runtime it reads its own path and branch from `GITHUB_WORKFLOW_REF` (a GitHub-injected environment variable) and records the result as `publisher_workflow_ref` in `moat-attestation.json`. The Registry Action reads this field when verifying publisher Rekor entries — the registry never needs to know the filename in advance. The recommended filename is `.github/workflows/moat.yml`, which the reference workflow uses by default. Registries that encounter a `moat-attestation.json` without `publisher_workflow_ref` (written before this field was introduced) fall back to assuming `.github/workflows/moat.yml@refs/heads/main`.
+
 ---
 
 ## `moat-attestation.json` Format (normative)
@@ -54,6 +56,7 @@ Location: `moat-attestation` branch root. One file per repo. The file is never p
 {
   "schema_version": 1,
   "attested_at": "2026-04-07T14:00:00Z",
+  "publisher_workflow_ref": ".github/workflows/moat.yml@refs/heads/main",
   "private_repo": false,
   "items": [
     {
@@ -69,6 +72,8 @@ Location: `moat-attestation` branch root. One file per repo. The file is never p
 ```
 
 **`private_repo` field:** REQUIRED. `true` when the action ran on a `private` or `internal` repository; `false` for `public`. This annotation is visible to registries and conforming clients — they MAY use it to isolate, flag, or reject attestations from private repositories. Attestations created before this field was added will not have it; conforming registries SHOULD treat absent `private_repo` as unknown visibility rather than assuming public.
+
+**`publisher_workflow_ref` field:** OPTIONAL. The workflow path and ref that produced this attestation, derived from `GITHUB_WORKFLOW_REF` at signing time (e.g., `.github/workflows/moat.yml@refs/heads/main`). The Registry Action reads this field to construct the expected OIDC subject for publisher verification. Absent means the attestation was produced before this field was introduced; conforming registries MUST fall back to `.github/workflows/moat.yml@refs/heads/main` in that case.
 
 **`source_ref` field (per item):** OPTIONAL. Full commit SHA at the time of attestation. Stored in `moat-attestation.json` as informational context only — it is not part of the signed payload and MUST NOT be used in trust decisions. The Rekor certificate's encoded ref is authoritative for provenance; `source_ref` here is for human auditing and tooling convenience.
 

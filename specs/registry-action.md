@@ -82,11 +82,16 @@ For each discovered content item, the action applies these rules in order:
 1. Locating the item's `rekor_log_index` in `moat-attestation.json`.
 2. Fetching the Rekor entry at that index from the transparency log.
 3. Confirming the entry's certificate OIDC issuer is `https://token.actions.githubusercontent.com`.
-4. Confirming the entry's certificate OIDC subject matches the expected pattern for the source repository and `moat.yml` workflow:
+4. Confirming the entry's certificate OIDC subject matches the expected publisher subject, constructed from the
+   source URI and the `publisher_workflow_ref` field in `moat-attestation.json`:
    ```
-   https://github.com/{owner}/{repo}/.github/workflows/moat.yml@refs/heads/main
+   https://github.com/{owner}/{repo}/{publisher_workflow_ref}
    ```
-   where `{owner}` and `{repo}` are derived from the source `uri`.
+   where `{owner}` and `{repo}` are derived from the source `uri`, and `{publisher_workflow_ref}` is read from
+   `moat-attestation.json` (e.g., `.github/workflows/moat.yml@refs/heads/main`). If `publisher_workflow_ref` is
+   absent — attestations written before the field was introduced — the action MUST fall back to
+   `.github/workflows/moat.yml@refs/heads/main`.
+
 5. Confirming the signed payload in the Rekor entry decodes to a valid MOAT attestation payload (see [Per-Item Canonical Payload](#per-item-canonical-payload)) with a `content_hash` matching the action's computed hash.
 
 If any step fails, the item falls back to `Signed`. The fallback is non-fatal for the run, but the action MUST log a clear, actionable message identifying the item, the failure step, and the expected vs. observed values. Example:
@@ -144,7 +149,7 @@ A publisher may run both the Publisher Action and the Registry Action from the s
 
 The independence guarantee comes from the OIDC subject binding, not from organizational separation. The two workflow files produce two distinct OIDC subjects:
 
-- Publisher Action: `.../.github/workflows/moat.yml@refs/heads/main`
+- Publisher Action: `.../{publisher_workflow_ref}` (default: `.github/workflows/moat.yml@refs/heads/main`)
 - Registry Action: `.../.github/workflows/moat-registry.yml@refs/heads/main`
 
 These map to two distinct, independently verifiable Rekor entries. Compromising one workflow's execution context does not automatically compromise the other.

@@ -311,14 +311,15 @@ jobs:
               return m.group(1) if m else None
 
 
-          def _expected_publisher_subject(source_uri):
+          def _expected_publisher_subject(source_uri, publisher_workflow_ref=None):
               owner_repo = _github_owner_repo(source_uri)
               if not owner_repo:
                   return None
-              return f"https://github.com/{owner_repo}/.github/workflows/moat.yml@refs/heads/main"
+              ref = publisher_workflow_ref or ".github/workflows/moat.yml@refs/heads/main"
+              return f"https://github.com/{owner_repo}/{ref}"
 
 
-          def verify_publisher_rekor(rekor_log_index, expected_hash, source_uri):
+          def verify_publisher_rekor(rekor_log_index, expected_hash, source_uri, publisher_workflow_ref=None):
               """
               Verify a publisher Rekor entry for Dual-Attested eligibility.
               Returns True if verified, False with a diagnostic log on failure.
@@ -363,7 +364,7 @@ jobs:
                       print("    No SAN URI in certificate")
                       return False
 
-                  expected_subject = _expected_publisher_subject(source_uri)
+                  expected_subject = _expected_publisher_subject(source_uri, publisher_workflow_ref)
                   if expected_subject not in uris:
                       observed = uris[0] if uris else "(none)"
                       print(f"    OIDC subject mismatch:")
@@ -505,9 +506,13 @@ jobs:
 
                           attestation = get_moat_attestation(work_dir)
                           attested_hashes = {}
+                          publisher_workflow_ref = ".github/workflows/moat.yml@refs/heads/main"
                           publisher_revocations = []
                           if attestation:
                               print("  Found moat-attestation.json")
+                              publisher_workflow_ref = (
+                                  attestation.get("publisher_workflow_ref") or publisher_workflow_ref
+                              )
                               for item in attestation.get("items", []):
                                   attested_hashes[item["name"]] = item
                               for rev in attestation.get("revocations", []):
@@ -558,14 +563,14 @@ jobs:
                                       log_index = attested.get("rekor_log_index")
                                       if log_index:
                                           print(f"    Verifying publisher Rekor entry #{log_index}...")
-                                          if verify_publisher_rekor(log_index, hash_value, source_uri):
+                                          if verify_publisher_rekor(log_index, hash_value, source_uri, publisher_workflow_ref):
                                               tier = "Dual-Attested"
                                               print(f"    Trust tier: Dual-Attested ✓")
-                                              # Build signing_profile for manifest
+                                              # Build signing_profile from publisher_workflow_ref
                                               owner_repo = _github_owner_repo(source_uri)
                                               signing_profile = {
                                                   "issuer": GITHUB_OIDC_ISSUER,
-                                                  "subject": f"https://github.com/{owner_repo}/.github/workflows/moat.yml@refs/heads/main",
+                                                  "subject": f"https://github.com/{owner_repo}/{publisher_workflow_ref}",
                                               }
                                           else:
                                               print(f"    Trust tier: Signed (publisher Rekor verification failed)")
