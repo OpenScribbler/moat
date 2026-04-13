@@ -1,6 +1,6 @@
 # MOAT — Model for Origin Attestation and Trust
 
-A protocol for publishing AI agent content through signed registries with cryptographic provenance.
+A protocol for publishing AI agent content through signed registries — no keys to manage.
 
 | | |
 |---|---|
@@ -50,6 +50,12 @@ Concrete implementations conformers can use directly or follow as authoritative 
 
 ---
 
+## Use Cases
+
+See [`docs/use-cases.md`](docs/use-cases.md) for concrete scenarios showing what each actor does (and doesn't do) in MOAT — from a publisher who shares skills and touches nothing, to a registry operator running a curated index, to a consumer verifying installs.
+
+---
+
 ## Guides
 
 Step-by-step documentation for each reference implementation. Guides cover setup, first run, and verification.
@@ -65,6 +71,10 @@ Step-by-step documentation for each reference implementation. Guides cover setup
 ---
 
 ## Core Concepts
+
+### Keyless signing
+
+MOAT uses [Sigstore](https://sigstore.dev) keyless signing — there are no private keys to generate, store, or rotate. The signing identity is the GitHub Actions OIDC token for the CI workflow that produced the signature. If GitHub says "this workflow ran in `owner/repo` on branch `main`," that statement *is* the identity, and it's permanently logged to a public transparency ledger. Publishers and registry operators never touch a key.
 
 ### Registry Manifest
 

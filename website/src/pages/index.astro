@@ -1,0 +1,650 @@
+---
+// MOAT landing page
+// Custom page — does not use Starlight's layout.
+// Theme syncs with Starlight docs via localStorage.starlight-theme.
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MOAT — AI agent content, verified at install.</title>
+    <meta
+      name="description"
+      content="Model for Origin Attestation and Trust — an open protocol for provenance and integrity of AI agent content."
+    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script is:inline>
+      // Apply stored theme before paint to prevent flash
+      const stored = localStorage.getItem('starlight-theme')
+      if (stored === 'dark' || (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.setAttribute('data-theme', 'dark')
+      } else {
+        document.documentElement.setAttribute('data-theme', 'light')
+      }
+    </script>
+  </head>
+  <body>
+    <!-- Header -->
+    <header class="site-header">
+      <div class="container">
+        <a href="/" class="logo" aria-label="MOAT home">MOAT</a>
+        <nav aria-label="Main navigation">
+          <a href="/overview/what-is-moat">Docs</a>
+          <a href="/spec/core">Spec</a>
+          <a href="https://github.com/OpenScribbler/moat" target="_blank" rel="noopener">GitHub</a>
+        </nav>
+        <button class="theme-toggle" aria-label="Toggle theme" id="theme-toggle">
+          <span class="theme-icon-light">☀</span>
+          <span class="theme-icon-dark">☽</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Hero -->
+    <section class="hero">
+      <div class="container">
+        <div class="hero-content">
+          <p class="spec-label">Open Protocol · Working Draft</p>
+          <h1>AI agent content,<br />verified at install.</h1>
+          <p class="tagline">Informing your trust decisions through verification.</p>
+          <p class="subhead">
+            Keyless signing.&ensp;Logged by default.&ensp;Tamper-evident by design.
+          </p>
+          <div class="hero-ctas">
+            <a href="/spec/core" class="cta-primary">Read the spec</a>
+            <a href="#how-it-works" class="cta-secondary">How it works</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Problem -->
+    <section class="problem">
+      <div class="container">
+        <p>
+          AI agent content installs directly into your environment and runs with your credentials.
+          There is currently no standard way to know whether a skill you installed came from who you
+          think, or whether it was modified after the publisher signed off.
+        </p>
+        <p class="problem-resolution">MOAT makes tampering detectable — using your existing CI identity, not keys you have to manage.</p>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="how-it-works" id="how-it-works">
+      <div class="container">
+        <h2>How it works</h2>
+        <div class="steps">
+          <div class="step">
+            <span class="step-number">1</span>
+            <h3>Publisher signs</h3>
+            <p>
+              Add one GitHub Actions workflow. MOAT generates a signed manifest, anchors it to a
+              transparency log, and pushes it to your registry branch. No key management.
+            </p>
+          </div>
+          <div class="step-arrow" aria-hidden="true">→</div>
+          <div class="step">
+            <span class="step-number">2</span>
+            <h3>Registry attests</h3>
+            <p>
+              The registry indexes the signed manifest. Anyone can query what was attested, when,
+              and by whom.
+            </p>
+          </div>
+          <div class="step-arrow" aria-hidden="true">→</div>
+          <div class="step">
+            <span class="step-number">3</span>
+            <h3>Consumer verifies</h3>
+            <p>
+              Run <code>moat-verify</code> before installing. It checks the content hash against the
+              registry attestation and confirms the signature is logged in Rekor. Tampered content
+              fails.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Audiences -->
+    <section class="audiences">
+      <div class="container">
+        <h2>Built for three roles</h2>
+        <div class="audience-cards">
+          <div class="audience-card">
+            <h3>Publisher</h3>
+            <p>
+              Add one workflow file and you're done. MOAT handles signing, manifest generation, and
+              transparency log submission automatically. No cryptography knowledge required.
+            </p>
+            <a href="/guides/publishers">Publisher guide →</a>
+          </div>
+          <div class="audience-card">
+            <h3>Registry operator</h3>
+            <p>
+              Add trust signals to what you already index. The Registry Action generates and pushes
+              attested manifests to a dedicated branch — no pipeline rebuild required.
+            </p>
+            <a href="/guides/registry-operators">Registry operator guide →</a>
+          </div>
+          <div class="audience-card">
+            <h3>Consumer</h3>
+            <p>
+              Run <code>moat-verify</code> to check that what you're about to install matches what
+              the registry attested. Works offline with a lockfile.
+            </p>
+            <a href="/guides/consumers">Consumer guide →</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Coverage -->
+    <section class="coverage">
+      <div class="container">
+        <h2>What MOAT covers</h2>
+        <ul class="content-types">
+          <li>Skills</li>
+          <li>Rules</li>
+          <li>Hooks</li>
+          <li>MCP configs</li>
+          <li>Sub-agents</li>
+          <li>Commands</li>
+        </ul>
+        <p class="coverage-note">
+          MOAT covers content provenance and integrity. It does not score safety, evaluate behavior,
+          or enforce policy. What you choose to trust is your call. What you can verify, MOAT makes
+          verifiable.
+        </p>
+      </div>
+    </section>
+
+    <!-- Spec status -->
+    <section class="spec-status">
+      <div class="container">
+        <div class="status-content">
+          <div>
+            <p class="status-label">Working draft</p>
+            <h2>Ready to read</h2>
+            <p>
+              The core spec, moat-verify, Publisher Action, and Registry Action are complete and
+              versioned. Implementation and conforming tooling are in progress.
+            </p>
+          </div>
+          <div class="status-ctas">
+            <a href="/spec/core" class="cta-primary">Read the full spec</a>
+            <a href="https://github.com/OpenScribbler/moat" class="cta-secondary" target="_blank" rel="noopener">View on GitHub</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="site-footer">
+      <div class="container">
+        <p>MOAT is an open protocol. <a href="https://github.com/OpenScribbler/moat" target="_blank" rel="noopener">Contribute on GitHub</a>.</p>
+      </div>
+    </footer>
+
+    <script is:inline>
+      const toggle = document.getElementById('theme-toggle')
+      toggle.addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme')
+        const next = current === 'dark' ? 'light' : 'dark'
+        document.documentElement.setAttribute('data-theme', next)
+        localStorage.setItem('starlight-theme', next)
+      })
+    </script>
+  </body>
+</html>
+
+<style>
+  /* ─── Flexoki palette ─────────────────────────────── */
+  :root {
+    --paper: #fffcf0;
+    --black: #100f0f;
+
+    --base-50: #f2f0e5;
+    --base-100: #e6e4d9;
+    --base-200: #cecdc3;
+    --base-300: #b7b5ac;
+    --base-400: #9f9d96;
+    --base-500: #878580;
+    --base-600: #6f6e69;
+    --base-700: #575653;
+    --base-800: #403e3c;
+    --base-850: #343331;
+    --base-900: #282726;
+    --base-950: #1c1b1a;
+
+    --cyan-400: #3aa99f;
+    --cyan-600: #24837b;
+    --cyan-50: #ddf1e4;
+    --cyan-850: #143f3c;
+  }
+
+  /* ─── Light mode ──────────────────────────────────── */
+  :root,
+  :root[data-theme='light'] {
+    --bg: var(--paper);
+    --bg-subtle: var(--base-50);
+    --bg-card: #fff;
+    --text: var(--base-900);
+    --text-muted: var(--base-600);
+    --text-faint: var(--base-400);
+    --border: var(--base-200);
+    --accent: var(--cyan-600);
+    --accent-bg: var(--cyan-50);
+  }
+
+  /* ─── Dark mode ───────────────────────────────────── */
+  :root[data-theme='dark'] {
+    --bg: var(--black);
+    --bg-subtle: var(--base-950);
+    --bg-card: var(--base-900);
+    --text: var(--base-100);
+    --text-muted: var(--base-400);
+    --text-faint: var(--base-600);
+    --border: var(--base-850);
+    --accent: var(--cyan-400);
+    --accent-bg: var(--cyan-850);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --bg: var(--black);
+      --bg-subtle: var(--base-950);
+      --bg-card: var(--base-900);
+      --text: var(--base-100);
+      --text-muted: var(--base-400);
+      --text-faint: var(--base-600);
+      --border: var(--base-850);
+      --accent: var(--cyan-400);
+      --accent-bg: var(--cyan-850);
+    }
+  }
+
+  /* ─── Reset & base ────────────────────────────────── */
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  a:hover {
+    text-decoration: underline;
+  }
+
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+  }
+
+  /* ─── Header ──────────────────────────────────────── */
+  .site-header {
+    border-bottom: 1px solid var(--border);
+    padding: 1rem 0;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 100;
+  }
+
+  .site-header .container {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+  }
+
+  .logo {
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--text);
+    letter-spacing: 0.05em;
+    text-decoration: none;
+  }
+
+  .site-header nav {
+    display: flex;
+    gap: 1.5rem;
+    flex: 1;
+  }
+
+  .site-header nav a {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+  }
+
+  .site-header nav a:hover {
+    color: var(--text);
+    text-decoration: none;
+  }
+
+  .theme-toggle {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1;
+  }
+
+  .theme-icon-dark { display: none; }
+
+  :root[data-theme='dark'] .theme-icon-light { display: none; }
+  :root[data-theme='dark'] .theme-icon-dark { display: inline; }
+
+  /* ─── Hero ────────────────────────────────────────── */
+  .hero {
+    padding: 6rem 0 5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .hero-content {
+    max-width: 680px;
+  }
+
+  .spec-label {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    margin-bottom: 1.25rem;
+  }
+
+  h1 {
+    font-size: clamp(2.25rem, 5vw, 3.5rem);
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    margin-bottom: 1.25rem;
+  }
+
+  .tagline {
+    font-size: 1.15rem;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+  }
+
+  .subhead {
+    font-size: 0.875rem;
+    color: var(--text-faint);
+    font-family: ui-monospace, monospace;
+    margin-bottom: 2.5rem;
+  }
+
+  .hero-ctas {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .cta-primary,
+  .cta-secondary {
+    padding: 0.65rem 1.4rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: opacity 0.15s;
+  }
+
+  .cta-primary {
+    background: var(--accent);
+    color: var(--bg);
+  }
+
+  .cta-secondary {
+    border: 1px solid var(--border);
+    color: var(--text);
+    background: transparent;
+  }
+
+  .cta-primary:hover,
+  .cta-secondary:hover {
+    opacity: 0.85;
+    text-decoration: none;
+  }
+
+  /* ─── Problem ─────────────────────────────────────── */
+  .problem {
+    padding: 3.5rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .problem p {
+    max-width: 640px;
+    color: var(--text-muted);
+    font-size: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .problem-resolution {
+    color: var(--text) !important;
+    font-weight: 600;
+  }
+
+  /* ─── How it works ────────────────────────────────── */
+  .how-it-works {
+    padding: 4rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 2.5rem;
+    color: var(--text);
+  }
+
+  .steps {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .step {
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .step-number {
+    display: inline-block;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 50%;
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-align: center;
+    line-height: 1.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .step h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--text);
+  }
+
+  .step p {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+
+  .step-arrow {
+    padding-top: 0.5rem;
+    color: var(--text-faint);
+    font-size: 1.25rem;
+    align-self: center;
+  }
+
+  /* ─── Audiences ───────────────────────────────────── */
+  .audiences {
+    padding: 4rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .audience-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .audience-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+  }
+
+  .audience-card h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    color: var(--text);
+  }
+
+  .audience-card p {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+    margin-bottom: 1rem;
+  }
+
+  .audience-card a {
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  /* ─── Coverage ────────────────────────────────────── */
+  .coverage {
+    padding: 4rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .content-types {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    list-style: none;
+    margin-bottom: 1.5rem;
+  }
+
+  .content-types li {
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    font-family: ui-monospace, monospace;
+  }
+
+  .coverage-note {
+    font-size: 0.875rem;
+    color: var(--text-faint);
+    max-width: 560px;
+    line-height: 1.7;
+  }
+
+  /* ─── Spec status ─────────────────────────────────── */
+  .spec-status {
+    padding: 4rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .status-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 3rem;
+    flex-wrap: wrap;
+  }
+
+  .status-label {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-faint);
+    margin-bottom: 0.5rem;
+  }
+
+  .status-content h2 {
+    margin-bottom: 0.75rem;
+  }
+
+  .status-content p {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    max-width: 440px;
+  }
+
+  .status-ctas {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+
+  /* ─── Footer ──────────────────────────────────────── */
+  .site-footer {
+    padding: 2rem 0;
+  }
+
+  .site-footer p {
+    font-size: 0.8rem;
+    color: var(--text-faint);
+  }
+
+  /* ─── Code ────────────────────────────────────────── */
+  code {
+    font-family: ui-monospace, monospace;
+    font-size: 0.875em;
+    background: var(--bg-subtle);
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+    color: var(--accent);
+  }
+
+  /* ─── Responsive ──────────────────────────────────── */
+  @media (max-width: 640px) {
+    .steps {
+      flex-direction: column;
+    }
+
+    .step-arrow {
+      transform: rotate(90deg);
+      align-self: flex-start;
+      padding-top: 0;
+    }
+
+    .status-content {
+      flex-direction: column;
+    }
+  }
+</style>

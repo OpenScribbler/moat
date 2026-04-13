@@ -1,0 +1,21 @@
+/*
+  MOAT custom theme overrides
+  Applied on top of starlight-theme-flexoki.
+  Use this file for typography, spacing, border-radius,
+  and shape/size customizations.
+*/
+
+/* Typography */
+:root {
+  /* TODO: set custom font stack */
+}
+
+/* Layout */
+:root {
+  /* TODO: adjust sidebar width, content width, spacing */
+}
+
+/* Shape */
+:root {
+  /* TODO: adjust border-radius for cards, code blocks, buttons */
+}
