@@ -15,11 +15,11 @@
    a. Fetches the source repository at HEAD using an authenticated GitHub API request. Source failures (network error, non-existent repo, rate limit) are non-fatal — the run continues and the failure is logged per source.
    b. Checks source repository visibility. If private and `allow-private-source: true` is not set, skips the source with a warning. See Private Repository Guard.
    c. Attempts to fetch `moat-attestation.json` from the source's `moat-attestation` branch. If the branch or file does not exist, the source contributes Signed items only.
-3. Discovers content items from each source via the same two-tier model as the Publisher Action: canonical category directories (`skills/`, `subagents/`, `rules/`, `commands/`) or `moat.yml` if present.
+3. Discovers content items from each source via the same two-tier model as the Publisher Action: canonical category directories (`skills/`, `agents/`, `rules/`, `commands/`) or `moat.yml` if present.
 4. Computes content hashes for all discovered items using the MOAT algorithm ([`reference/moat_hash.py`](../reference/moat_hash.py)).
 5. Determines trust tier per item. See Trust Tier Determination.
 6. Signs each Signed or Dual-Attested item's canonical payload with `cosign sign-blob` using Sigstore keyless OIDC. GitHub Actions provides the OIDC token automatically — no keys or secrets required. Records the Rekor `logIndex` per item.
-7. Assembles the registry manifest (`registry.json`) with all indexed items, revocations (registry-initiated from `registry.yml` plus publisher-initiated from `moat-attestation.json` sources), and metadata fields including the runtime-derived `registry_signing_profile`.
+7. Assembles the registry manifest (`registry.json`) with all indexed items, revocations (registry-initiated from `registry.yml` plus publisher-initiated from `moat-attestation.json` sources), and metadata fields including the runtime-derived `registry_signing_profile`. Before writing the manifest, the action MUST verify that no two content entries share the same `(name, type)` compound key. If duplicates are detected, the action MUST exit non-zero with a clear error message identifying the conflicting entries and the source repositories they originated from. This enforces the normative uniqueness constraint at manifest generation time.
 8. Signs the assembled manifest with `cosign sign-blob`. The resulting bundle is written to `registry.json.sigstore` alongside `registry.json`.
 9. Pushes `registry.json` and `registry.json.sigstore` to the `moat-registry` branch with commit message `chore(moat): update registry manifest`. If the branch does not exist, the action creates it as an orphan. The `moat-registry` branch is never merged into the source branch — it contains only manifest data.
 
@@ -103,7 +103,16 @@ Publisher Rekor verification failed for skills/my-skill (log index 12345678):
   Item will be indexed as Signed.
 ```
 
-**Hash mismatch:** If the action's computed hash for an item differs from the hash recorded in `moat-attestation.json`, the action's computed hash is authoritative. The item is indexed at the computed hash, the trust tier falls to `Signed`, and the action MUST log a warning identifying the item and both hash values. The mismatch MUST be recorded in the manifest entry — see `content[].attestation_hash_mismatch` in the manifest format.
+**Hash mismatch (normative):** If the action's computed `content_hash` for an item differs from the `content_hash` recorded in `moat-attestation.json`, the Registry Action MUST downgrade the item from Dual-Attested to Signed. The action's computed hash is authoritative. Specifically:
+
+1. The item is indexed at the registry's computed hash (not the publisher's attested hash).
+2. The trust tier is set to `Signed` regardless of whether publisher Rekor entry verification would otherwise succeed.
+3. The mismatch MUST be recorded in the manifest entry as `"attestation_hash_mismatch": true` — see `content[].attestation_hash_mismatch` in the main spec manifest format.
+4. The action MUST log a clear warning identifying the item, the registry's computed hash, and the publisher's attested hash.
+
+**Ambiguous case — matching hashes but old attestation:** When the registry's computed hash matches the publisher's attested hash but the attestation is old (e.g., `attested_at` is months in the past), the item qualifies as Dual-Attested. Registry operators MAY choose to downgrade in this case as a maintenance signal, but MUST NOT set `attestation_hash_mismatch: true` — the field is reserved for actual hash mismatches, not attestation age. Age-based staleness is a maintenance signal; hash mismatch is an integrity signal. MOAT is about integrity.
+
+**Conforming client behavior on `attestation_hash_mismatch`:** Conforming clients SHOULD surface `attestation_hash_mismatch: true` to End Users when present. Clients targeting security-conscious environments MAY treat a newly-detected hash mismatch on previously installed content as a re-approval event. Clients MUST NOT hard-block on `attestation_hash_mismatch` alone — the item is still registry-signed at the Signed tier.
 
 ---
 

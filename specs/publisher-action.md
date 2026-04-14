@@ -11,7 +11,7 @@
 ## What It Does (on push)
 
 1. Detects source repository visibility. If `private` or `internal` and `allow-private-repo: true` is not set, exits immediately with a non-zero code and a clear error message. See Private Repository Guard.
-2. Discovers content items via two-tier model: canonical category directories (`skills/`, `subagents/`, `rules/`, `commands/`) or `moat.yml` if present.
+2. Discovers content items via two-tier model: canonical category directories (`skills/`, `agents/`, `rules/`, `commands/`) or `moat.yml` if present.
 3. Computes content hashes using the MOAT algorithm ([`reference/moat_hash.py`](../reference/moat_hash.py)). Errors (symlinks, empty directories) skip the item with a logged warning.
 4. Builds one attestation payload JSON per content item (schema below).
 5. Signs each payload with `cosign sign-blob` using Sigstore keyless OIDC. GitHub Actions provides the OIDC token automatically — no keys or secrets required. The workflow path and branch are encoded into the OIDC certificate at signing time and recorded automatically in `publisher_workflow_ref` in `moat-attestation.json`. Registries read this field to derive the expected OIDC subject for publisher verification — no manual filename configuration is needed.
@@ -21,6 +21,34 @@
 9. If `registry-webhook` is configured and the repository is public, POSTs a signed notification payload to the webhook URL. On private or internal repositories, webhook delivery requires an additional explicit opt-in. See Webhook section.
 
 **Branch isolation note:** The Publisher Action pushes to `moat-attestation`, not to the branch that triggered it. Workflow triggers scoped to `main` (or equivalent) do not fire on pushes to `moat-attestation`, so recursive execution is structurally impossible. Publishers MUST NOT configure the action to trigger on pushes to the `moat-attestation` branch. Unlike the commit-back model, this approach works with standard branch protection on `main` — no PAT or bypass configuration is required.
+
+## Undiscovered Content Detection (normative)
+
+After tier-1 discovery (canonical category directories) and tier-2 discovery (`moat.yml`) are complete, the action MUST inspect the repository root for directories with content-like structure that were not covered by either discovery tier.
+
+**Detection rule (normative — MUST):** A directory is "content-like" if it contains at least one file with a text extension (`.md`, `.yaml`, `.json`, `.py`, etc.) and is not one of: `.git`, `.github`, `node_modules`, `.venv`, `__pycache__`, or other VCS/tooling directories. If such a directory was not matched by discovery, it is reported as potentially undiscovered content.
+
+**Required action log output:**
+
+1. **Discovery summary (always):** After discovery, emit a log line of the form:
+   ```
+   Attested N items: X skills, Y agents, Z rules. Skipped: hooks/ (empty).
+   ```
+   Where `N` is the total attested count and the per-type breakdown covers all types with at least one item. "Skipped" lists directories that exist but contained no attested items (empty directories, or directories skipped due to symlinks or other errors).
+
+2. **Undiscovered content warning:** When a content-like directory is found but not covered by discovery, emit:
+   ```
+   Warning: directory 'tools/' looks like it may contain content items but was not attested.
+   If these are MOAT content items, add them to moat.yml:
+
+     items:
+       - path: tools/my-tool
+         type: skill
+         name: my-tool
+   ```
+   The suggested `moat.yml` snippet MUST list every unmatched directory as a separate entry with `path`, `type` (defaulting to `skill` as the most common type), and `name` (defaulting to the directory name). Publishers copy and edit this snippet — the action does not write `moat.yml` automatically.
+
+This behavior is detection-only and non-blocking. Unmatched directories do not cause the action to fail. The warning is surfaced in the action log so publishers can review and optionally extend their coverage.
 
 ---
 

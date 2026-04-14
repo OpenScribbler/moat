@@ -263,7 +263,7 @@ MOAT currently defines four normative content types, with two more deferred:
 | `mcp`      | `mcp/`       | Deferred — directory reserved, type not yet normative         |
 | `rules`    | `rules/`     | Behavior configuration files and rule bundles                 |
 | `skill`    | `skills/`    | Reusable instruction sets                                     |
-| `subagent` | `subagents/` | Specialized persona definitions with controlled tools/context |
+| `agent`    | `agents/`    | Specialized persona definitions with controlled tools/context |
 
 Each subdirectory within a category directory is one content item. The content hash covers that subdirectory as a unit.
 
@@ -277,7 +277,7 @@ hooks/
 mcp/
 rules/
 skills/
-subagents/
+agents/
 ```
 
 The [Publisher Action](specs/publisher-action.md) uses a two-tier discovery model:
@@ -423,6 +423,36 @@ confirmation. See [Trust Anchor Model](#trust-anchor-model).
 
 ---
 
+## Version Transition
+
+This section defines how conforming clients handle schema version changes when the `_version` field in the Attestation Payload advances.
+
+### Ordering: Content Hash Before `_version`
+
+When verifying an attestation payload, conforming verifiers MUST check the `content_hash` value BEFORE accepting the `_version` field. The verification order is:
+
+1. Verify `content_hash` matches the locally computed hash of the content directory.
+2. Verify `_version` is a recognized schema version.
+3. Verify the Rekor certificate identity.
+
+This ordering is load-bearing: checking `_version` first creates a window where a verifier accepts an old-format attestation for different content (a TOCTOU race). Checking content hash first ensures integrity before format acceptance.
+
+### Grace Period for `_version` Transitions
+
+When a new `_version` value is introduced:
+
+1. Conforming clients MUST accept both the previous and new `_version` values for **6 months** after the new version ships.
+2. After the grace period, the previous `_version` MUST be rejected.
+3. Publisher re-attestation during the grace period: publishers run the Publisher Action on their source branch (or wait for their registry's next crawl). Old Rekor entries remain valid and independently verifiable for the duration of the grace period.
+
+The 6-month window is calibrated to active-but-infrequent publishers: monthly CI checks cover active publishers; quarterly checks cover publishers who update seasonally. Extending beyond 6 months would increase the replay attack surface (old-format attestations accepted for longer); contracting below 6 months would break dormant-but-maintained repos.
+
+### What Counts as a `_version` Bump
+
+A `_version` bump is required when the Attestation Payload schema changes in a way that makes old payloads unverifiable. Additive-only changes (new optional fields) MAY be handled within the current `_version` using forward-compatibility rules. Breaking changes (field renames, removed fields, format changes) REQUIRE a `_version` bump and a corresponding grace period.
+
+---
+
 ## Fork and Lineage Handling
 
 If a repo is forked and the content is unchanged, registries can preserve lineage with `derived_from` while attesting
@@ -438,7 +468,7 @@ attribution conflicts are surfaced to End Users; they are not automatic hard blo
 These items are required for conformance. A conforming registry, a conforming client, and a conforming verifier such as
 [`moat-verify`](specs/moat-verify.md) all implement exactly these.
 
-- **Content type registry** — normative list of current types (`skill`, `subagent`, `rules`, `command`), category
+- **Content type registry** — normative list of current types (`skill`, `agent`, `rules`, `command`), category
   directory names, and deferred types (`hook`, `mcp`).
 - **Repository layout convention** — canonical directory structure and two-tier discovery model (`moat.yml` override).
 - **Registry manifest format** — the signed document a registry publishes. The core artifact of MOAT. Top-level
@@ -512,6 +542,25 @@ These items are required for conformance. A conforming registry, a conforming cl
   issued each revocation — is the primary detection mechanism after opt-in. A user who trusts only one registry has
   no cross-registry signal to compare against if that registry is compromised; this limitation cannot be addressed at
   the protocol level.
+- **Non-interactive client behavior:** Conforming clients operating in non-interactive environments (CI/CD pipelines, fleet management, headless install scripts) MUST exit non-zero and MUST provide a machine-distinguishable error signal when any of the following conditions are encountered. The signal MUST indicate the failure class — the exact mechanism (stderr prefix, structured JSON output, or distinct exit codes) is an implementation choice, but the failure class MUST be distinguishable by an automated caller:
+
+  | Condition | Required client behavior |
+  |-----------|-------------------------|
+  | TOFU signing profile acceptance required (first registry add) | Exit non-zero. A trust decision that requires human judgment MUST NOT be made silently by a pipeline. |
+  | `registry_signing_profile` change detected | Exit non-zero. A signing profile change could indicate registry key compromise. |
+  | Publisher revocation encountered | Exit non-zero. Non-interactive clients MUST NOT proceed past revocation warnings. |
+  | Manifest staleness exceeded | Exit non-zero. A stale manifest means the pipeline is operating on potentially outdated trust data. |
+
+  A conforming non-interactive client MUST NOT auto-accept any trust decision that requires human judgment. See `DQ-8` for the deferred pre-approval mechanism needed for CI/CD to add new registries without interactive prompts.
+
+- **Revocation archival:** Registries MAY prune revocation entries for content no longer present in their manifest after a configurable retention period. The recommended minimum retention period is **180 days**. Pruning before 180 days is non-conforming; registries MAY retain revocations indefinitely.
+
+  **Lockfile is authoritative for pruned revocations.** When a client has previously recorded a revocation in its lockfile `revoked_hashes` array and that revocation entry subsequently disappears from the registry manifest (due to pruning), the lockfile entry persists. The hard-block continues. A client MUST NOT remove a `revoked_hashes` entry because the manifest no longer carries the revocation.
+
+  **Tombstone rule (normative for Registry Action):** Registries MUST NOT re-list a content item in the `content` array if a revocation entry for that item's `content_hash` has been pruned from the `revocations` array. A content hash that was once revoked and subsequently pruned is permanently tombstoned — it MUST NOT reappear as installable content. The Registry Action enforces this via a `revocation-tombstones.json` file in the `moat-registry` branch alongside the manifest. This file contains an array of content_hash strings that must never reappear in the `content` array. The file persists between crawl runs and is appended to (never shrunk) when revocations are pruned from the `revocations` array. This closes the gap for clients who never witnessed the revocation: a previously-revoked hash that reappears in the manifest with no revocation entry would bypass the client's lockfile guard for first-time installers.
+
+  **180-day calibration:** Active developers sync at least monthly; 180 days covers dormant-but-maintained publishers who update quarterly and may sync less often. The recommended minimum ensures that even infrequent users have seen the revocation entry before pruning begins. Security-focused registries SHOULD retain revocations indefinitely.
+
 - **Lineage model** — `derived_from` for forks and adaptations.
 - **Version semantics** — `version` is an optional display label; content hash is normative identity; `attested_at` for
   freshness.
@@ -624,7 +673,7 @@ Minimum structure:
 | `content`                          | REQUIRED                                       | Array of per-item entries                                                                                                                                                                                                       |
 | `content[].name`                   | REQUIRED                                       | Canonical identifier for the content item                                                                                                                                                                                       |
 | `content[].display_name`           | REQUIRED                                       | Human-readable name                                                                                                                                                                                                             |
-| `content[].type`                   | REQUIRED                                       | One of: `skill`, `subagent`, `rules`, `command`                                                                                                                                                                                 |
+| `content[].type`                   | REQUIRED                                       | One of: `skill`, `agent`, `rules`, `command`                                                                                                                                                                                 |
 | `content[].content_hash`           | REQUIRED                                       | `<algorithm>:<hex>` — normative identity of the content                                                                                                                                                                         |
 | `content[].source_uri`             | REQUIRED                                       | Source repository URI                                                                                                                                                                                                           |
 | `content[].attested_at`            | REQUIRED                                       | Registry attestation timestamp (RFC 3339 UTC)                                                                                                                                                                                   |
@@ -650,6 +699,7 @@ Minimum structure:
   identity changes and MUST NOT require re-approval when they change.
 - `updated_at` uses the registry's clock. The 24-hour staleness threshold runs against the client's own last-fetch
   timestamp. See [Freshness Guarantee and Replay Scope](#freshness-guarantee-and-replay-scope).
+- `content[].name` + `content[].type` MUST be unique within a single manifest. The compound key `(name, type)` is the normative uniqueness constraint. A manifest with two entries sharing the same `name` and `type` is malformed — conforming registries MUST NOT publish such a manifest. If the same content appears under two different `name` values, both entries are valid. Cross-registry name collisions (same name+type appearing in two different registries) are handled by the conforming client, which SHOULD display `source_uri` alongside the content name to disambiguate. The `source_uri` field (REQUIRED on every manifest entry) provides all the disambiguation data needed.
 
 ### Lockfile
 
@@ -660,10 +710,15 @@ Minimum structure:
 ```json
 {
   "moat_lockfile_version": 1,
+  "registries": {
+    "https://example.com/moat-manifest.json": {
+      "fetched_at": "2026-04-13T00:00:00Z"
+    }
+  },
   "entries": [
     {
       "name": "string",
-      "type": "skill|subagent|rules|command",
+      "type": "skill|agent|rules|command",
       "registry": "https://...",
       "content_hash": "sha256:<hex>",
       "trust_tier": "DUAL-ATTESTED|SIGNED|UNSIGNED",
@@ -680,9 +735,11 @@ Minimum structure:
 | Field                          | Required | Description                                                                                           |
 |--------------------------------|----------|-------------------------------------------------------------------------------------------------------|
 | `moat_lockfile_version`        | REQUIRED | Schema version; currently `1`                                                                         |
+| `registries`                   | REQUIRED | Per-registry tracking object; keys are registry manifest URLs                                         |
+| `registries[url].fetched_at`   | REQUIRED | RFC 3339 UTC timestamp of the client's last successful manifest fetch for this registry. Used for staleness enforcement and `moat-verify` staleness auditing. |
 | `entries`                      | REQUIRED | Array of installed content records                                                                    |
 | `entries[].name`               | REQUIRED | Content item name as recorded in the registry manifest                                                |
-| `entries[].type`               | REQUIRED | Content type; closed set: `skill`, `subagent`, `rules`, `command`                                     |
+| `entries[].type`               | REQUIRED | Content type; closed set: `skill`, `agent`, `rules`, `command`                                     |
 | `entries[].registry`           | REQUIRED | Registry manifest URL the item was installed from                                                     |
 | `entries[].content_hash`       | REQUIRED | `<algorithm>:<hex>` — normative identity of the installed item                                        |
 | `entries[].trust_tier`         | REQUIRED | Trust tier at install time: `DUAL-ATTESTED`, `SIGNED`, or `UNSIGNED`                                  |
@@ -701,6 +758,8 @@ Minimum structure:
 - `entries[].type` is a closed set in the current version. Conforming clients MUST accept entries with unrecognized type values without error — new types will be added in future versions.
 - `entries[].registry` MUST be treated as permanently stable once published. A URL change invalidates all lockfile entries referencing it.
 - `revoked_hashes` entries MUST NOT be silently removed. Clearing a revoked hash requires deliberate End User action. This prevents the remove-and-reinstall bypass: an attempt to reinstall a revoked hash is blocked by this record.
+
+**Upgrade path:** If a conforming client reads a lockfile without the `registries` key (upgrade from a pre-staleness lockfile), it SHOULD initialize the key and set `fetched_at` to the current time on the next successful manifest fetch. This prevents clients from immediately treating all installed content as stale after upgrading.
 
 Conforming clients MAY add additional fields to entries but MUST include all fields listed above. A lockfile from one
 conforming client must be readable by another.
