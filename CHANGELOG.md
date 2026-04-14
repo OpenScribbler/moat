@@ -2,6 +2,43 @@
 
 All notable changes to the MOAT specification are documented in this file.
 
+## [0.6.0] — 2026-04-14 (Draft)
+
+Five-persona panel review resolved all 17 findings (3 ship-blockers, 7 spec changes, 7 design questions). Breaking changes: content type rename, field renames, new required lockfile fields, staleness model redesign.
+
+### Added
+
+- **Version Transition section** (SC-2) — content hash checked before `_version`; 6-month grace period for schema version bumps
+- **Non-interactive client behavior** (SC-3) — normative exit-non-zero table for TOFU, signing profile change, revocation, staleness in CI/CD environments
+- **Undiscovered content detection** (SC-4) — Publisher Action MUST warn about content-like directories not covered by discovery
+- **Revocation archival** (SC-5) — 180-day recommended retention, lockfile authority for pruned revocations, tombstone rule via `revocation-tombstones.json`
+- **Namespace uniqueness** (SC-7) — `(name, type)` compound key MUST be unique within a manifest; Registry Action rejects duplicates
+- **TUF staleness model** (DQ-1) — registry-set `expires` field with 72-hour client default; replaces fixed 24-hour threshold
+- **`fetched_at` lockfile field** — per-registry tracking for staleness enforcement, with upgrade path for pre-staleness lockfiles
+- **Security Considerations section** — 96-hour worst-case revocation propagation, replay attack scope, TOFU attack surface, lockfile integrity precision note
+- **Crawl optimization guidance** (DQ-5) — informative section in Registry Action for Rekor entry reuse with OIDC identity check
+- **Manifest size guidance** (DQ-4) — informative section on ETag caching, jitter, and deferred delta-sync
+- **`test_normalization.py`** (SB-3) — integration tests TV-17 through TV-22 for BOM stripping, CRLF normalization, binary classification, chunk boundary, lone CR
+- **Cross-validation** — `generate_test_vectors.py` now validates against `moat_hash.py` on every run
+- **VERSION file + `scripts/bump-version.py`** — single-source version propagation to all spec files
+
+### Changed
+
+- **`subagent` renamed to `agent`** (SC-1) — content type, canonical directory `agents/`, all spec files updated
+- **`expires_at` renamed to `expires`** — manifest field table updated
+- **Hash mismatch is normative downgrade** (SC-6) — Registry Action MUST downgrade from Dual-Attested to Signed on hash mismatch; `attestation_hash_mismatch` client behavior defined
+- **Test vectors are normative authority** — `generate_test_vectors.py` declared normative; `moat_hash.py` demoted to informative reference
+- **`generate_test_vectors.py` aligned to sha256sum format** (SB-1) — manifest format changed from `{path}\x00{hash}\n` to `{hash}  {path}\n` matching `moat_hash.py`
+- **TV-09, TV-10 rewritten as error cases** (SB-2) — reject-all symlink policy; both now `must_error=True`
+- **Staleness bullet updated** — Conforming Clients section now references `fetched_at + 72 hours` instead of configurable 24-hour threshold
+
+### Removed
+
+- **Meta hash code** — `meta_hash()`, `vector_meta_hash()`, `vector_meta_hash_derived()` removed from `generate_test_vectors.py` (vestigial v0.3.0)
+- **`import json`** — unused after meta hash removal
+
+---
+
 ## [0.5.3] — 2026-04-11 (Draft)
 
 Removed redundant `## Publisher Action` and `## moat-verify` top-level summary sections. Both were duplicating content already present in `## Conforming specs` (descriptions and links) and the respective sub-specs (operational details). No normative content removed.

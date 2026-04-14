@@ -9,7 +9,7 @@ MOAT is a working draft. The specifications are written and internally consisten
 
 ## Current version
 
-**Core spec:** v0.5.3 (Draft)
+**Core spec:** v0.6.0 (Draft)
 
 The core spec covers the registry manifest format, lockfile format, content hashing algorithm, trust tiers, and conforming client behavior requirements.
 
@@ -17,7 +17,7 @@ The core spec covers the registry manifest format, lockfile format, content hash
 
 | Spec | Version | Status |
 |---|---|---|
-| [Core spec](/spec/core) | 0.5.3 | Draft |
+| [Core spec](/spec/core) | 0.6.0 | Draft |
 | [moat-verify](/spec/moat-verify) | 0.1.0 | Draft |
 | [Publisher Action](/spec/publisher-action) | 0.1.0 | Draft |
 | [Registry Action](/spec/registry-action) | 0.1.0 | Draft |
@@ -67,7 +67,7 @@ These are explicit scope decisions with documented rationale — not open questi
 The `hooks/` and `mcp/` canonical directories are reserved but the content types are not yet normative. Hash semantics and discovery behavior for these types need design work.
 
 **Freshness / anti-rollback**
-The `expires_at` field in the manifest is currently OPTIONAL. Making it REQUIRED (as TUF does) is deferred until registries have demonstrated reliable automated manifest rotation — a mandatory expiry with brittle CI creates availability risk for the entire registry catalog.
+The `expires` field in the manifest is OPTIONAL with a client-enforced 72-hour default (TUF model, added in v0.6.0). Making it REQUIRED is deferred until registries have demonstrated reliable automated manifest rotation — a mandatory expiry with brittle CI creates availability risk for the entire registry catalog.
 
 **GitLab support**
 The Publisher Action and moat-verify `--source` flag are GitHub-only. GitLab CI OIDC token format differences require separate design and testing. Both should ship together.
