@@ -116,6 +116,32 @@ Publisher Rekor verification failed for skills/my-skill (log index 12345678):
 
 ---
 
+## Crawl Optimization (Informative)
+
+For large registries, re-signing every item on every crawl is expensive. The Registry Action SHOULD apply the following optimization:
+
+**Skip re-signing when content is unchanged:** If an item's computed `content_hash` matches the `content_hash` recorded in the previous manifest entry for that item, the existing Rekor log entry MAY be reused. The `attested_at` timestamp updates only when content changes, not on every crawl.
+
+**Identity check before reuse (informative):** Before reusing an existing Rekor entry, the action SHOULD verify that the existing entry's OIDC identity still matches the current `registry_signing_profile`. If the workflow was renamed, the repository was moved, or the signing identity changed for any reason, the action SHOULD re-sign regardless of whether the content hash changed. Reusing a Rekor entry whose OIDC identity no longer matches the current workflow misrepresents which workflow attested the content.
+
+**Reuse criteria summary:**
+
+| Condition | Action |
+|-----------|--------|
+| `content_hash` unchanged AND OIDC identity matches | Reuse existing Rekor entry; skip re-signing |
+| `content_hash` changed | Re-sign; update `attested_at` |
+| OIDC identity changed (workflow rename, repo move) | Re-sign regardless of content hash |
+
+## Manifest Size (Informative)
+
+Most registries will index 100–1,000 items; 10,000+ items is theoretical for the current version. At 1,000 items, the manifest is approximately 300KB–600KB uncompressed — manageable for HTTP clients with ETag-based caching and conditional GET (`If-None-Match`). The Registry Action SHOULD emit an `ETag` header (or equivalent) for its manifest serving infrastructure to enable clients to skip full re-download when the manifest has not changed.
+
+Registries experiencing manifest size pressure SHOULD add random jitter (±1 hour) to their crawl schedules to avoid synchronized manifest refreshes from large client populations.
+
+Delta-sync and manifest sharding are deferred to post-v1.0. These are not needed for the scale MOAT targets in its initial version.
+
+---
+
 ## Per-Item Canonical Payload
 
 Each Signed or Dual-Attested item is attested with one registry-signed payload. This payload is structurally identical to the per-item attestation payload defined in the main spec:

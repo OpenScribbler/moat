@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 """
-MOAT v0.4.0 — Content Hash Reference Implementation
+MOAT v0.4.0 — Content Hash Reference Implementation (Informative)
 
-This is the normative reference. A conforming implementation is one that
-produces identical output to this script for all test vectors.
+This script is an informative reference implementation. The normative authority
+for correct output is the test vector suite in generate_test_vectors.py and
+test_normalization.py. When this script and a test vector disagree, the test
+vector is correct and this script has a bug.
+
+A conforming implementation produces identical output to all test vectors in
+generate_test_vectors.py and test_normalization.py — not necessarily identical
+output to this script if this script contains a bug.
 
 Usage:
     python3 moat_hash.py <directory>

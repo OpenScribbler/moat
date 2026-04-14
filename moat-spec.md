@@ -152,8 +152,9 @@ repository is a self-publishing operator.
 
 ### Reference implementations
 
-**[`reference/moat_hash.py`](reference/moat_hash.py)** — Python reference implementation of the MOAT content hashing
-algorithm. Conforming implementations in any language MUST produce identical output for all test vectors.
+**[`reference/generate_test_vectors.py`](reference/generate_test_vectors.py)** — **Normative.** The test vectors produced by this script are the authoritative specification of correct hashing output. When a conforming implementation and a test vector disagree, the implementation is non-conforming. When `moat_hash.py` and a test vector disagree, `moat_hash.py` has a bug — the test vector is correct.
+
+**[`reference/moat_hash.py`](reference/moat_hash.py)** — **Informative.** Python reference implementation of the MOAT content hashing algorithm. Useful as a starting point for implementations in other languages, and as a cross-check during development. It is not the normative specification — the test vectors are. Two independent implementations in different languages must pass all test vectors before the spec advances beyond Draft.
 
 **[`reference/moat_verify.py`](reference/moat_verify.py)** — Python reference implementation of `moat-verify` —
 standalone verification tool supporting online (`--registry`) and offline (`--lockfile`) modes.
@@ -163,9 +164,6 @@ to produce source-side attestations and qualify for the Dual-Attested tier.
 
 **[`reference/moat-registry.yml`](reference/moat-registry.yml)** — Registry Action workflow template. Drop into
 `.github/workflows/` to run a MOAT registry.
-
-**[`reference/generate_test_vectors.py`](reference/generate_test_vectors.py)** — Generates the canonical test vector
-suite used to validate conforming implementations of the content hashing algorithm.
 
 ---
 
@@ -235,10 +233,10 @@ The spec defines what a conforming client must do on install and sync:
 - Surface trust tier before install confirmation
 - Surface revocation source attribution and treat publisher revocations as warnings, registry revocations as the gating
   signal
-- MUST NOT use a cached registry manifest for revocation checks when the cached copy exceeds a configurable
-  staleness threshold (default: 24 hours). When the threshold is exceeded, the client MUST sync the manifest
-  before performing revocation checks. Clients SHOULD NOT allow this threshold to be configured above 48 hours —
-  doing so widens the replay window beyond what the protocol's freshness guarantees are designed around.
+- MUST NOT use a cached registry manifest for revocation checks when the cached copy is stale. A manifest is
+  stale when the current time exceeds `expires` (if present) or exceeds `fetched_at + 72 hours` (if `expires`
+  is absent). When stale, the client MUST sync the manifest before performing revocation checks. A failed
+  refresh MUST NOT reset the staleness clock.
 - On manifest sync: check all installed content hashes against the updated `revocations` array; apply hard-block for
   registry revocations and warn-on-use for publisher revocations (see Revocation mechanism above)
 - **Private content isolation:** Conforming clients MUST NOT automatically index or submit content from private or
@@ -360,25 +358,29 @@ when operating in lockfile mode.
 
 ### Freshness Guarantee and Replay Scope
 
-The 24-hour staleness threshold is MOAT's freshness guarantee. MOAT does not defend against manifest replay
-attacks within that window. For a replay attack to succeed, an attacker must be able to intercept or
-cache-poison a client's manifest fetch, a revocation must have been issued after the cached manifest was
-generated, and the client must not have refreshed within the staleness threshold. These conditions narrow the
-exploitable window significantly in practice.
+MOAT adopts the TUF (The Update Framework) staleness model: the registry sets expiry, the client enforces it.
 
-**`updated_at` and the staleness threshold:** The manifest's `updated_at` field records when the registry last
-regenerated its manifest and is for display and activity monitoring only. The 24-hour staleness threshold MUST be
-computed against the client's own last-fetch timestamp — not against `updated_at`. A manifest whose `updated_at`
-is recent but which the client fetched 25 hours ago is stale; a manifest whose `updated_at` is seven days old but
-which the client fetched two hours ago is not.
+**Registry side:** Registries MAY include an `expires` field (RFC 3339 UTC) in the manifest. The Registry Action auto-populates `expires` during manifest generation. Registry operators MAY override the default value to enforce stricter freshness for their consumers.
 
-Registries MAY include an `expires_at` field (RFC 3339 UTC) in the manifest. If present, conforming clients
-MUST reject manifests where the current time is past `expires_at`. Requiring `expires_at` for all conforming
-registries is deferred to a future version: the field creates a hard liveness dependency on the registry's CI
-pipeline, and a CI outage means the registry's entire catalog goes dark for all clients. That trade-off is
-appropriate for registry operators with dedicated infrastructure and monitoring; it is not appropriate to mandate
-for hobbyist and small-team operators that the current version targets. Operators who want to enforce strict
-freshness for their consumers MAY opt in by setting `expires_at`.
+**Client side:**
+- If `expires` is present: conforming clients MUST NOT trust the manifest after the value of `expires`.
+- If `expires` is absent: conforming clients apply a spec-defined default of **72 hours** from `fetched_at` (the client's own last successful manifest fetch timestamp, recorded in the lockfile `registries[url].fetched_at` field).
+- Staleness is checked at **install time** — not continuously. A cached manifest is valid until the next install or sync operation triggers a staleness check.
+- A failed manifest refresh MUST NOT reset the staleness clock. The clock runs from the last *successful* fetch. A client that cannot refresh a stale manifest MUST NOT proceed as if the manifest were fresh.
+
+**`updated_at` vs `fetched_at`:** The manifest's `updated_at` field records when the registry last regenerated its manifest — it is for display and activity monitoring only. The staleness check MUST be computed against the client's own `fetched_at` timestamp, not against `updated_at`. A manifest whose `updated_at` is recent but which the client fetched 73 hours ago is stale; a manifest whose `updated_at` is seven days old but which the client fetched two hours ago is not.
+
+**Why 72 hours:** The 72-hour default survives the weekend test (Friday 6pm to Monday 9am is 63 hours, within the 72-hour window). A 48-hour default would produce hard failures for every developer on Monday morning, driving MOAT disabling. A 7-day default provides an exploitation window of 8 days (7d + 24h registry crawl). 72 hours bounds the worst-case exploitation window to 96 hours (72h + 24h crawl delay) while avoiding the Monday morning failure mode. Security-conscious registries SHOULD set a shorter `expires` (4h, 24h, or 48h) regardless of the default — the default only affects registries that do not configure expiry.
+
+**Air-gapped environments:** The same mechanism as TUF applies. Operators provision manifests with a long `expires` value during the provisioning step. The spec does not define a separate offline or degraded mode — any exemption triggered by network state creates an exploitation path for attackers who control network state.
+
+**Clarifying note for existing manifests:** Manifests published before the `expires` field was added will not carry this field. Conforming clients apply the 72-hour default from `fetched_at`. This is a client-side policy, not a registry assertion — the registry has not declared an explicit expiry, so the client's default applies.
+
+**No separate revocation endpoint (informative):** MOAT does not define a separate revocation-only endpoint or push notification mechanism. The `expires`-based freshness model bounds the revocation propagation window (96h worst case for default-expiry registries; 28h for 4h-expiry registries). Registries that require faster revocation propagation SHOULD set a shorter `expires` value rather than relying on a separate endpoint. This is simpler to implement, avoids new endpoint format and client polling logic, and provides equivalent security for registries that tune their expiry.
+
+**No per-entry expiry (informative):** Per-entry `expires_at` fields are not defined in this version. Per-entry expiry is only meaningful when content items have individual fetch endpoints — without per-item URLs, any expired item triggers a full manifest refresh, making per-entry expiry equivalent to manifest-level expiry. Revisit if per-item fetch endpoints are added in a future version.
+
+MOAT does not defend against manifest replay attacks within the valid window. For a replay attack to succeed, an attacker must be able to intercept or cache-poison a client's manifest fetch, a revocation must have been issued after the cached manifest was generated, and the client must not have refreshed within the staleness window.
 
 ### Signature Envelope
 
@@ -575,7 +577,7 @@ These items are required for conformance. A conforming registry, a conforming cl
 - **[`reference/moat_verify.py`](reference/moat_verify.py)** — `moat-verify` reference implementation (Python). Spec: [`specs/moat-verify.md`](specs/moat-verify.md)
 - **[`reference/moat.yml`](reference/moat.yml)** — Publisher Action workflow template. Spec: [`specs/publisher-action.md`](specs/publisher-action.md)
 - **[`reference/moat-registry.yml`](reference/moat-registry.yml)** — Registry Action workflow template. Spec: [`specs/registry-action.md`](specs/registry-action.md)
-- **[`reference/generate_test_vectors.py`](reference/generate_test_vectors.py)** — Generates the canonical test vector suite used to validate conforming implementations.
+- **[`reference/generate_test_vectors.py`](reference/generate_test_vectors.py)** — **Normative.** See [Reference implementations](#reference-implementations) above for the authoritative description.
 
 ### Informative profiles
 
@@ -665,7 +667,7 @@ Minimum structure:
 | `name`                             | REQUIRED                                       | Human-readable registry name                                                                                                                                                                                                    |
 | `operator`                         | REQUIRED                                       | Human-readable name of the registry operator. Display label only — changes do NOT trigger re-approval.                                                                                                                          |
 | `updated_at`                       | REQUIRED                                       | RFC 3339 UTC timestamp of when this manifest was last generated. For display and activity monitoring only — the staleness check uses the client's last-fetch timestamp, not this field.                                         |
-| `expires_at`                       | OPTIONAL                                       | RFC 3339 UTC timestamp after which conforming clients MUST reject this manifest. See [Freshness Guarantee and Replay Scope](#freshness-guarantee-and-replay-scope).                                                             |
+| `expires`                          | OPTIONAL                                       | RFC 3339 UTC timestamp after which conforming clients MUST reject this manifest. The Registry Action auto-populates this field. See [Freshness Guarantee and Replay Scope](#freshness-guarantee-and-replay-scope).               |
 | `self_published`                   | OPTIONAL                                       | `true` if the registry operator and publisher are the same entity (same repository runs both Publisher Action and Registry Action). Absent is equivalent to `false`. Conforming clients SHOULD surface this to End Users when `true`. |
 | `registry_signing_profile`         | REQUIRED                                       | The registry's CI signing identity. Conforming clients MUST track this per registry; changes on a subsequent fetch require End User re-approval before the manifest is accepted. See [Signature Envelope](#signature-envelope). |
 | `registry_signing_profile.issuer`  | REQUIRED                                       | OIDC issuer URL of the registry's CI provider                                                                                                                                                                                   |
@@ -935,6 +937,44 @@ payload = json.dumps(
 
 See [Publisher Action](specs/publisher-action.md#attestation-payload-schema-normative) for the publisher-side
 signing requirement.
+
+---
+
+## Security Considerations
+
+### Revocation Propagation Worst Case
+
+The revocation propagation time under MOAT's default-expiry model is bounded as follows:
+
+**Default-expiry registries (72-hour `expires`):**
+- Publisher revokes content.
+- Registry next crawl picks up the revocation: up to **24 hours** (registry crawl interval).
+- Client manifest expires and is refreshed on next install attempt: up to **72 hours** from last fetch.
+- **Total worst case: 96 hours (4 days)** for default-expiry registries (72h expiry + 24h crawl).
+
+The crawl delay and client expiry run in parallel, not sequentially — after the manifest expires, the client refreshes on the next install attempt and immediately receives the updated manifest containing the revocation. There is no additional window after expiry. In practice, active developers trigger install or sync operations daily; the typical propagation time is under 24 hours for active users.
+
+**Security-critical registries (short `expires`, e.g., 4 hours):**
+- Registry crawl: up to 24 hours.
+- Client manifest expires and refreshes: up to 4 hours.
+- **Total worst case: 28 hours.**
+- For emergency revocations with immediate manifest regeneration: 0-hour crawl + 4-hour expiry = **4 hours**.
+
+Registry operators handling sensitive content SHOULD set `expires` to 4 hours or less to minimize the exploitation window.
+
+### Replay Attack Scope
+
+MOAT does not defend against manifest replay attacks within the valid staleness window. A replay attack requires an attacker who can intercept or cache-poison a client's manifest fetch AND a revocation that was issued after the cached manifest was generated AND a client that has not refreshed within the staleness window. These conditions narrow the exploitable window significantly in practice.
+
+### Trust Decision Attack Surface
+
+TOFU (trust-on-first-use) for manually-added registries is a known attack surface. An attacker who can intercept the first manifest fetch for a new registry can inject a malicious `registry_signing_profile`. Registries discovered through a signed Registry Index close this gap — the Index entry establishes the expected signing identity before first fetch. For manually-added registries, the End User's explicit add action is the trust bootstrap; MOAT cannot provide a stronger guarantee without a pre-established PKI.
+
+### Lockfile Integrity
+
+The lockfile is not protected by a MAC or checksum. An attacker with local write access can modify the lockfile directly. However, an attacker with local write access can also modify the installed content directly — the lockfile is not the weakest link. Detection (via `moat-verify`) is the right approach: `moat-verify` re-hashes installed content and compares against the lockfile, detecting both content tampering and lockfile manipulation when the two diverge.
+
+**Detection scope (precision note):** `moat-verify` detects accidental corruption and inconsistent modification — cases where the lockfile says hash X but content hashes to Y. It does NOT detect targeted tampering where an attacker modifies installed content AND updates the lockfile with matching hashes AND removes revocation entries consistently. This is an inherent limitation of any local-only integrity check without an external trust anchor. Users requiring stronger guarantees should verify against the registry manifest and Rekor log directly.
 
 ---
 
