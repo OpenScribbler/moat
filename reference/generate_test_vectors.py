@@ -10,8 +10,12 @@ Usage: python3 generate_test_vectors.py
 """
 
 import hashlib
-import json
+import os
+import sys
 import unicodedata
+
+sys.path.insert(0, os.path.dirname(__file__))
+import moat_hash
 
 
 def sha256_hex(data: bytes) -> str:
@@ -28,8 +32,12 @@ def content_hash_directory(file_map: dict[str, bytes]) -> str:
     """
     Section 7.3: Directory tree content hash.
 
-    file_map: {relative_path: file_bytes} — meta.yaml already excluded.
+    file_map: {relative_path: file_bytes} — moat-attestation.json already excluded.
     Paths use forward slashes, no leading ./ or trailing /.
+
+    Manifest format: sha256sum — "{hash}  {path}\n" per entry.
+    This matches moat_hash.py (the normative reference) and POSIX sha256sum output,
+    making individual manifest entries verifiable with standard Unix tools.
     """
     entries = []
     for path, data in file_map.items():
@@ -47,26 +55,11 @@ def content_hash_directory(file_map: dict[str, bytes]) -> str:
     # Step 5: sort by NFC path using raw UTF-8 byte ordering
     entries.sort(key=lambda e: e[0].encode("utf-8"))
 
-    # Step 6: concatenate {path}\x00{hash}\n
-    concat = b""
-    for path, file_hash in entries:
-        concat += path.encode("utf-8") + b"\x00" + file_hash.encode("utf-8") + b"\n"
+    # Step 6: build manifest in sha256sum format: "{hash}  {path}\n"
+    manifest = "".join(f"{h}  {p}\n" for p, h in entries).encode("utf-8")
 
     # Step 7: final hash
-    return f"sha256:{sha256_hex(concat)}"
-
-
-def meta_hash(meta_fields: dict) -> str:
-    """
-    Section 8: Meta hash.
-    Input is all meta.yaml fields EXCEPT meta_hash and signature.
-    Serialize to JCS (RFC 8785), then SHA-256.
-    """
-    # RFC 8785 canonical JSON: sorted keys, no whitespace, specific number formatting
-    # Python's json.dumps with sort_keys=True, separators=(',', ':') is JCS-compliant
-    # for the data types we use (strings, integers, lists, objects).
-    canonical = json.dumps(meta_fields, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    return f"sha256:{sha256_hex(canonical.encode('utf-8'))}"
+    return f"sha256:{sha256_hex(manifest)}"
 
 
 # ─── Test Vector Definitions ───────────────────────────────────────────────
@@ -218,40 +211,28 @@ def vector_08():
 
 
 def vector_09():
-    """TV-09: Internal symlink — resolved"""
-    # Symlink target/link.txt -> real.txt (both inside content dir)
-    # Per spec: use symlink's path, target's content
-    real_content = b"I am the real file\n"
-    files = {
-        "real.txt": real_content,
-        "target/link.txt": real_content,  # symlink resolved: link's path, real's content
-    }
+    """TV-09: Internal symlink — MUST error (reject-all symlink policy)"""
     return {
         "id": 9,
-        "title": "Internal symlink",
+        "title": "Internal symlink — MUST error",
         "section": "7.3",
-        "input_description": "`target/link.txt` is a symlink to `real.txt` (internal). Resolved: symlink's path with target's content.",
-        "files": {k: {"hex": v.hex(), "display": v.decode(), "hash": sha256_hex(v)} for k, v in files.items()},
-        "content_hash": content_hash_directory(files),
-        "note": "Both entries have the same per-file hash since the content is identical",
+        "input_description": "`target/link.txt` is a symlink to `real.txt` (internal). ALL symlinks are rejected — content MUST error.",
+        "content_hash": "ERROR: Symlink rejected — content MUST be rejected as unpublishable",
+        "must_error": True,
+        "note": "moat_hash.py raises ValueError('Symlink rejected: target/link.txt') for any symlink, internal or external. No resolution or exclusion — reject-all is the normative behavior.",
     }
 
 
 def vector_10():
-    """TV-10: External symlink — excluded"""
-    # external.txt -> /etc/passwd (external target) — excluded
-    files = {
-        "real.txt": b"only real file\n",
-        # external.txt symlink excluded
-    }
+    """TV-10: External symlink — MUST error (reject-all symlink policy)"""
     return {
         "id": 10,
-        "title": "External symlink",
+        "title": "External symlink — MUST error",
         "section": "7.3",
-        "input_description": "`real.txt` is a regular file. `external.txt` is a symlink to `/etc/passwd` (external target) — excluded.",
-        "files": {"real.txt": {"hex": files["real.txt"].hex(), "display": files["real.txt"].decode(), "hash": sha256_hex(files["real.txt"])}},
-        "content_hash": content_hash_directory(files),
-        "note": "Hash is identical to a directory containing only `real.txt`",
+        "input_description": "`external.txt` is a symlink to `/etc/passwd` (external target). ALL symlinks are rejected — content MUST error.",
+        "content_hash": "ERROR: Symlink rejected — content MUST be rejected as unpublishable",
+        "must_error": True,
+        "note": "moat_hash.py raises ValueError('Symlink rejected: external.txt') before attempting any target resolution. Reject-all eliminates path-traversal attack surface.",
     }
 
 
@@ -359,65 +340,6 @@ def vector_16():
     }
 
 
-# ─── Meta Hash Test Vector ────────────────────────────────────────────────
-
-def vector_meta_hash():
-    """TV-MH: meta_hash computation using TV-03's real content_hash"""
-    fields = {
-        "meta_version": 1,
-        "type": "skill",
-        "name": "code-review",
-        "version": 3,
-        "description": "Reviews code for quality and security issues.",
-        "authors": ["alice <alice@example.com>"],
-        "generated_by": "claude-code/4.0",
-        "source_repo": "github.com/alice/code-review",
-        "source_commit": "abc123def456789",
-        "published_at": "2026-04-01T14:32:00Z",
-        "content_hash": "sha256:9c9c3591140eae4e0f047060470af98da00629b668f152ac6d4846e64ff91d40",
-    }
-    canonical = json.dumps(fields, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    return {
-        "title": "Meta hash computation (Section 8) — uses TV-03 content_hash",
-        "input_fields": fields,
-        "jcs_canonical": canonical,
-        "jcs_hex": canonical.encode("utf-8").hex(),
-        "meta_hash": meta_hash(fields),
-    }
-
-
-def vector_meta_hash_derived():
-    """TV-MH2: meta_hash with derived_from — provenance chain from TV-MH"""
-    # Bob adapted Alice's code-review (TV-03/TV-MH) into react-testing (TV-06)
-    # source_hash = Alice's content_hash (TV-03), content_hash = Bob's content (TV-06)
-    fields = {
-        "meta_version": 1,
-        "type": "skill",
-        "name": "react-testing",
-        "version": 1,
-        "description": "Testing utilities for React components.",
-        "authors": ["bob <bob@example.com>"],
-        "source_repo": "github.com/bob/react-testing",
-        "published_at": "2026-04-01T16:00:00Z",
-        "content_hash": "sha256:9ea0a30f2b9a2ad72eb7cacff1870916ee64e64ade8c4b8aca4603c5aad0bc43",
-        "derived_from": [
-            {
-                "source": "github.com/alice/code-review",
-                "relation": "adapt",
-                "source_hash": "sha256:9c9c3591140eae4e0f047060470af98da00629b668f152ac6d4846e64ff91d40",
-            }
-        ],
-    }
-    canonical = json.dumps(fields, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    return {
-        "title": "Meta hash with derived_from (Section 8) — TV-06 content, TV-03 source (chains to TV-MH)",
-        "input_fields": fields,
-        "jcs_canonical": canonical,
-        "jcs_hex": canonical.encode("utf-8").hex(),
-        "meta_hash": meta_hash(fields),
-    }
-
-
 # ─── Output ────────────────────────────────────────────────────────────────
 
 def print_separator():
@@ -471,22 +393,6 @@ def main():
             print(f"  Note: {v['note']}")
         print()
 
-    # Meta hash vectors
-    print_separator()
-    mv = vector_meta_hash()
-    print(f"TV-MH: {mv['title']}")
-    print(f"  JCS canonical JSON:")
-    print(f"    {mv['jcs_canonical']}")
-    print(f"  meta_hash: {mv['meta_hash']}")
-    print()
-
-    mv2 = vector_meta_hash_derived()
-    print(f"TV-MH2: {mv2['title']}")
-    print(f"  JCS canonical JSON:")
-    print(f"    {mv2['jcs_canonical']}")
-    print(f"  meta_hash: {mv2['meta_hash']}")
-    print()
-
     # Verify determinism — run twice and compare
     print_separator()
     print("Determinism check: regenerating all hashes...")
@@ -497,6 +403,50 @@ def main():
             if key in v1 and key in v2:
                 assert v1[key] == v2[key], f"TV-{v1['id']} non-deterministic on {key}!"
     print("  All 16 vectors are deterministic. ✓")
+
+    print_separator()
+    print("Cross-validation: generate_test_vectors vs moat_hash.py...")
+    import tempfile, pathlib
+
+    _xv_cases: list[tuple[str, dict[str, bytes]]] = [
+        ("TV-03 (3 ASCII-path files)", {
+            "SKILL.md": b"# Code Review\n",
+            "config.yaml": b"timeout: 30\n",
+            "lib/helpers.py": b"def greet():\n    return 'hello'\n",
+        }),
+        ("TV-07 (hidden file)", {
+            "SKILL.md": b"# My Skill\n",
+            ".env.example": b"API_KEY=changeme\n",
+        }),
+        ("TV-14 (sort edge cases)", {
+            "a-b": b"hyphen\n",
+            "a.b": b"dot\n",
+            "a/b": b"slash\n",
+        }),
+    ]
+
+    all_ok = True
+    for label, file_map in _xv_cases:
+        expected = content_hash_directory(file_map)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            for rel, data in file_map.items():
+                p = root / rel
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_bytes(data)
+            got = moat_hash.content_hash(root)
+        if expected == got:
+            print(f"  {label}: OK ({expected})")
+        else:
+            print(f"  {label}: MISMATCH")
+            print(f"    generate_test_vectors: {expected}")
+            print(f"    moat_hash.py:          {got}")
+            all_ok = False
+
+    if all_ok:
+        print("  Cross-validation passed. ✓")
+    else:
+        raise AssertionError("Cross-validation FAILED — generate_test_vectors and moat_hash.py disagree")
 
 
 if __name__ == "__main__":
