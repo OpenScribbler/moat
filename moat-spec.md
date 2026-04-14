@@ -699,8 +699,8 @@ Minimum structure:
   attestation. Conforming implementations MUST NOT conflate these two fields.
 - `operator` and `name` are display labels. Conforming clients MUST NOT treat changes to these fields as signing
   identity changes and MUST NOT require re-approval when they change.
-- `updated_at` uses the registry's clock. The 24-hour staleness threshold runs against the client's own last-fetch
-  timestamp. See [Freshness Guarantee and Replay Scope](#freshness-guarantee-and-replay-scope).
+- `updated_at` uses the registry's clock. The staleness check runs against the client's own `fetched_at`
+  timestamp, not against `updated_at`. See [Freshness Guarantee and Replay Scope](#freshness-guarantee-and-replay-scope).
 - `content[].name` + `content[].type` MUST be unique within a single manifest. The compound key `(name, type)` is the normative uniqueness constraint. A manifest with two entries sharing the same `name` and `type` is malformed — conforming registries MUST NOT publish such a manifest. If the same content appears under two different `name` values, both entries are valid. Cross-registry name collisions (same name+type appearing in two different registries) are handled by the conforming client, which SHOULD display `source_uri` alongside the content name to disambiguate. The `source_uri` field (REQUIRED on every manifest entry) provides all the disambiguation data needed.
 
 ### Lockfile
