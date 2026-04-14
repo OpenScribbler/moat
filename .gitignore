@@ -7,6 +7,8 @@ panel/
 .vscode/
 __pycache__/
 CLAUDE.md
+.claude/
+.wolf/
 
 # Generated test artifacts (cosign bundles, blobs, identity metadata)
 reference/test_artifacts/

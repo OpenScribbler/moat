@@ -5,6 +5,10 @@
 *.db-wal
 *.db-shm
 
+# bd 1.0.0 embedded Dolt storage and runtime backups
+embeddeddolt/
+backup/
+
 # Daemon runtime files
 daemon.lock
 daemon.log
