@@ -553,7 +553,7 @@ These items are required for conformance. A conforming registry, a conforming cl
   | Publisher revocation encountered | Exit non-zero. Non-interactive clients MUST NOT proceed past revocation warnings. |
   | Manifest staleness exceeded | Exit non-zero. A stale manifest means the pipeline is operating on potentially outdated trust data. |
 
-  A conforming non-interactive client MUST NOT auto-accept any trust decision that requires human judgment. See `DQ-8` for the deferred pre-approval mechanism needed for CI/CD to add new registries without interactive prompts.
+  A conforming non-interactive client MUST NOT auto-accept any trust decision that requires human judgment. A pre-approval mechanism — so operators can authorize registries and signing-profile changes out-of-band, letting pipelines consume them without interactive prompts — is deferred work; see [ROADMAP.md](ROADMAP.md#non-interactive-trust-onboarding).
 
 - **Revocation archival:** Registries MAY prune revocation entries for content no longer present in their manifest after a configurable retention period. The recommended minimum retention period is **180 days**. Pruning before 180 days is non-conforming; registries MAY retain revocations indefinitely.
 

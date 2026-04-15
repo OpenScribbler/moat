@@ -30,6 +30,26 @@ The `expires_at` field is currently OPTIONAL — registries that want strict fre
 
 *Influenced by:* TUF's freshness semantics. See the Influences section in [moat-spec.md](moat-spec.md).
 
+### Non-interactive trust onboarding
+
+**CI/CD pre-approval mechanism**
+Conforming clients MUST exit non-zero on TOFU acceptance, `registry_signing_profile` changes, and other trust decisions that require human judgment. This leaves CI/CD environments with no path to add new registries or accept routine profile rotations without interactive prompts. A pre-approval mechanism is needed: a committed file (e.g., `.moat/preapproved-registries.json`) mapping registry URLs to expected signing profiles, consulted by the client before exiting non-zero. The git history of the file serves as the audit record that interactive acceptance would otherwise provide.
+
+Scope to lock before this can be specified:
+
+- **File format and location** — fixed path vs. client-configurable.
+- **Profile pinning granularity** — full `registry_signing_profile` object (strict; any rotation breaks CI until re-approved) vs. OIDC issuer/subject only (looser; wider trust surface).
+- **Rotation handling** — single pinned profile (TOFU-equivalent semantics) vs. ordered list of N acceptable profiles (allows registry rotation without downstream CI edits at the cost of added complexity).
+- **Expiry** — whether pre-approval entries carry an `expires_at` so abandoned pipelines don't trust indefinitely; mirrors the manifest staleness model.
+- **Failure-mode signals** — machine-distinguishable signals for registry-not-listed, profile mismatch against listed entry, and expired entry; extends the existing non-interactive failure table.
+- **`moat-verify` integration** — whether the standalone verify tool gains a `--preapproval <file>` flag for pipeline use or remains human-driven.
+
+**Explicit non-override (normative, not a design knob):** revocation and manifest staleness MUST NOT be pre-approvable. Tolerating staleness in CI defeats the staleness guarantee; revocation is a hard block by design.
+
+Shipping this requires a normative sub-spec, a reference implementation (per the spec rule that non-obvious requirements carry one), test vectors for each failure mode, and adversarial design review — with particular weight on whether ops teams will actually maintain the pre-approval file in practice.
+
+*Influenced by:* TUF role separation and rotation ceremonies for the pinning and rotation decisions; the existing staleness model for expiry.
+
 ### Platform support
 
 **GitLab support in Publisher Action and moat-verify**
