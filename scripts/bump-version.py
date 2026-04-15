@@ -78,6 +78,12 @@ def bump(dry_run: bool = False, check: bool = False) -> bool:
     changes = []
 
     for rel_path, pattern, template in TARGETS:
+        # --check validates version consistency across files, not date freshness.
+        # The Date field is set to today only when bumping a release; comparing it
+        # against today on every push would fail the day after every release.
+        if check and "{date}" in template:
+            continue
+
         path = REPO_ROOT / rel_path
         if not path.exists():
             print(f"  SKIP  {rel_path} (file not found)")
