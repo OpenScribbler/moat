@@ -1,11 +1,24 @@
 ---
-description: MOAT changelog conventions — how to write or edit CHANGELOG.md entries
-globs: CHANGELOG.md
+description: MOAT changelog conventions — how to write CHANGELOG.md and when spec edits require an [Unreleased] entry
+globs: CHANGELOG.md, moat-spec.md, specs/**/*.md
 ---
 
 # MOAT Changelog Conventions
 
 `CHANGELOG.md` is a public record read by spec consumers — publishers, registry operators, and conforming-client implementers. It documents **what changed** and **what the reader must do about it**. Nothing else belongs here.
+
+## Every spec edit gets a changelog entry
+
+Any change to `moat-spec.md` or a sub-spec under `specs/*.md` made after a release tag MUST be logged in `CHANGELOG.md` in the same commit. Editing spec content without a changelog entry creates silent drift between the tagged release and `main` — the release trail becomes meaningless.
+
+- If there is no `[Unreleased]` section at the top of `CHANGELOG.md`, add one.
+- Log the edit under the appropriate Keep-a-Changelog section (`Added`, `Changed`, `Removed`, `Fixed`, `Deprecated`, `Security`).
+- State whether the edit is normative or editorial. If editorial, include a phrase like "no normative change" so readers know it's a PATCH-level clarification.
+- When the next release is cut, the `[Unreleased]` contents move into the new versioned section per [RELEASING.md](../../RELEASING.md).
+
+This applies even to single-line edits. Version bumping is batched per RELEASING.md's "batch editorial fixes" policy, but `[Unreleased]` tracking is **per-commit**, not batched.
+
+Tooling-only changes (files under `scripts/`, `.github/`, `.gitignore`, `AGENTS.md`, `.claude/`, `ROADMAP.md`) are not spec content and do not need a changelog entry.
 
 ## Do not include internal process metadata
 
