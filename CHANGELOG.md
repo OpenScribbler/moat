@@ -2,6 +2,12 @@
 
 All notable changes to the MOAT specification are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **`moat-spec.md` non-interactive client subsection** — the forward-reference to a deferred pre-approval mechanism now links to [`ROADMAP.md#non-interactive-trust-onboarding`](ROADMAP.md#non-interactive-trust-onboarding) (a new Deferred item) instead of an internal tracking ID. Editorial clarification; no normative change.
+
 ## [0.6.0] — 2026-04-14 (Draft)
 
 Breaking release: content type rename, field renames, new required lockfile fields, staleness model redesign. Publishers and conforming-client implementers will need updates.
