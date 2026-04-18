@@ -18,6 +18,12 @@ on:
     paths:
       - 'registry.yml'     # Immediate run on config change (emergency revocation path)
   workflow_dispatch:       # Manual trigger for testing and on-demand refresh
+    inputs:
+      expires_hours:
+        description: 'Hours until manifest expiry (default: 72)'
+        required: false
+        default: '72'
+        type: number
 
 permissions:
   id-token: write   # Required for Sigstore OIDC keyless signing
@@ -51,6 +57,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_WORKFLOW_REF: ${{ github.workflow_ref }}
           GITHUB_SERVER_URL: ${{ github.server_url }}
+          EXPIRES_HOURS: ${{ github.event.inputs.expires_hours || '72' }}
         run: |
           python3 << 'PYEOF'
           """
@@ -75,7 +82,7 @@ jobs:
           import unicodedata
           import urllib.request
           import urllib.error
-          from datetime import datetime, timezone
+          from datetime import datetime, timedelta, timezone
           from pathlib import Path
 
           import yaml
@@ -760,13 +767,23 @@ jobs:
                           )
                   sys.exit(1)
 
+              # Auto-populated expires (moat-spec.md §Freshness Guarantee and Replay Scope):
+              # registry sets expiry = build_time + 72h by default; operators can tighten
+              # the window via the EXPIRES_HOURS workflow_dispatch input.
+              now = datetime.now(timezone.utc)
+              try:
+                  expires_hours = int(os.environ.get("EXPIRES_HOURS", "72") or "72")
+              except ValueError:
+                  expires_hours = 72
+
               # Assemble manifest
               manifest = {
                   "schema_version": 1,
                   "manifest_uri": registry_cfg["manifest_uri"],
                   "name": registry_cfg["name"],
                   "operator": registry_cfg["operator"],
-                  "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                  "updated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                  "expires": (now + timedelta(hours=expires_hours)).strftime("%Y-%m-%dT%H:%M:%SZ"),
                   "self_published": self_published,
                   "registry_signing_profile": build_registry_signing_profile(),
                   "content": manifest_items,
