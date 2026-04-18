@@ -209,7 +209,7 @@ jobs:
               items = []
               type_map = {
                   "skills": "skill",
-                  "subagents": "subagent",
+                  "agents": "agent",
                   "rules": "rules",
                   "commands": "command",
               }

@@ -261,13 +261,54 @@ jobs:
                   return None
 
 
+          def get_existing_registry_state(branch="moat-registry"):
+              """Fetch existing registry.json and revocation-tombstones.json from the moat-registry branch.
+
+              Runs in the workflow's own checkout (the Registry's own repo). On first run
+              (branch does not yet exist), returns (None, []). Returns a parsed manifest dict
+              and a list of tombstoned content_hash strings.
+              """
+              result = subprocess.run(
+                  ["git", "fetch", "--quiet", "origin", branch],
+                  capture_output=True, text=True,
+              )
+              if result.returncode != 0:
+                  return None, []
+
+              existing_manifest = None
+              result = subprocess.run(
+                  ["git", "show", "FETCH_HEAD:registry.json"],
+                  capture_output=True, text=True,
+              )
+              if result.returncode == 0:
+                  try:
+                      existing_manifest = json.loads(result.stdout)
+                  except json.JSONDecodeError:
+                      pass
+
+              existing_tombstones = []
+              result = subprocess.run(
+                  ["git", "show", "FETCH_HEAD:revocation-tombstones.json"],
+                  capture_output=True, text=True,
+              )
+              if result.returncode == 0:
+                  try:
+                      data = json.loads(result.stdout)
+                      if isinstance(data, list):
+                          existing_tombstones = data
+                  except json.JSONDecodeError:
+                      pass
+
+              return existing_manifest, existing_tombstones
+
+
           def discover_items(repo_dir, source_uri):
               """Discover content items from canonical directories or moat.yml."""
               root = Path(repo_dir)
               items = []
               type_map = {
                   "skills": "skill",
-                  "subagents": "subagent",
+                  "agents": "agent",
                   "rules": "rules",
                   "commands": "command",
               }
@@ -444,8 +485,9 @@ jobs:
               return bundle_path
 
 
-          def push_manifest(manifest_path, branch="moat-registry"):
-              """Push registry.json and registry.json.sigstore to the moat-registry branch."""
+          def push_manifest(manifest_path, tombstones_path, branch="moat-registry"):
+              """Push registry.json, registry.json.sigstore, and revocation-tombstones.json
+              to the moat-registry branch."""
               import shutil
               bundle_path = Path(str(manifest_path) + ".sigstore")
 
@@ -471,10 +513,12 @@ jobs:
 
                   shutil.copy(manifest_path, work / "registry.json")
                   shutil.copy(bundle_path, work / "registry.json.sigstore")
+                  shutil.copy(tombstones_path, work / "revocation-tombstones.json")
 
                   subprocess.run(
                       ["git", "-C", str(work), "add",
-                       "registry.json", "registry.json.sigstore"],
+                       "registry.json", "registry.json.sigstore",
+                       "revocation-tombstones.json"],
                       check=True, capture_output=True,
                   )
                   subprocess.run(
@@ -664,6 +708,33 @@ jobs:
                   print("\nerror: all sources failed — no manifest update produced", file=sys.stderr)
                   sys.exit(1)
 
+              # Tombstone logic (v0.6.0 normative, moat-spec.md "Tombstone rule"):
+              # Load prior registry state and accumulate tombstones. A revocation that existed
+              # in the prior manifest but has been removed from the new revocations array is
+              # considered pruned — its content_hash is appended to the tombstones list
+              # permanently. Tombstoned hashes MUST NOT reappear in the content array.
+              existing_manifest, existing_tombstones = get_existing_registry_state()
+              current_revocation_hashes = {r["content_hash"] for r in manifest_revocations}
+              newly_pruned = set()
+              if existing_manifest:
+                  prior_revocation_hashes = {
+                      r["content_hash"] for r in existing_manifest.get("revocations", [])
+                  }
+                  newly_pruned = prior_revocation_hashes - current_revocation_hashes
+
+              tombstones = sorted(set(existing_tombstones) | newly_pruned)
+
+              if tombstones:
+                  tombstoned_set = set(tombstones)
+                  before_count = len(manifest_items)
+                  manifest_items = [
+                      item for item in manifest_items
+                      if item["content_hash"] not in tombstoned_set
+                  ]
+                  filtered = before_count - len(manifest_items)
+                  if filtered:
+                      print(f"Filtered {filtered} tombstoned item(s) from content array.")
+
               # Assemble manifest
               manifest = {
                   "schema_version": 1,
@@ -683,7 +754,17 @@ jobs:
                   json.dump(manifest, f, indent=2)
                   f.write("\n")
 
-              print(f"\nManifest written: {len(manifest_items)} items, {len(manifest_revocations)} revocations")
+              # Write revocation-tombstones.json alongside the manifest. The file is always
+              # written (even as []) so clients have a stable artifact to reason about.
+              tombstones_path = Path("revocation-tombstones.json")
+              with open(tombstones_path, "w") as f:
+                  json.dump(tombstones, f, indent=2)
+                  f.write("\n")
+
+              print(
+                  f"\nManifest written: {len(manifest_items)} items, "
+                  f"{len(manifest_revocations)} revocations, {len(tombstones)} tombstones"
+              )
 
               # Sign manifest
               print("Signing manifest...")
@@ -692,7 +773,7 @@ jobs:
 
               # Push to moat-registry branch (not main)
               print("Pushing to moat-registry branch...")
-              push_manifest(manifest_path)
+              push_manifest(manifest_path, tombstones_path)
               print("Done. moat-registry branch updated.")
 
           main()
