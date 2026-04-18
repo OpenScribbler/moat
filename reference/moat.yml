@@ -87,6 +87,13 @@ jobs:
               ".lock", ".sum", ".mod",
           })
           VCS_DIRS = frozenset({".git", ".svn", ".hg", ".bzr", "_darcs", ".fossil"})
+          TOOLING_DIRS = frozenset({
+              ".github", ".gitlab",
+              "node_modules", ".venv", "venv", "__pycache__",
+              ".pytest_cache", ".mypy_cache", ".tox",
+              ".idea", ".vscode",
+              "dist", "build", "target",
+          })
           EXCLUDED_FILES = frozenset({"moat-attestation.json"})
           UTF8_BOM = b"\xef\xbb\xbf"
           CHUNK = 65536
@@ -204,6 +211,18 @@ jobs:
 
           # ─── Content discovery ────────────────────────────────────────────────────────
 
+          def _has_text_file(directory):
+              """Return True if directory contains at least one file with a text extension."""
+              for path in directory.rglob("*"):
+                  if not path.is_file():
+                      continue
+                  if any(part in VCS_DIRS or part in TOOLING_DIRS for part in path.parts):
+                      continue
+                  if _final_ext(path.name) in TEXT_EXTENSIONS:
+                      return True
+              return False
+
+
           def discover_items():
               root = Path(".")
               items = []
@@ -225,6 +244,7 @@ jobs:
                               })
 
               moat_yml = root / "moat.yml"
+              moat_config = {}
               if moat_yml.exists():
                   with open(moat_yml) as f:
                       moat_config = yaml.safe_load(f) or {}
@@ -236,6 +256,41 @@ jobs:
                               "type": entry.get("type", "skill"),
                               "path": item_path,
                           })
+
+              # Tier-3: undiscovered content detection (specs/publisher-action.md).
+              # Warn about content-like dirs at repo root not covered by tier-1 or tier-2.
+              covered_roots = set(type_map.keys())
+              for entry in moat_config.get("items", []):
+                  p = entry.get("path", entry.get("name", ""))
+                  if p:
+                      covered_roots.add(p.split("/")[0])
+
+              unmatched = []
+              for child in sorted(root.iterdir()):
+                  if not child.is_dir():
+                      continue
+                  if child.name.startswith("."):
+                      continue
+                  if child.name in VCS_DIRS or child.name in TOOLING_DIRS:
+                      continue
+                  if child.name in covered_roots:
+                      continue
+                  if _has_text_file(child):
+                      unmatched.append(child.name)
+
+              if unmatched:
+                  print("")
+                  for name in unmatched:
+                      print(f"Warning: directory '{name}/' looks like it may contain content items but was not attested.")
+                  print("If these are MOAT content items, add them to moat.yml:")
+                  print("")
+                  print("  items:")
+                  for name in unmatched:
+                      print(f"    - path: {name}")
+                      print(f"      type: skill")
+                      print(f"      name: {name}")
+                  print("")
+
               return items
 
 
