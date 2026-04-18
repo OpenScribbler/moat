@@ -9,21 +9,41 @@ permissions:
 
 jobs:
   close:
-    if: ${{ !contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
           script: |
+            const prNumber = context.payload.pull_request.number;
+
+            // Query the REST API for author_association instead of reading it
+            // from the pull_request_target event payload. The payload field is
+            // often empty on `opened` events even for OWNER/MEMBER/COLLABORATOR
+            // authors, which caused this workflow to auto-close the
+            // maintainer's own PRs (see v0.6.1 release cycle).
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+
+            const trusted = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+            if (trusted.has(pr.author_association)) {
+              core.info(
+                `Skipping auto-close: @${pr.user.login} has author_association=${pr.author_association}`
+              );
+              return;
+            }
+
             await github.rest.pulls.update({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              pull_number: context.payload.pull_request.number,
-              state: 'closed'
+              pull_number: prNumber,
+              state: 'closed',
             });
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.payload.pull_request.number,
-              body: 'This repository does not accept pull requests. Please open an issue to discuss proposed changes to the MOAT specification.'
+              issue_number: prNumber,
+              body: 'This repository does not accept pull requests. Please open an issue to discuss proposed changes to the MOAT specification.',
             });
