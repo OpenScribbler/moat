@@ -4,6 +4,10 @@ All notable changes to the MOAT specification are documented in this file.
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-04-17 (Draft)
+
+Reference template parity release. `reference/moat.yml` and `reference/moat-registry.yml` now implement the v0.6.0 normative requirements for revocation tombstones, undiscovered content detection, discovery summary logging, `(name, type)` uniqueness rejection, and the auto-populated `expires` field. Core spec text also picks up two editorial fixes: the `agents/` canonical-directory rename is carried through both reference templates, and the non-interactive client subsection's deferred-mechanism pointer now references `ROADMAP.md` instead of an internal tracking ID. No normative change — implementers targeting v0.6.0 do not need to re-validate against v0.6.1.
+
 ### Added
 
 - **`reference/moat-registry.yml` revocation-tombstones.json emission** — Registry Action template now implements the v0.6.0 tombstone rule from [`moat-spec.md`](moat-spec.md#registry-action-requirements). On each run the action fetches `origin/moat-registry`, computes `prior_revocations − current_revocations` to find newly-pruned hashes, appends them to the existing tombstone set (union, sorted), filters any tombstoned hash from `content[]`, and writes `revocation-tombstones.json` alongside `registry.json`. First run of an existing registry creates the file. No normative change; upstream templates now match the spec.
