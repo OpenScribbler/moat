@@ -4,8 +4,13 @@ All notable changes to the MOAT specification are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **`reference/moat-registry.yml` revocation-tombstones.json emission** — Registry Action template now implements the v0.6.0 tombstone rule from [`moat-spec.md`](moat-spec.md#registry-action-requirements). On each run the action fetches `origin/moat-registry`, computes `prior_revocations − current_revocations` to find newly-pruned hashes, appends them to the existing tombstone set (union, sorted), filters any tombstoned hash from `content[]`, and writes `revocation-tombstones.json` alongside `registry.json`. First run of an existing registry creates the file. No normative change; upstream templates now match the spec.
+
 ### Fixed
 
+- **`reference/moat.yml` + `reference/moat-registry.yml` `agents/` discovery drift** — both templates' `discover_items()` `type_map` mapped the canonical directory as `"subagents": "subagent"` instead of the v0.6.0 rename target `"agents": "agent"`. Repositories following the canonical layout had their agent content silently skipped by the Publisher, and any surviving attestations were rejected by the Registry. Now both templates discover `agents/` → `type: agent`. No spec change.
 - **`moat-spec.md` non-interactive client subsection** — the forward-reference to a deferred pre-approval mechanism now links to [`ROADMAP.md#non-interactive-trust-onboarding`](ROADMAP.md#non-interactive-trust-onboarding) (a new Deferred item) instead of an internal tracking ID. Editorial clarification; no normative change.
 
 ## [0.6.0] — 2026-04-14 (Draft)
