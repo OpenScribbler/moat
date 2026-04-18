@@ -7,6 +7,7 @@ All notable changes to the MOAT specification are documented in this file.
 ### Added
 
 - **`reference/moat-registry.yml` revocation-tombstones.json emission** — Registry Action template now implements the v0.6.0 tombstone rule from [`moat-spec.md`](moat-spec.md#registry-action-requirements). On each run the action fetches `origin/moat-registry`, computes `prior_revocations − current_revocations` to find newly-pruned hashes, appends them to the existing tombstone set (union, sorted), filters any tombstoned hash from `content[]`, and writes `revocation-tombstones.json` alongside `registry.json`. First run of an existing registry creates the file. No normative change; upstream templates now match the spec.
+- **`reference/moat-registry.yml` (name, type) uniqueness rejection** — Registry Action template now enforces the v0.6.0 normative constraint from [`moat-spec.md §Registry manifest format`](moat-spec.md#registry-manifest-format) and [`specs/registry-action.md` step 7](specs/registry-action.md). After assembling `manifest_items` and applying tombstone filtering, the action groups entries by the `(name, type)` compound key; if any group has more than one member, the action prints a structured error to stderr listing each conflict with its `source_uri` and Rekor entry URL, then exits non-zero. No normative change; upstream template now matches the spec.
 
 ### Fixed
 

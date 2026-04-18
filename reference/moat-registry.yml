@@ -735,6 +735,31 @@ jobs:
                   if filtered:
                       print(f"Filtered {filtered} tombstoned item(s) from content array.")
 
+              # (name, type) uniqueness enforcement (moat-spec.md:
+              # "content[].name + content[].type MUST be unique within a single manifest";
+              # registry-action.md step 7 — fail non-zero on duplicates.)
+              groups = {}
+              for item in manifest_items:
+                  groups.setdefault((item["name"], item["type"]), []).append(item)
+              duplicates = sorted(
+                  ((key, members) for key, members in groups.items() if len(members) > 1),
+                  key=lambda kv: kv[0],
+              )
+              if duplicates:
+                  print(
+                      "\nerror: duplicate (name, type) entries in manifest — cannot publish.",
+                      file=sys.stderr,
+                  )
+                  for (name, item_type), members in duplicates:
+                      print(f"  ({name}, {item_type}):", file=sys.stderr)
+                      for m in members:
+                          rekor_uri = f"{REKOR_URL}/api/v1/log/entries?logIndex={m['rekor_log_index']}"
+                          print(
+                              f"    - {m['source_uri']} — {rekor_uri}",
+                              file=sys.stderr,
+                          )
+                  sys.exit(1)
+
               # Assemble manifest
               manifest = {
                   "schema_version": 1,
