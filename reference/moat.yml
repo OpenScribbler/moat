@@ -434,22 +434,35 @@ jobs:
               is_private = check_visibility()
 
               items = discover_items()
-              if not items:
-                  print("No content items found. Exiting without updating attestation.")
-                  sys.exit(0)
 
-              # Load existing revocations to preserve them
-              existing = load_existing_attestation()
-              existing_revocations = (existing or {}).get("revocations", [])
+              # Canonical category dirs that exist but yielded no items,
+              # for the discovery summary "Skipped" list.
+              category_dirs = {
+                  "skills": "skill",
+                  "agents": "agent",
+                  "rules": "rules",
+                  "commands": "command",
+              }
+              root = Path(".")
+              empty_canonical_dirs = [
+                  f"{d}/ (empty)"
+                  for d in category_dirs
+                  if (root / d).is_dir()
+                  and not any(item["path"].parent == (root / d) for item in items)
+              ]
 
               attested_items = []
+              skipped_items = []
+              type_counts = {}
               for item in items:
                   name = item["name"]
-                  print(f"  Item: {name} ({item['type']})")
+                  item_type = item["type"]
+                  print(f"  Item: {name} ({item_type})")
                   try:
                       hash_value = moat_content_hash(item["path"])
                   except ValueError as e:
                       print(f"    WARNING: Hash failed — {e}; skipping.")
+                      skipped_items.append((item["path"], str(e)))
                       continue
 
                   print(f"    Content hash: {hash_value}")
@@ -464,10 +477,49 @@ jobs:
                       "rekor_log_id": log_id,
                       "rekor_log_index": log_index,
                   })
+                  type_counts[item_type] = type_counts.get(item_type, 0) + 1
+
+              # Discovery summary (specs/publisher-action.md §Undiscovered Content Detection).
+              # Canonical types ordered per the spec example; custom types appended in sort order.
+              display_plurals = {"skill": "skills", "agent": "agents", "rules": "rules", "command": "commands"}
+              breakdown_parts = [
+                  f"{type_counts[t]} {display_plurals[t]}"
+                  for t in display_plurals
+                  if t in type_counts
+              ]
+              for t in sorted(type_counts):
+                  if t not in display_plurals:
+                      breakdown_parts.append(f"{type_counts[t]} {t}s")
+              failed_entries = []
+              for path, reason in skipped_items:
+                  if "Symlink" in reason:
+                      short = "symlink rejected"
+                  elif "No files" in reason:
+                      short = "empty"
+                  else:
+                      short = "hash error"
+                  failed_entries.append(f"{path.as_posix()}/ ({short})")
+
+              all_skipped = empty_canonical_dirs + failed_entries
+              summary = f"Attested {len(attested_items)} items"
+              if breakdown_parts:
+                  summary += f": {', '.join(breakdown_parts)}"
+              summary += "."
+              if all_skipped:
+                  summary += f" Skipped: {', '.join(all_skipped)}."
+              print(summary)
+
+              if not items:
+                  print("No content items found. Exiting without updating attestation.")
+                  sys.exit(0)
 
               if not attested_items:
                   print("No items successfully attested. Exiting.")
                   sys.exit(1)
+
+              # Load existing revocations to preserve them.
+              existing = load_existing_attestation()
+              existing_revocations = (existing or {}).get("revocations", [])
 
               attestation = {
                   "schema_version": 1,
