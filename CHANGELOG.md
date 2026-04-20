@@ -4,6 +4,13 @@ All notable changes to the MOAT specification are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Trusted-Root Acquisition subsection (`moat-spec.md §Trust Model`)** — three normative modes for obtaining the Sigstore trusted root: bundled default (staleness-gated, 90/180/365-day cliff), per-registry override via manifest/index `trusted_root` pointer, and invocation-time override via client flag. Defines precedence (invocation > per-registry > bundled) and rationale for exempting operator-supplied roots from the staleness cliff. Unblocks conforming clients shipping a bundled public-good trusted root while still permitting private Sigstore deployments.
+- **Rename-attack binding (normative for GitHub Actions issuer)** — upgrades the prior informative risk note into a normative MUST for clients verifying manifests signed by GitHub Actions. Clients MUST match the Fulcio certificate's `sourceRepositoryIdentifier` (OID `1.3.6.1.4.1.57264.1.15`) and `sourceRepositoryOwnerIdentifier` (OID `1.3.6.1.4.1.57264.1.17`) against the pinned numeric IDs in `signing_profile`. Includes correction table calling out that OIDs `.1.12` / `.1.13` (URI / digest) are rename-mutable and NOT sufficient for this binding.
+- **`signing_profile` schema extension (`moat-spec.md §Data Formats`)** — adds `repository_id` and `repository_owner_id` (REQUIRED for GitHub Actions issuer, OPTIONAL otherwise), plus optional `profile_version`, `subject_regex`, `issuer_regex`. Back-compat rule: absent `profile_version` is treated as v1. Regex fields constrain fuzzy identity matching but MUST NOT relax the numeric-ID binding above.
+- **Trust State Error Vocabulary (`moat-spec.md §Trust Model`)** — normative classification of per-fetch trust decisions: `MOAT_SIGNED`, `MOAT_UNSIGNED`, `MOAT_INVALID`, `MOAT_IDENTITY_MISMATCH`, `MOAT_IDENTITY_UNPINNED`, `MOAT_TRUSTED_ROOT_STALE`. Reserves `MOAT_REVOKED` for a future revocation-propagation extension. Gives tooling, telemetry, and UI surfaces a common vocabulary without mandating a wire format.
+
 ## [0.6.1] — 2026-04-17 (Draft)
 
 Reference template parity release. `reference/moat.yml` and `reference/moat-registry.yml` now implement the v0.6.0 normative requirements for revocation tombstones, undiscovered content detection, discovery summary logging, `(name, type)` uniqueness rejection, and the auto-populated `expires` field. Core spec text also picks up two editorial fixes: the `agents/` canonical-directory rename is carried through both reference templates, and the non-interactive client subsection's deferred-mechanism pointer now references `ROADMAP.md` instead of an internal tracking ID. No normative change — implementers targeting v0.6.0 do not need to re-validate against v0.6.1.
