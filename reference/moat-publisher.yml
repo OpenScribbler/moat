@@ -243,7 +243,7 @@ jobs:
                                   "path": item_dir,
                               })
 
-              moat_yml = root / "moat.yml"
+              moat_yml = root / ".moat/publisher.yml"
               moat_config = {}
               if moat_yml.exists():
                   with open(moat_yml) as f:
@@ -282,7 +282,7 @@ jobs:
                   print("")
                   for name in unmatched:
                       print(f"Warning: directory '{name}/' looks like it may contain content items but was not attested.")
-                  print("If these are MOAT content items, add them to moat.yml:")
+                  print("If these are MOAT content items, add them to .moat/publisher.yml:")
                   print("")
                   print("  items:")
                   for name in unmatched:
@@ -423,13 +423,13 @@ jobs:
               now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
               # Derive publisher_workflow_ref from GITHUB_WORKFLOW_REF.
-              # Format: "owner/repo/.github/workflows/moat.yml@refs/heads/main"
+              # Format: "owner/repo/.github/workflows/moat-publisher.yml@refs/heads/main"
               # Strip the "owner/repo/" prefix to get the portable ref.
               workflow_ref_env = os.environ.get("GITHUB_WORKFLOW_REF", "")
               if workflow_ref_env and repo and workflow_ref_env.startswith(repo + "/"):
                   publisher_workflow_ref = workflow_ref_env[len(repo) + 1:]
               else:
-                  publisher_workflow_ref = ".github/workflows/moat.yml@refs/heads/main"
+                  publisher_workflow_ref = ".github/workflows/moat-publisher.yml@refs/heads/main"
 
               is_private = check_visibility()
 

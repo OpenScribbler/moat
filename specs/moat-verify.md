@@ -191,7 +191,7 @@ Fail (exit 1) if: source URI unreachable; `moat-attestation.json` missing or mal
 Verify the Rekor entry using the same procedure as Step 4, plus: verify certificate OIDC issuer is
 `https://token.actions.githubusercontent.com` and certificate subject matches:
 ```
-https://github.com/<owner>/<repo>/.github/workflows/moat.yml@refs/heads/<branch>
+https://github.com/<owner>/<repo>/.github/workflows/moat-publisher.yml@refs/heads/<branch>
 ```
 
 **`moat-verify` MUST report the actual OIDC identity found — it MUST NOT decide whether this identity is the legitimate
@@ -201,7 +201,7 @@ owner of the source repository. That decision belongs to the End User.**
 [✓] Publisher Rekor attestation verified
     Log ID:        <rekor-log-id>
     Log Index:     <index>
-    OIDC Identity: https://github.com/alice/my-skills/.github/workflows/moat.yml@refs/heads/main
+    OIDC Identity: https://github.com/alice/my-skills/.github/workflows/moat-publisher.yml@refs/heads/main
 ```
 
 ---

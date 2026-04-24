@@ -4,12 +4,23 @@ All notable changes to the MOAT specification are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **Config file paths — filename rename for disambiguation (`specs/publisher-action.md`, `specs/registry-action.md`, `moat-spec.md`)** — publisher tier-2 discovery config moves from `moat.yml` at repo root to `.moat/publisher.yml`; registry operator config moves from `registry.yml` at repo root to `.moat/registry.yml`; publisher workflow template renames from `.github/workflows/moat.yml` to `.github/workflows/moat-publisher.yml`. Output artifacts (`moat-attestation.json`, `registry.json`) and the Registry Action workflow filename (`.github/workflows/moat-registry.yml`) are unchanged. This is a hard cut — no dual-read, no grace period, no legacy-path OIDC fallback.
+
 ### Added
 
+- **`.moat/` directory reservation (`specs/publisher-action.md`)** — normative MUST: publishers reserve `.moat/` at the repo root for MOAT protocol files. Currently defined files are `.moat/publisher.yml` (tier-2 discovery) and `.moat/registry.yml` (registry operator config). Publisher Action MUST warn on any file under `.moat/` matching `^[^.].*\.(yml|yaml)$` that is not a defined config file; non-YAML files (e.g., `README.md`, `.gitkeep`) MUST NOT trigger the warning. Files under `.moat/` MUST NOT be included in the attestation payload.
+- **Actionable error messages for migration (`specs/publisher-action.md §Actionable Error Messages`)** — Publisher Action SHOULD emit diagnostics for two common misconfigurations: (1) legacy `moat.yml` present at repo root without a `.moat/publisher.yml` sibling, and (2) workflow renamed to `.github/workflows/moat-publisher.yml` but a `paths:` allow-list trigger still references `moat.yml`. Messages are log-only, not failure gates.
+- **`.moat` in Undiscovered Content Detection exclusion list (`specs/publisher-action.md`)** — detection rule exclusion set now includes `.moat` alongside `.git`, `.github`, `node_modules`, `.venv`, `__pycache__`. Prevents the reservation directory from being reported as potentially undiscovered content.
 - **Trusted-Root Acquisition subsection (`moat-spec.md §Trust Model`)** — three normative modes for obtaining the Sigstore trusted root: bundled default (staleness-gated, 90/180/365-day cliff), per-registry override via manifest/index `trusted_root` pointer, and invocation-time override via client flag. Defines precedence (invocation > per-registry > bundled) and rationale for exempting operator-supplied roots from the staleness cliff. Unblocks conforming clients shipping a bundled public-good trusted root while still permitting private Sigstore deployments.
 - **Rename-attack binding (normative for GitHub Actions issuer)** — upgrades the prior informative risk note into a normative MUST for clients verifying manifests signed by GitHub Actions. Clients MUST match the Fulcio certificate's `sourceRepositoryIdentifier` (OID `1.3.6.1.4.1.57264.1.15`) and `sourceRepositoryOwnerIdentifier` (OID `1.3.6.1.4.1.57264.1.17`) against the pinned numeric IDs in `signing_profile`. Includes correction table calling out that OIDs `.1.12` / `.1.13` (URI / digest) are rename-mutable and NOT sufficient for this binding.
 - **`signing_profile` schema extension (`moat-spec.md §Data Formats`)** — adds `repository_id` and `repository_owner_id` (REQUIRED for GitHub Actions issuer, OPTIONAL otherwise), plus optional `profile_version`, `subject_regex`, `issuer_regex`. Back-compat rule: absent `profile_version` is treated as v1. Regex fields constrain fuzzy identity matching but MUST NOT relax the numeric-ID binding above.
 - **Trust State Error Vocabulary (`moat-spec.md §Trust Model`)** — normative classification of per-fetch trust decisions: `MOAT_SIGNED`, `MOAT_UNSIGNED`, `MOAT_INVALID`, `MOAT_IDENTITY_MISMATCH`, `MOAT_IDENTITY_UNPINNED`, `MOAT_TRUSTED_ROOT_STALE`. Reserves `MOAT_REVOKED` for a future revocation-propagation extension. Gives tooling, telemetry, and UI surfaces a common vocabulary without mandating a wire format.
+
+### Removed
+
+- **OIDC legacy-path fallback clauses (`specs/publisher-action.md`, `specs/registry-action.md`)** — deleted the fallback text that instructed Registry Actions to verify pre-v0.7.0 attestations against `.github/workflows/moat.yml@refs/heads/main` when `publisher_workflow_ref` was absent. Registries now MUST downgrade items missing `publisher_workflow_ref` to `Signed` rather than falling back to a legacy path.
 
 ## [0.6.1] — 2026-04-17 (Draft)
 

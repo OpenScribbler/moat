@@ -159,7 +159,7 @@ repository is a self-publishing operator.
 **[`reference/moat_verify.py`](reference/moat_verify.py)** — Python reference implementation of `moat-verify` —
 standalone verification tool supporting online (`--registry`) and offline (`--lockfile`) modes.
 
-**[`reference/moat.yml`](reference/moat.yml)** — Publisher Action workflow template. Drop into `.github/workflows/`
+**[`reference/moat-publisher.yml`](reference/moat-publisher.yml)** — Publisher Action workflow template. Drop into `.github/workflows/`
 to produce source-side attestations and qualify for the Dual-Attested tier.
 
 **[`reference/moat-registry.yml`](reference/moat-registry.yml)** — Registry Action workflow template. Drop into
@@ -281,7 +281,7 @@ agents/
 The [Publisher Action](specs/publisher-action.md) uses a two-tier discovery model:
 
 - **Tier 1:** Canonical category directories
-- **Tier 2:** `moat.yml` for custom layouts; when present it overrides Tier 1
+- **Tier 2:** `.moat/publisher.yml` for custom layouts; when present it overrides Tier 1
 
 `moat-attestation.json` is a reserved filename. The [Publisher Action](specs/publisher-action.md) writes this file to a
 dedicated `moat-attestation` branch — it is never present in the source branch and is therefore never included in
@@ -552,7 +552,7 @@ These items are required for conformance. A conforming registry, a conforming cl
 
 - **Content type registry** — normative list of current types (`skill`, `agent`, `rules`, `command`), category
   directory names, and deferred types (`hook`, `mcp`).
-- **Repository layout convention** — canonical directory structure and two-tier discovery model (`moat.yml` override).
+- **Repository layout convention** — canonical directory structure and two-tier discovery model (`.moat/publisher.yml` override).
 - **Registry manifest format** — the signed document a registry publishes. The core artifact of MOAT. Top-level
   fields: `schema_version`, `manifest_uri`, `name`, `operator`, `updated_at`, `registry_signing_profile`,
   `content`, `revocations`. Per-item entries: `name`, `display_name`, `content_hash`, `source_uri`, `attested_at`,
@@ -676,7 +676,7 @@ These items are required for conformance. A conforming registry, a conforming cl
   test vectors. Two independent implementations in different languages must pass all test vectors before the spec
   advances beyond Draft.
 - **[`reference/moat_verify.py`](reference/moat_verify.py)** — `moat-verify` reference implementation (Python). Spec: [`specs/moat-verify.md`](specs/moat-verify.md)
-- **[`reference/moat.yml`](reference/moat.yml)** — Publisher Action workflow template. Spec: [`specs/publisher-action.md`](specs/publisher-action.md)
+- **[`reference/moat-publisher.yml`](reference/moat-publisher.yml)** — Publisher Action workflow template. Spec: [`specs/publisher-action.md`](specs/publisher-action.md)
 - **[`reference/moat-registry.yml`](reference/moat-registry.yml)** — Registry Action workflow template. Spec: [`specs/registry-action.md`](specs/registry-action.md)
 - **[`reference/generate_test_vectors.py`](reference/generate_test_vectors.py)** — **Normative.** See [Reference implementations](#reference-implementations) above for the authoritative description.
 
