@@ -5,7 +5,7 @@ name: MOAT Registry Action
 #
 # The action pushes registry.json to the `moat-registry` branch, NOT to the
 # branch that triggered it. An unscoped `push` trigger on main is therefore
-# safe, but the `paths: ['registry.yml']` trigger is intentional: a config
+# safe, but the `paths: ['.moat/registry.yml']` trigger is intentional: a config
 # change (e.g., adding a revocation) immediately kicks off a run — this is
 # the normative emergency revocation path.
 #
@@ -16,7 +16,7 @@ on:
     - cron: '0 0 * * *'   # Daily at midnight UTC — adjust interval as needed
   push:
     paths:
-      - 'registry.yml'     # Immediate run on config change (emergency revocation path)
+      - '.moat/registry.yml'     # Immediate run on config change (emergency revocation path)
   workflow_dispatch:       # Manual trigger for testing and on-demand refresh
 
 permissions:
@@ -56,7 +56,7 @@ jobs:
           """
           MOAT Registry Action — reference implementation v0.1.0
 
-          Reads registry.yml, crawls sources, determines trust tiers, signs
+          Reads .moat/registry.yml, crawls sources, determines trust tiers, signs
           per-item canonical payloads and the manifest, writes registry.json
           and registry.json.sigstore.
 
@@ -190,9 +190,9 @@ jobs:
           # ─── Config ───────────────────────────────────────────────────────────────────
 
           def load_config():
-              config_path = Path("registry.yml")
+              config_path = Path(".moat/registry.yml")
               if not config_path.exists():
-                  print("error: registry.yml not found", file=sys.stderr)
+                  print("error: .moat/registry.yml not found", file=sys.stderr)
                   sys.exit(1)
               with open(config_path) as f:
                   config = yaml.safe_load(f)
@@ -262,7 +262,7 @@ jobs:
 
 
           def discover_items(repo_dir, source_uri):
-              """Discover content items from canonical directories or moat.yml."""
+              """Discover content items from canonical directories or .moat/publisher.yml."""
               root = Path(repo_dir)
               items = []
               type_map = {
@@ -283,8 +283,8 @@ jobs:
                                   "source_uri": source_uri,
                               })
 
-              # moat.yml discovery (items with explicit name/type)
-              moat_yml = root / "moat.yml"
+              # .moat/publisher.yml discovery (items with explicit name/type)
+              moat_yml = root / ".moat/publisher.yml"
               if moat_yml.exists():
                   with open(moat_yml) as f:
                       moat_config = yaml.safe_load(f) or {}
@@ -317,7 +317,7 @@ jobs:
               owner_repo = _github_owner_repo(source_uri)
               if not owner_repo:
                   return None
-              ref = publisher_workflow_ref or ".github/workflows/moat.yml@refs/heads/main"
+              ref = publisher_workflow_ref or ".github/workflows/moat-publisher.yml@refs/heads/main"
               return f"https://github.com/{owner_repo}/{ref}"
 
 
@@ -526,7 +526,7 @@ jobs:
               any_source_succeeded = False
               self_published = False
 
-              # Registry-initiated revocations from registry.yml
+              # Registry-initiated revocations from .moat/registry.yml
               for rev in config.get("revocations") or []:
                   manifest_revocations.append({
                       "content_hash": rev["content_hash"],
@@ -560,7 +560,7 @@ jobs:
 
                           attestation = get_moat_attestation(work_dir)
                           attested_hashes = {}
-                          publisher_workflow_ref = ".github/workflows/moat.yml@refs/heads/main"
+                          publisher_workflow_ref = ".github/workflows/moat-publisher.yml@refs/heads/main"
                           publisher_revocations = []
                           if attestation:
                               print("  Found moat-attestation.json")

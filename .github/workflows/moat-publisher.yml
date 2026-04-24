@@ -224,7 +224,7 @@ jobs:
                                   "path": item_dir,
                               })
 
-              moat_yml = root / "moat.yml"
+              moat_yml = root / ".moat/publisher.yml"
               if moat_yml.exists():
                   with open(moat_yml) as f:
                       moat_config = yaml.safe_load(f) or {}
@@ -368,13 +368,13 @@ jobs:
               now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
               # Derive publisher_workflow_ref from GITHUB_WORKFLOW_REF.
-              # Format: "owner/repo/.github/workflows/moat.yml@refs/heads/main"
+              # Format: "owner/repo/.github/workflows/moat-publisher.yml@refs/heads/main"
               # Strip the "owner/repo/" prefix to get the portable ref.
               workflow_ref_env = os.environ.get("GITHUB_WORKFLOW_REF", "")
               if workflow_ref_env and repo and workflow_ref_env.startswith(repo + "/"):
                   publisher_workflow_ref = workflow_ref_env[len(repo) + 1:]
               else:
-                  publisher_workflow_ref = ".github/workflows/moat.yml@refs/heads/main"
+                  publisher_workflow_ref = ".github/workflows/moat-publisher.yml@refs/heads/main"
 
               is_private = check_visibility()
 
