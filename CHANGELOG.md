@@ -4,6 +4,8 @@ All notable changes to the MOAT specification are documented in this file.
 
 ## [Unreleased]
 
+Two-track release: (1) filename and directory disambiguation for publisher and registry config files, and (2) normative hardening of signing-identity verification against repository rename attacks. No output-file format or wire-format changes. Publishers and registry operators migrate the rename in a single commit; see migration steps below. Clients that already pin `signing_profile` by Fulcio certificate extensions will pick up the rename-attack binding with no code changes.
+
 ### Changed
 
 - **Config file paths — filename rename for disambiguation (`specs/publisher-action.md`, `specs/registry-action.md`, `moat-spec.md`)** — publisher tier-2 discovery config moves from `moat.yml` at repo root to `.moat/publisher.yml`; registry operator config moves from `registry.yml` at repo root to `.moat/registry.yml`; publisher workflow template renames from `.github/workflows/moat.yml` to `.github/workflows/moat-publisher.yml`. Output artifacts (`moat-attestation.json`, `registry.json`) and the Registry Action workflow filename (`.github/workflows/moat-registry.yml`) are unchanged. This is a hard cut — no dual-read, no grace period, no legacy-path OIDC fallback.
@@ -21,6 +23,25 @@ All notable changes to the MOAT specification are documented in this file.
 ### Removed
 
 - **OIDC legacy-path fallback clauses (`specs/publisher-action.md`, `specs/registry-action.md`)** — deleted the fallback text that instructed Registry Actions to verify pre-v0.7.0 attestations against `.github/workflows/moat.yml@refs/heads/main` when `publisher_workflow_ref` was absent. Registries now MUST downgrade items missing `publisher_workflow_ref` to `Signed` rather than falling back to a legacy path.
+
+### Migration (publishers)
+
+On a clean working tree, perform all edits in a single commit:
+
+1. `git mv .github/workflows/moat.yml .github/workflows/moat-publisher.yml`
+2. If a tier-2 `moat.yml` exists: `mkdir -p .moat && git mv moat.yml .moat/publisher.yml`
+3. If the workflow has a custom `paths:` allow-list referencing `moat.yml`, update it to `.moat/publisher.yml`. (The reference workflow does not need this edit — it uses `paths-ignore`, not `paths:`.)
+4. Commit and push.
+
+### Migration (registry operators)
+
+On a clean working tree, perform all edits in a single commit:
+
+1. `mkdir -p .moat && git mv registry.yml .moat/registry.yml`
+2. Update the `paths:` trigger in `.github/workflows/moat-registry.yml` from `['registry.yml']` to `['.moat/registry.yml']`. (If using the reference workflow, replace it with the v0.7.0 version from `reference/moat-registry.yml`.)
+3. Commit and push.
+
+Emergency revocation path is unchanged: editing `.moat/registry.yml` with a new entry continues to trigger an immediate rebuild on the `moat-registry` branch.
 
 ## [0.6.1] — 2026-04-17 (Draft)
 
