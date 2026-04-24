@@ -4,7 +4,7 @@ A protocol for publishing AI agent content through signed registries — no keys
 
 | | |
 |---|---|
-| **Version** | 0.7.0 (Draft) |
+| **Version** | 0.7.1 (Draft) |
 | **Status** | Draft — spec complete; reference implementations in progress |
 | **Specification** | [`moat-spec.md`](moat-spec.md) |
 | **Changelog** | [`CHANGELOG.md`](CHANGELOG.md) |

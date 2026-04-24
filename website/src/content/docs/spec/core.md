@@ -4,9 +4,9 @@ description: The MOAT core specification — provenance and integrity protocol f
 ---
 
 :::note[Spec metadata]
-**Version:** 0.7.0 (Draft) · **Editor:** Holden Hewett · **License:** Apache-2.0 · **Repository:** [OpenScribbler/moat](https://github.com/OpenScribbler/moat)
+**Version:** 0.7.1 (Draft) · **Editor:** Holden Hewett · **License:** Apache-2.0 · **Repository:** [OpenScribbler/moat](https://github.com/OpenScribbler/moat)
 
-**Sub-specs:** [moat-verify](/spec/moat-verify) · [Publisher Action](/spec/publisher-action) · [Registry Action](/spec/registry-action)
+**Sub-specs:** [Publisher Action](/spec/publisher-action) · [Registry Action](/spec/registry-action) · [moat-verify](/spec/moat-verify)
 :::
 
 ### Document Status
@@ -152,8 +152,9 @@ repository is a self-publishing operator.
 
 ### Reference implementations
 
-**[`reference/moat_hash.py`](reference/moat_hash.py)** — Python reference implementation of the MOAT content hashing
-algorithm. Conforming implementations in any language MUST produce identical output for all test vectors.
+**[`reference/generate_test_vectors.py`](reference/generate_test_vectors.py)** — **Normative.** The test vectors produced by this script are the authoritative specification of correct hashing output. When a conforming implementation and a test vector disagree, the implementation is non-conforming. When `moat_hash.py` and a test vector disagree, `moat_hash.py` has a bug — the test vector is correct.
+
+**[`reference/moat_hash.py`](reference/moat_hash.py)** — **Informative.** Python reference implementation of the MOAT content hashing algorithm. Useful as a starting point for implementations in other languages, and as a cross-check during development. It is not the normative specification — the test vectors are. Two independent implementations in different languages must pass all test vectors before the spec advances beyond Draft.
 
 **[`reference/moat_verify.py`](reference/moat_verify.py)** — Python reference implementation of `moat-verify` —
 standalone verification tool supporting online (`--registry`) and offline (`--lockfile`) modes.
@@ -163,9 +164,6 @@ to produce source-side attestations and qualify for the Dual-Attested tier.
 
 **[`reference/moat-registry.yml`](reference/moat-registry.yml)** — Registry Action workflow template. Drop into
 `.github/workflows/` to run a MOAT registry.
-
-**[`reference/generate_test_vectors.py`](reference/generate_test_vectors.py)** — Generates the canonical test vector
-suite used to validate conforming implementations of the content hashing algorithm.
 
 ---
 
@@ -235,10 +233,10 @@ The spec defines what a conforming client must do on install and sync:
 - Surface trust tier before install confirmation
 - Surface revocation source attribution and treat publisher revocations as warnings, registry revocations as the gating
   signal
-- MUST NOT use a cached registry manifest for revocation checks when the cached copy exceeds a configurable
-  staleness threshold (default: 24 hours). When the threshold is exceeded, the client MUST sync the manifest
-  before performing revocation checks. Clients SHOULD NOT allow this threshold to be configured above 48 hours —
-  doing so widens the replay window beyond what the protocol's freshness guarantees are designed around.
+- MUST NOT use a cached registry manifest for revocation checks when the cached copy is stale. A manifest is
+  stale when the current time exceeds `expires` (if present) or exceeds `fetched_at + 72 hours` (if `expires`
+  is absent). When stale, the client MUST sync the manifest before performing revocation checks. A failed
+  refresh MUST NOT reset the staleness clock.
 - On manifest sync: check all installed content hashes against the updated `revocations` array; apply hard-block for
   registry revocations and warn-on-use for publisher revocations (see Revocation mechanism above)
 - **Private content isolation:** Conforming clients MUST NOT automatically index or submit content from private or
@@ -263,7 +261,7 @@ MOAT currently defines four normative content types, with two more deferred:
 | `mcp`      | `mcp/`       | Deferred — directory reserved, type not yet normative         |
 | `rules`    | `rules/`     | Behavior configuration files and rule bundles                 |
 | `skill`    | `skills/`    | Reusable instruction sets                                     |
-| `subagent` | `subagents/` | Specialized persona definitions with controlled tools/context |
+| `agent`    | `agents/`    | Specialized persona definitions with controlled tools/context |
 
 Each subdirectory within a category directory is one content item. The content hash covers that subdirectory as a unit.
 
@@ -277,7 +275,7 @@ hooks/
 mcp/
 rules/
 skills/
-subagents/
+agents/
 ```
 
 The [Publisher Action](/spec/publisher-action) uses a two-tier discovery model:
@@ -340,7 +338,7 @@ they serve different roles:
 - **Per-item Rekor entry:** proves this specific `content_hash` was attested at a logged point in time. Verified for
   each item being installed or verified.
 
-A conforming verifier such as [moat-verify](/spec/moat-verify) MUST verify the manifest signature AND MUST verify
+A conforming verifier such as [`moat-verify`](/spec/moat-verify) MUST verify the manifest signature AND MUST verify
 the per-item Rekor entry for each item under verification. Rekor unavailability is a hard failure — there is no fallback
 to manifest-signature-only when Rekor is offline. This is a deliberate design choice: silent degradation to an
 unverified-transparency state creates a downgrade path attackers can exploit.
@@ -358,27 +356,68 @@ What offline mode cannot verify is current registry state: revocations issued si
 and trust tier changes require a live manifest sync to reflect. Conforming clients SHOULD surface this distinction
 when operating in lockfile mode.
 
+### Trusted-Root Acquisition
+
+A conforming client cannot verify a Sigstore signature without a Sigstore trusted root — the Fulcio CA bundle, Rekor
+public keys, and timestamp authorities that anchor the signing ecosystem. This section defines the acquisition modes
+a conforming client MUST support and the staleness obligation that applies to each.
+
+**Acquisition modes (normative):** conforming clients MUST support at least the three modes below. A client MAY
+implement additional modes (for example, TUF-backed runtime refresh) provided the staleness obligation still applies.
+
+| Mode | Source | Staleness obligation |
+|---|---|---|
+| **Bundled** | Trusted root embedded in the client binary at build time | Client MUST track calendar age of the bundle and surface it to the operator before verification fails silently against rotated keys. |
+| **Per-registry override** | File path declared on the registry configuration entry | Client MUST verify the file parses as a valid Sigstore trusted root before accepting. Freshness is the operator's responsibility. |
+| **Invocation override** | File path passed at command invocation | Same as per-registry: parse-on-load, operator-owned freshness. |
+
+Precedence when more than one mode would apply: invocation override > per-registry override > bundled default. A
+client MUST emit an auditor-visible signal (stderr line, log record, or structured event) whenever a non-bundled
+acquisition mode is in effect, naming the path and the registry. Silent override is the attack surface; loud
+override is the defense.
+
+**Staleness policy for bundled roots (normative):** when a client ships a trusted root as a bundled asset, the
+client MUST enforce a maximum calendar age beyond which verification refuses to proceed. The threshold value is an
+implementation choice; the requirement is that the threshold exist and that age-at-failure be discoverable before
+the threshold is crossed. The Sigstore public-good instance rotates Fulcio CA and Rekor keys every 6 to 12 months,
+so a bundle older than the longest rotation interval cannot reliably verify newly-issued signing certificates.
+
+**Staleness policy for override roots:** override paths are explicitly out of scope for the bundled-root staleness
+policy — operators who supply their own trusted root accept responsibility for refreshing it. Conforming clients
+MUST NOT apply the bundled-root cliff to override roots. Clients MAY apply a distinct validity check derived from
+the root's own `certificateAuthorities[].validFor.end` if they wish to surface forthcoming CA expirations.
+
+**Rationale:** The three modes cover three deployment realities. Bundled roots give first-run clients a usable
+default without a network dependency. Per-registry overrides let enterprises pin a corporate Sigstore deployment
+without affecting unrelated registries. Invocation overrides give operators a break-glass path for testing and
+air-gapped environments. Collapsing the three into one — bundled only, or runtime-fetch only — forces every
+adopter into a deployment posture that breaks at least one of the three realities.
+
 ### Freshness Guarantee and Replay Scope
 
-The 24-hour staleness threshold is MOAT's freshness guarantee. MOAT does not defend against manifest replay
-attacks within that window. For a replay attack to succeed, an attacker must be able to intercept or
-cache-poison a client's manifest fetch, a revocation must have been issued after the cached manifest was
-generated, and the client must not have refreshed within the staleness threshold. These conditions narrow the
-exploitable window significantly in practice.
+MOAT adopts the TUF (The Update Framework) staleness model: the registry sets expiry, the client enforces it.
 
-**`updated_at` and the staleness threshold:** The manifest's `updated_at` field records when the registry last
-regenerated its manifest and is for display and activity monitoring only. The 24-hour staleness threshold MUST be
-computed against the client's own last-fetch timestamp — not against `updated_at`. A manifest whose `updated_at`
-is recent but which the client fetched 25 hours ago is stale; a manifest whose `updated_at` is seven days old but
-which the client fetched two hours ago is not.
+**Registry side:** Registries MAY include an `expires` field (RFC 3339 UTC) in the manifest. The Registry Action auto-populates `expires` during manifest generation. Registry operators MAY override the default value to enforce stricter freshness for their consumers.
 
-Registries MAY include an `expires_at` field (RFC 3339 UTC) in the manifest. If present, conforming clients
-MUST reject manifests where the current time is past `expires_at`. Requiring `expires_at` for all conforming
-registries is deferred to a future version: the field creates a hard liveness dependency on the registry's CI
-pipeline, and a CI outage means the registry's entire catalog goes dark for all clients. That trade-off is
-appropriate for registry operators with dedicated infrastructure and monitoring; it is not appropriate to mandate
-for hobbyist and small-team operators that the current version targets. Operators who want to enforce strict
-freshness for their consumers MAY opt in by setting `expires_at`.
+**Client side:**
+- If `expires` is present: conforming clients MUST NOT trust the manifest after the value of `expires`.
+- If `expires` is absent: conforming clients apply a spec-defined default of **72 hours** from `fetched_at` (the client's own last successful manifest fetch timestamp, recorded in the lockfile `registries[url].fetched_at` field).
+- Staleness is checked at **install time** — not continuously. A cached manifest is valid until the next install or sync operation triggers a staleness check.
+- A failed manifest refresh MUST NOT reset the staleness clock. The clock runs from the last *successful* fetch. A client that cannot refresh a stale manifest MUST NOT proceed as if the manifest were fresh.
+
+**`updated_at` vs `fetched_at`:** The manifest's `updated_at` field records when the registry last regenerated its manifest — it is for display and activity monitoring only. The staleness check MUST be computed against the client's own `fetched_at` timestamp, not against `updated_at`. A manifest whose `updated_at` is recent but which the client fetched 73 hours ago is stale; a manifest whose `updated_at` is seven days old but which the client fetched two hours ago is not.
+
+**Why 72 hours:** The 72-hour default survives the weekend test (Friday 6pm to Monday 9am is 63 hours, within the 72-hour window). A 48-hour default would produce hard failures for every developer on Monday morning, driving MOAT disabling. A 7-day default provides an exploitation window of 8 days (7d + 24h registry crawl). 72 hours bounds the worst-case exploitation window to 96 hours (72h + 24h crawl delay) while avoiding the Monday morning failure mode. Security-conscious registries SHOULD set a shorter `expires` (4h, 24h, or 48h) regardless of the default — the default only affects registries that do not configure expiry.
+
+**Air-gapped environments:** The same mechanism as TUF applies. Operators provision manifests with a long `expires` value during the provisioning step. The spec does not define a separate offline or degraded mode — any exemption triggered by network state creates an exploitation path for attackers who control network state.
+
+**Clarifying note for existing manifests:** Manifests published before the `expires` field was added will not carry this field. Conforming clients apply the 72-hour default from `fetched_at`. This is a client-side policy, not a registry assertion — the registry has not declared an explicit expiry, so the client's default applies.
+
+**No separate revocation endpoint (informative):** MOAT does not define a separate revocation-only endpoint or push notification mechanism. The `expires`-based freshness model bounds the revocation propagation window (96h worst case for default-expiry registries; 28h for 4h-expiry registries). Registries that require faster revocation propagation SHOULD set a shorter `expires` value rather than relying on a separate endpoint. This is simpler to implement, avoids new endpoint format and client polling logic, and provides equivalent security for registries that tune their expiry.
+
+**No per-entry expiry (informative):** Per-entry `expires_at` fields are not defined in this version. Per-entry expiry is only meaningful when content items have individual fetch endpoints — without per-item URLs, any expired item triggers a full manifest refresh, making per-entry expiry equivalent to manifest-level expiry. Revisit if per-item fetch endpoints are added in a future version.
+
+MOAT does not defend against manifest replay attacks within the valid window. For a replay attack to succeed, an attacker must be able to intercept or cache-poison a client's manifest fetch, a revocation must have been issued after the cached manifest was generated, and the client must not have refreshed within the staleness window.
 
 ### Signature Envelope
 
@@ -421,6 +460,79 @@ confirmation. See [Trust Anchor Model](#trust-anchor-model).
 - On subsequent fetches: if `registry_signing_profile` has changed, conforming clients MUST require End User
   re-approval before accepting the manifest. `operator` and `name` changes do NOT trigger re-approval.
 
+### Trust State Error Vocabulary
+
+Conforming clients MUST expose a trust decision for every registry fetch. This section defines the normative
+vocabulary for those decisions so that tooling, telemetry, and downstream integrations can interoperate without
+each implementation inventing its own terms.
+
+The vocabulary is a classification, not a wire format. A conforming client MAY surface these states via exit
+codes, structured error objects, log fields, or UI labels; the identifiers below are the canonical names.
+
+**Terminal states (per-fetch outcome):**
+
+| Identifier                  | Meaning                                                                                         |
+|-----------------------------|-------------------------------------------------------------------------------------------------|
+| `MOAT_SIGNED`               | Manifest signature verified; signing identity matched the pinned `registry_signing_profile`.    |
+| `MOAT_UNSIGNED`             | Manifest fetched without a `.sigstore` bundle and the registry has no pinned signing identity.  |
+| `MOAT_INVALID`              | Manifest or bundle failed cryptographic verification (bad signature, bad Rekor entry, etc.).    |
+| `MOAT_IDENTITY_MISMATCH`    | Signature verified but the signing identity does not match the pinned `registry_signing_profile`. |
+| `MOAT_IDENTITY_UNPINNED`    | Manifest declares a `registry_signing_profile` but the client has no stored pin (first fetch).  |
+| `MOAT_TRUSTED_ROOT_STALE`   | Verification refused because the trusted root used for verification is past its freshness cliff. |
+
+**Reserved (not yet in use):**
+
+- `MOAT_REVOKED` — reserved for a future revocation-propagation extension. Conforming clients MUST NOT emit
+  `MOAT_REVOKED` in this version of the spec. Future revisions will define the signaling surface.
+
+**Classification rules:**
+
+- Every fetch MUST resolve to exactly one terminal state.
+- `MOAT_SIGNED` and `MOAT_UNSIGNED` are the only success states. Every other identifier denotes a fetch that
+  MUST NOT be accepted as authoritative without explicit End User override.
+- `MOAT_INVALID` and `MOAT_IDENTITY_MISMATCH` are distinct: the former means "the crypto didn't check out";
+  the latter means "the crypto checked out but the wrong party signed it." Tooling SHOULD surface them
+  differently because the remediation differs (re-fetch vs. investigate publisher compromise).
+- `MOAT_IDENTITY_UNPINNED` is reserved for the trust-on-first-use path. If a pin exists and does not match,
+  emit `MOAT_IDENTITY_MISMATCH` instead.
+- `MOAT_TRUSTED_ROOT_STALE` is a client-local state (the trusted root bundle has aged out), not a property
+  of the fetched manifest. A fetch that would have been `MOAT_SIGNED` against a fresh root MUST be classified
+  as `MOAT_TRUSTED_ROOT_STALE` if the root is past the freshness cliff — do not silently downgrade to
+  `MOAT_UNSIGNED`.
+
+Conforming clients MAY emit additional implementation-specific identifiers, but the six states above are
+reserved names within the `MOAT_*` prefix and MUST carry the meanings defined here.
+
+---
+
+## Version Transition
+
+This section defines how conforming clients handle schema version changes when the `_version` field in the Attestation Payload advances.
+
+### Ordering: Content Hash Before `_version`
+
+When verifying an attestation payload, conforming verifiers MUST check the `content_hash` value BEFORE accepting the `_version` field. The verification order is:
+
+1. Verify `content_hash` matches the locally computed hash of the content directory.
+2. Verify `_version` is a recognized schema version.
+3. Verify the Rekor certificate identity.
+
+This ordering is load-bearing: checking `_version` first creates a window where a verifier accepts an old-format attestation for different content (a TOCTOU race). Checking content hash first ensures integrity before format acceptance.
+
+### Grace Period for `_version` Transitions
+
+When a new `_version` value is introduced:
+
+1. Conforming clients MUST accept both the previous and new `_version` values for **6 months** after the new version ships.
+2. After the grace period, the previous `_version` MUST be rejected.
+3. Publisher re-attestation during the grace period: publishers run the Publisher Action on their source branch (or wait for their registry's next crawl). Old Rekor entries remain valid and independently verifiable for the duration of the grace period.
+
+The 6-month window is calibrated to active-but-infrequent publishers: monthly CI checks cover active publishers; quarterly checks cover publishers who update seasonally. Extending beyond 6 months would increase the replay attack surface (old-format attestations accepted for longer); contracting below 6 months would break dormant-but-maintained repos.
+
+### What Counts as a `_version` Bump
+
+A `_version` bump is required when the Attestation Payload schema changes in a way that makes old payloads unverifiable. Additive-only changes (new optional fields) MAY be handled within the current `_version` using forward-compatibility rules. Breaking changes (field renames, removed fields, format changes) REQUIRE a `_version` bump and a corresponding grace period.
+
 ---
 
 ## Fork and Lineage Handling
@@ -436,9 +548,9 @@ attribution conflicts are surfaced to End Users; they are not automatic hard blo
 ### Normative core
 
 These items are required for conformance. A conforming registry, a conforming client, and a conforming verifier such as
-[moat-verify](/spec/moat-verify) all implement exactly these.
+[`moat-verify`](/spec/moat-verify) all implement exactly these.
 
-- **Content type registry** — normative list of current types (`skill`, `subagent`, `rules`, `command`), category
+- **Content type registry** — normative list of current types (`skill`, `agent`, `rules`, `command`), category
   directory names, and deferred types (`hook`, `mcp`).
 - **Repository layout convention** — canonical directory structure and two-tier discovery model (`.moat/publisher.yml` override).
 - **Registry manifest format** — the signed document a registry publishes. The core artifact of MOAT. Top-level
@@ -467,11 +579,32 @@ These items are required for conformance. A conforming registry, a conforming cl
   and subject match the declared `signing_profile`. This check is load-bearing for the Dual-Attested tier —
   without it there is no interoperability guarantee that clients are verifying the correct publisher identity.
 
-  **Risk note:** OIDC subjects derived from repository names are vulnerable to rename attacks. If a publisher
-  renames their repository, the subject claim changes, and an attacker who claims the old name could produce
-  matching attestations. Stable numeric ID claims (`repository_id` on GitHub Actions, `project_id` on GitLab)
-  avoid this problem, but verification against numeric IDs requires tooling support beyond standard `cosign`
-  flags. This is a known limitation of the current Dual-Attested verification model.
+  **Rename-attack binding (normative for GitHub Actions issuer):** OIDC subjects derived from repository names
+  are vulnerable to rename and transfer attacks. If a publisher renames or transfers their repository, the subject
+  claim changes, and an attacker who claims the old name could produce matching attestations. For signatures whose
+  issuer is `https://token.actions.githubusercontent.com`, conforming clients MUST match the immutable numeric
+  repository ID and repository owner ID embedded as OIDC extensions on the Fulcio certificate, in addition to the
+  SAN/subject match. Mismatch on any dimension (issuer, subject, repository ID, owner ID) is a verification hard
+  failure.
+
+  The authoritative OID references are:
+
+  | OID | Extension | Value |
+  |---|---|---|
+  | `1.3.6.1.4.1.57264.1.15` | `sourceRepositoryIdentifier` | Immutable numeric repository ID (decimal string) |
+  | `1.3.6.1.4.1.57264.1.17` | `sourceRepositoryOwnerIdentifier` | Immutable numeric repository-owner ID (decimal string) |
+
+  These extensions are stable across repository renames, transfers, and owner renames. The adjacent OIDs
+  `1.3.6.1.4.1.57264.1.12` (`sourceRepositoryURI`) and `1.3.6.1.4.1.57264.1.13` (`sourceRepositoryDigest`) are NOT
+  immutable — they carry the human-readable URL and the git commit SHA and change when the repository is renamed
+  or the signing commit moves. The rename-attack binding MUST use `.1.15` and `.1.17`.
+
+  For signatures issued by other OIDC providers (GitLab, Buildkite, etc.), equivalent stable-identifier bindings
+  are encouraged but remain out of scope of this version of the spec. Conforming clients MAY implement additional
+  provider-specific bindings; the GitHub Actions binding is the MUST-level floor.
+
+  **Schema:** `signing_profile.repository_id` and `signing_profile.repository_owner_id` — see
+  [signing_profile](#signing_profile) for the data format.
 
 - **Client verification protocol** — what a conforming client must check on install.
 - **Revocation mechanism** — `revocations` array in manifest (REQUIRED; empty if none). Each entry MUST include:
@@ -512,6 +645,25 @@ These items are required for conformance. A conforming registry, a conforming cl
   issued each revocation — is the primary detection mechanism after opt-in. A user who trusts only one registry has
   no cross-registry signal to compare against if that registry is compromised; this limitation cannot be addressed at
   the protocol level.
+- **Non-interactive client behavior:** Conforming clients operating in non-interactive environments (CI/CD pipelines, fleet management, headless install scripts) MUST exit non-zero and MUST provide a machine-distinguishable error signal when any of the following conditions are encountered. The signal MUST indicate the failure class — the exact mechanism (stderr prefix, structured JSON output, or distinct exit codes) is an implementation choice, but the failure class MUST be distinguishable by an automated caller:
+
+  | Condition | Required client behavior |
+  |-----------|-------------------------|
+  | TOFU signing profile acceptance required (first registry add) | Exit non-zero. A trust decision that requires human judgment MUST NOT be made silently by a pipeline. |
+  | `registry_signing_profile` change detected | Exit non-zero. A signing profile change could indicate registry key compromise. |
+  | Publisher revocation encountered | Exit non-zero. Non-interactive clients MUST NOT proceed past revocation warnings. |
+  | Manifest staleness exceeded | Exit non-zero. A stale manifest means the pipeline is operating on potentially outdated trust data. |
+
+  A conforming non-interactive client MUST NOT auto-accept any trust decision that requires human judgment. A pre-approval mechanism — so operators can authorize registries and signing-profile changes out-of-band, letting pipelines consume them without interactive prompts — is deferred work; see [ROADMAP.md](https://github.com/OpenScribbler/moat/blob/main/ROADMAP.md#non-interactive-trust-onboarding).
+
+- **Revocation archival:** Registries MAY prune revocation entries for content no longer present in their manifest after a configurable retention period. The recommended minimum retention period is **180 days**. Pruning before 180 days is non-conforming; registries MAY retain revocations indefinitely.
+
+  **Lockfile is authoritative for pruned revocations.** When a client has previously recorded a revocation in its lockfile `revoked_hashes` array and that revocation entry subsequently disappears from the registry manifest (due to pruning), the lockfile entry persists. The hard-block continues. A client MUST NOT remove a `revoked_hashes` entry because the manifest no longer carries the revocation.
+
+  **Tombstone rule (normative for Registry Action):** Registries MUST NOT re-list a content item in the `content` array if a revocation entry for that item's `content_hash` has been pruned from the `revocations` array. A content hash that was once revoked and subsequently pruned is permanently tombstoned — it MUST NOT reappear as installable content. The Registry Action enforces this via a `revocation-tombstones.json` file in the `moat-registry` branch alongside the manifest. This file contains an array of content_hash strings that must never reappear in the `content` array. The file persists between crawl runs and is appended to (never shrunk) when revocations are pruned from the `revocations` array. This closes the gap for clients who never witnessed the revocation: a previously-revoked hash that reappears in the manifest with no revocation entry would bypass the client's lockfile guard for first-time installers.
+
+  **180-day calibration:** Active developers sync at least monthly; 180 days covers dormant-but-maintained publishers who update quarterly and may sync less often. The recommended minimum ensures that even infrequent users have seen the revocation entry before pruning begins. Security-focused registries SHOULD retain revocations indefinitely.
+
 - **Lineage model** — `derived_from` for forks and adaptations.
 - **Version semantics** — `version` is an optional display label; content hash is normative identity; `attested_at` for
   freshness.
@@ -523,10 +675,10 @@ These items are required for conformance. A conforming registry, a conforming cl
 - **[`reference/moat_hash.py`](reference/moat_hash.py)** — Python reference implementation. A conforming implementation produces identical output for all
   test vectors. Two independent implementations in different languages must pass all test vectors before the spec
   advances beyond Draft.
-- **[`reference/moat_verify.py`](reference/moat_verify.py)** — `moat-verify` reference implementation (Python). Spec: [moat-verify](/spec/moat-verify)
+- **[`reference/moat_verify.py`](reference/moat_verify.py)** — `moat-verify` reference implementation (Python). Spec: [`moat-verify`](/spec/moat-verify)
 - **[`reference/moat-publisher.yml`](reference/moat-publisher.yml)** — Publisher Action workflow template. Spec: [Publisher Action](/spec/publisher-action)
 - **[`reference/moat-registry.yml`](reference/moat-registry.yml)** — Registry Action workflow template. Spec: [Registry Action](/spec/registry-action)
-- **[`reference/generate_test_vectors.py`](reference/generate_test_vectors.py)** — Generates the canonical test vector suite used to validate conforming implementations.
+- **[`reference/generate_test_vectors.py`](reference/generate_test_vectors.py)** — **Normative.** See [Reference implementations](#reference-implementations) above for the authoritative description.
 
 ### Informative profiles
 
@@ -616,7 +768,7 @@ Minimum structure:
 | `name`                             | REQUIRED                                       | Human-readable registry name                                                                                                                                                                                                    |
 | `operator`                         | REQUIRED                                       | Human-readable name of the registry operator. Display label only — changes do NOT trigger re-approval.                                                                                                                          |
 | `updated_at`                       | REQUIRED                                       | RFC 3339 UTC timestamp of when this manifest was last generated. For display and activity monitoring only — the staleness check uses the client's last-fetch timestamp, not this field.                                         |
-| `expires_at`                       | OPTIONAL                                       | RFC 3339 UTC timestamp after which conforming clients MUST reject this manifest. See [Freshness Guarantee and Replay Scope](#freshness-guarantee-and-replay-scope).                                                             |
+| `expires`                          | OPTIONAL                                       | RFC 3339 UTC timestamp after which conforming clients MUST reject this manifest. The Registry Action auto-populates this field. See [Freshness Guarantee and Replay Scope](#freshness-guarantee-and-replay-scope).               |
 | `self_published`                   | OPTIONAL                                       | `true` if the registry operator and publisher are the same entity (same repository runs both Publisher Action and Registry Action). Absent is equivalent to `false`. Conforming clients SHOULD surface this to End Users when `true`. |
 | `registry_signing_profile`         | REQUIRED                                       | The registry's CI signing identity. Conforming clients MUST track this per registry; changes on a subsequent fetch require End User re-approval before the manifest is accepted. See [Signature Envelope](#signature-envelope). |
 | `registry_signing_profile.issuer`  | REQUIRED                                       | OIDC issuer URL of the registry's CI provider                                                                                                                                                                                   |
@@ -624,7 +776,7 @@ Minimum structure:
 | `content`                          | REQUIRED                                       | Array of per-item entries                                                                                                                                                                                                       |
 | `content[].name`                   | REQUIRED                                       | Canonical identifier for the content item                                                                                                                                                                                       |
 | `content[].display_name`           | REQUIRED                                       | Human-readable name                                                                                                                                                                                                             |
-| `content[].type`                   | REQUIRED                                       | One of: `skill`, `subagent`, `rules`, `command`                                                                                                                                                                                 |
+| `content[].type`                   | REQUIRED                                       | One of: `skill`, `agent`, `rules`, `command`                                                                                                                                                                                 |
 | `content[].content_hash`           | REQUIRED                                       | `<algorithm>:<hex>` — normative identity of the content                                                                                                                                                                         |
 | `content[].source_uri`             | REQUIRED                                       | Source repository URI                                                                                                                                                                                                           |
 | `content[].attested_at`            | REQUIRED                                       | Registry attestation timestamp (RFC 3339 UTC)                                                                                                                                                                                   |
@@ -648,8 +800,9 @@ Minimum structure:
   attestation. Conforming implementations MUST NOT conflate these two fields.
 - `operator` and `name` are display labels. Conforming clients MUST NOT treat changes to these fields as signing
   identity changes and MUST NOT require re-approval when they change.
-- `updated_at` uses the registry's clock. The 24-hour staleness threshold runs against the client's own last-fetch
-  timestamp. See [Freshness Guarantee and Replay Scope](#freshness-guarantee-and-replay-scope).
+- `updated_at` uses the registry's clock. The staleness check runs against the client's own `fetched_at`
+  timestamp, not against `updated_at`. See [Freshness Guarantee and Replay Scope](#freshness-guarantee-and-replay-scope).
+- `content[].name` + `content[].type` MUST be unique within a single manifest. The compound key `(name, type)` is the normative uniqueness constraint. A manifest with two entries sharing the same `name` and `type` is malformed — conforming registries MUST NOT publish such a manifest. If the same content appears under two different `name` values, both entries are valid. Cross-registry name collisions (same name+type appearing in two different registries) are handled by the conforming client, which SHOULD display `source_uri` alongside the content name to disambiguate. The `source_uri` field (REQUIRED on every manifest entry) provides all the disambiguation data needed.
 
 ### Lockfile
 
@@ -660,10 +813,15 @@ Minimum structure:
 ```json
 {
   "moat_lockfile_version": 1,
+  "registries": {
+    "https://example.com/moat-manifest.json": {
+      "fetched_at": "2026-04-13T00:00:00Z"
+    }
+  },
   "entries": [
     {
       "name": "string",
-      "type": "skill|subagent|rules|command",
+      "type": "skill|agent|rules|command",
       "registry": "https://...",
       "content_hash": "sha256:<hex>",
       "trust_tier": "DUAL-ATTESTED|SIGNED|UNSIGNED",
@@ -680,9 +838,11 @@ Minimum structure:
 | Field                          | Required | Description                                                                                           |
 |--------------------------------|----------|-------------------------------------------------------------------------------------------------------|
 | `moat_lockfile_version`        | REQUIRED | Schema version; currently `1`                                                                         |
+| `registries`                   | REQUIRED | Per-registry tracking object; keys are registry manifest URLs                                         |
+| `registries[url].fetched_at`   | REQUIRED | RFC 3339 UTC timestamp of the client's last successful manifest fetch for this registry. Used for staleness enforcement and `moat-verify` staleness auditing. |
 | `entries`                      | REQUIRED | Array of installed content records                                                                    |
 | `entries[].name`               | REQUIRED | Content item name as recorded in the registry manifest                                                |
-| `entries[].type`               | REQUIRED | Content type; closed set: `skill`, `subagent`, `rules`, `command`                                     |
+| `entries[].type`               | REQUIRED | Content type; closed set: `skill`, `agent`, `rules`, `command`                                     |
 | `entries[].registry`           | REQUIRED | Registry manifest URL the item was installed from                                                     |
 | `entries[].content_hash`       | REQUIRED | `<algorithm>:<hex>` — normative identity of the installed item                                        |
 | `entries[].trust_tier`         | REQUIRED | Trust tier at install time: `DUAL-ATTESTED`, `SIGNED`, or `UNSIGNED`                                  |
@@ -701,6 +861,8 @@ Minimum structure:
 - `entries[].type` is a closed set in the current version. Conforming clients MUST accept entries with unrecognized type values without error — new types will be added in future versions.
 - `entries[].registry` MUST be treated as permanently stable once published. A URL change invalidates all lockfile entries referencing it.
 - `revoked_hashes` entries MUST NOT be silently removed. Clearing a revoked hash requires deliberate End User action. This prevents the remove-and-reinstall bypass: an attempt to reinstall a revoked hash is blocked by this record.
+
+**Upgrade path:** If a conforming client reads a lockfile without the `registries` key (upgrade from a pre-staleness lockfile), it SHOULD initialize the key and set `fetched_at` to the current time on the next successful manifest fetch. This prevents clients from immediately treating all installed content as stale after upgrading.
 
 Conforming clients MAY add additional fields to entries but MUST include all fields listed above. A lockfile from one
 conforming client must be readable by another.
@@ -794,9 +956,11 @@ Minimum structure:
 ### signing_profile
 
 `signing_profile` declares a publisher's expected CI signing identity on Dual-Attested manifest entries. Conforming
-clients MUST verify the Rekor certificate's OIDC issuer and subject match this field.
+clients MUST verify the Rekor certificate's OIDC issuer and subject match this field. When the issuer is GitHub
+Actions, conforming clients MUST additionally match the numeric repository and owner IDs — see the
+[rename-attack binding](#publisher-signing-identity-model) requirement.
 
-Minimum structure:
+Minimum structure (any OIDC provider):
 
 ```json
 {
@@ -805,10 +969,35 @@ Minimum structure:
 }
 ```
 
-| Field     | Required | Description                                               |
-|-----------|----------|-----------------------------------------------------------|
-| `issuer`  | REQUIRED | OIDC issuer URL from the CI provider                      |
-| `subject` | REQUIRED | OIDC subject claim as produced by the CI provider's token |
+Required structure when `issuer` is `https://token.actions.githubusercontent.com`:
+
+```json
+{
+  "issuer": "https://token.actions.githubusercontent.com",
+  "subject": "repo:owner/repo:ref:refs/heads/main",
+  "repository_id": "123456789",
+  "repository_owner_id": "987654321"
+}
+```
+
+| Field                  | Required                          | Description                                                                                   |
+|------------------------|-----------------------------------|-----------------------------------------------------------------------------------------------|
+| `issuer`               | REQUIRED                          | OIDC issuer URL from the CI provider                                                          |
+| `subject`              | REQUIRED                          | OIDC subject claim as produced by the CI provider's token                                     |
+| `repository_id`        | REQUIRED for GitHub Actions issuer; OPTIONAL for others | Decimal string matching the Fulcio cert extension at OID `1.3.6.1.4.1.57264.1.15`          |
+| `repository_owner_id`  | REQUIRED for GitHub Actions issuer; OPTIONAL for others | Decimal string matching the Fulcio cert extension at OID `1.3.6.1.4.1.57264.1.17`          |
+| `profile_version`      | OPTIONAL                          | Integer schema version for additive extensions; absent or `1` = baseline v1 shape. Current: 1 |
+| `subject_regex`        | OPTIONAL                          | Regex alternative to exact `subject` match for publishers that sign across multiple refs      |
+| `issuer_regex`         | OPTIONAL                          | Regex alternative to exact `issuer` match for organizations running multiple OIDC instances   |
+
+**Back-compatibility:** Profiles captured before versioning are treated as `profile_version: 1`. Conforming clients
+MUST accept profiles without a `profile_version` field and MUST treat them as v1. The `profile_version` field bumps
+to `2` or higher when new issuers add equivalent stable-identifier fields (e.g., GitLab `project_id`).
+
+**Regex fields:** `subject_regex` and `issuer_regex` are convenience mechanisms for publishers who sign from
+multiple branches or forked environments. When both `subject` and `subject_regex` are present, the client MUST
+accept the signature if either the exact subject OR the regex matches. Regex fields MUST NOT relax the numeric-ID
+binding requirement — they apply only to the issuer/subject dimensions.
 
 *Informative — known CI provider values:*
 
@@ -876,6 +1065,44 @@ payload = json.dumps(
 
 See [Publisher Action](/spec/publisher-action#attestation-payload-schema-normative) for the publisher-side
 signing requirement.
+
+---
+
+## Security Considerations
+
+### Revocation Propagation Worst Case
+
+The revocation propagation time under MOAT's default-expiry model is bounded as follows:
+
+**Default-expiry registries (72-hour `expires`):**
+- Publisher revokes content.
+- Registry next crawl picks up the revocation: up to **24 hours** (registry crawl interval).
+- Client manifest expires and is refreshed on next install attempt: up to **72 hours** from last fetch.
+- **Total worst case: 96 hours (4 days)** for default-expiry registries (72h expiry + 24h crawl).
+
+The crawl delay and client expiry run in parallel, not sequentially — after the manifest expires, the client refreshes on the next install attempt and immediately receives the updated manifest containing the revocation. There is no additional window after expiry. In practice, active developers trigger install or sync operations daily; the typical propagation time is under 24 hours for active users.
+
+**Security-critical registries (short `expires`, e.g., 4 hours):**
+- Registry crawl: up to 24 hours.
+- Client manifest expires and refreshes: up to 4 hours.
+- **Total worst case: 28 hours.**
+- For emergency revocations with immediate manifest regeneration: 0-hour crawl + 4-hour expiry = **4 hours**.
+
+Registry operators handling sensitive content SHOULD set `expires` to 4 hours or less to minimize the exploitation window.
+
+### Replay Attack Scope
+
+MOAT does not defend against manifest replay attacks within the valid staleness window. A replay attack requires an attacker who can intercept or cache-poison a client's manifest fetch AND a revocation that was issued after the cached manifest was generated AND a client that has not refreshed within the staleness window. These conditions narrow the exploitable window significantly in practice.
+
+### Trust Decision Attack Surface
+
+TOFU (trust-on-first-use) for manually-added registries is a known attack surface. An attacker who can intercept the first manifest fetch for a new registry can inject a malicious `registry_signing_profile`. Registries discovered through a signed Registry Index close this gap — the Index entry establishes the expected signing identity before first fetch. For manually-added registries, the End User's explicit add action is the trust bootstrap; MOAT cannot provide a stronger guarantee without a pre-established PKI.
+
+### Lockfile Integrity
+
+The lockfile is not protected by a MAC or checksum. An attacker with local write access can modify the lockfile directly. However, an attacker with local write access can also modify the installed content directly — the lockfile is not the weakest link. Detection (via `moat-verify`) is the right approach: `moat-verify` re-hashes installed content and compares against the lockfile, detecting both content tampering and lockfile manipulation when the two diverge.
+
+**Detection scope (precision note):** `moat-verify` detects accidental corruption and inconsistent modification — cases where the lockfile says hash X but content hashes to Y. It does NOT detect targeted tampering where an attacker modifies installed content AND updates the lockfile with matching hashes AND removes revocation entries consistently. This is an inherent limitation of any local-only integrity check without an external trust anchor. Users requiring stronger guarantees should verify against the registry manifest and Rekor log directly.
 
 ---
 

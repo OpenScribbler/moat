@@ -4,7 +4,7 @@ description: "Specification for the MOAT Registry Action GitHub Actions workflow
 ---
 
 :::note[Spec metadata]
-**Version:** 0.1.0 (Draft) · **Requires:** moat-spec.md ≥ 0.5.0
+**Version:** 0.2.0 (Draft) · **Requires:** moat-spec.md ≥ 0.5.0
 :::
 
 The Registry Action is the standard mechanism for producing a MOAT registry manifest. Any GitHub repository becomes a registry with a single workflow file and a `.moat/registry.yml` config — no key management, no MOAT-specific knowledge required.
@@ -18,15 +18,15 @@ The Registry Action is the standard mechanism for producing a MOAT registry mani
    a. Fetches the source repository at HEAD using an authenticated GitHub API request. Source failures (network error, non-existent repo, rate limit) are non-fatal — the run continues and the failure is logged per source.
    b. Checks source repository visibility. If private and `allow-private-source: true` is not set, skips the source with a warning. See Private Repository Guard.
    c. Attempts to fetch `moat-attestation.json` from the source's `moat-attestation` branch. If the branch or file does not exist, the source contributes Signed items only.
-3. Discovers content items from each source via the same two-tier model as the Publisher Action: canonical category directories (`skills/`, `subagents/`, `rules/`, `commands/`) or `.moat/publisher.yml` if present.
+3. Discovers content items from each source via the same two-tier model as the Publisher Action: canonical category directories (`skills/`, `agents/`, `rules/`, `commands/`) or `.moat/publisher.yml` if present.
 4. Computes content hashes for all discovered items using the MOAT algorithm (`reference/moat_hash.py`).
 5. Determines trust tier per item. See Trust Tier Determination.
 6. Signs each Signed or Dual-Attested item's canonical payload with `cosign sign-blob` using Sigstore keyless OIDC. GitHub Actions provides the OIDC token automatically — no keys or secrets required. Records the Rekor `logIndex` per item.
-7. Assembles the registry manifest (`registry.json`) with all indexed items, revocations (registry-initiated from `.moat/registry.yml` plus publisher-initiated from `moat-attestation.json` sources), and metadata fields including the runtime-derived `registry_signing_profile`.
+7. Assembles the registry manifest (`registry.json`) with all indexed items, revocations (registry-initiated from `.moat/registry.yml` plus publisher-initiated from `moat-attestation.json` sources), and metadata fields including the runtime-derived `registry_signing_profile`. Before writing the manifest, the action MUST verify that no two content entries share the same `(name, type)` compound key. If duplicates are detected, the action MUST exit non-zero with a clear error message identifying the conflicting entries and the source repositories they originated from. This enforces the normative uniqueness constraint at manifest generation time.
 8. Signs the assembled manifest with `cosign sign-blob`. The resulting bundle is written to `registry.json.sigstore` alongside `registry.json`.
 9. Pushes `registry.json` and `registry.json.sigstore` to the `moat-registry` branch with commit message `chore(moat): update registry manifest`. If the branch does not exist, the action creates it as an orphan. The `moat-registry` branch is never merged into the source branch — it contains only manifest data.
 
-**Branch isolation note:** The Registry Action pushes to `moat-registry`, not to the branch that triggered it. Pushes to `moat-registry` do not re-trigger the action, so recursive execution is structurally impossible. Registry operators MUST NOT configure the action to trigger on pushes to the `moat-registry` branch. The action MUST be configured with a schedule trigger (e.g., daily) as its primary crawl mechanism and SHOULD include `workflow_dispatch` for manual runs. The `paths: ['.moat/registry.yml']` push trigger is intentional — it makes an emergency revocation (editing `.moat/registry.yml`) immediately kick off a run.
+**Branch isolation note:** The Registry Action pushes to `moat-registry`, not to the branch that triggered it. Pushes to `moat-registry` do not re-trigger the action, so recursive execution is structurally impossible. Registry operators MUST NOT configure the action to trigger on pushes to the `moat-registry` branch. The action MUST be configured with a schedule trigger (e.g., daily) as its primary crawl mechanism and SHOULD include `workflow_dispatch` for manual runs. The `paths: ['.moat/registry.yml']` push trigger is intentional — it makes an emergency revocation (editing `.moat/registry.yml`) immediately kick off a run. When the registry repository is also a Publisher (self-publishing) or when the operator wants a compliant registry to bootstrap from two workflow files alone, the action SHOULD include a `workflow_run` trigger chaining this action after `moat-publisher.yml` completes; the `update-registry` job MUST then guard on `github.event.workflow_run.conclusion == 'success'` so the registry does not crawl after a failed publisher build.
 
 **All-sources-fail behavior:** If every source in `sources` fails to return content, the action MUST exit non-zero. A run that contacts no sources successfully produces no manifest update and must not silently succeed.
 
@@ -104,7 +104,42 @@ Publisher Rekor verification failed for skills/my-skill (log index 12345678):
   Item will be indexed as Signed.
 ```
 
-**Hash mismatch:** If the action's computed hash for an item differs from the hash recorded in `moat-attestation.json`, the action's computed hash is authoritative. The item is indexed at the computed hash, the trust tier falls to `Signed`, and the action MUST log a warning identifying the item and both hash values. The mismatch MUST be recorded in the manifest entry — see `content[].attestation_hash_mismatch` in the manifest format.
+**Hash mismatch (normative):** If the action's computed `content_hash` for an item differs from the `content_hash` recorded in `moat-attestation.json`, the Registry Action MUST downgrade the item from Dual-Attested to Signed. The action's computed hash is authoritative. Specifically:
+
+1. The item is indexed at the registry's computed hash (not the publisher's attested hash).
+2. The trust tier is set to `Signed` regardless of whether publisher Rekor entry verification would otherwise succeed.
+3. The mismatch MUST be recorded in the manifest entry as `"attestation_hash_mismatch": true` — see `content[].attestation_hash_mismatch` in the main spec manifest format.
+4. The action MUST log a clear warning identifying the item, the registry's computed hash, and the publisher's attested hash.
+
+**Ambiguous case — matching hashes but old attestation:** When the registry's computed hash matches the publisher's attested hash but the attestation is old (e.g., `attested_at` is months in the past), the item qualifies as Dual-Attested. Registry operators MAY choose to downgrade in this case as a maintenance signal, but MUST NOT set `attestation_hash_mismatch: true` — the field is reserved for actual hash mismatches, not attestation age. Age-based staleness is a maintenance signal; hash mismatch is an integrity signal. MOAT is about integrity.
+
+**Conforming client behavior on `attestation_hash_mismatch`:** Conforming clients SHOULD surface `attestation_hash_mismatch: true` to End Users when present. Clients targeting security-conscious environments MAY treat a newly-detected hash mismatch on previously installed content as a re-approval event. Clients MUST NOT hard-block on `attestation_hash_mismatch` alone — the item is still registry-signed at the Signed tier.
+
+---
+
+## Crawl Optimization (Informative)
+
+For large registries, re-signing every item on every crawl is expensive. The Registry Action SHOULD apply the following optimization:
+
+**Skip re-signing when content is unchanged:** If an item's computed `content_hash` matches the `content_hash` recorded in the previous manifest entry for that item, the existing Rekor log entry MAY be reused. The `attested_at` timestamp updates only when content changes, not on every crawl.
+
+**Identity check before reuse (informative):** Before reusing an existing Rekor entry, the action SHOULD verify that the existing entry's OIDC identity still matches the current `registry_signing_profile`. If the workflow was renamed, the repository was moved, or the signing identity changed for any reason, the action SHOULD re-sign regardless of whether the content hash changed. Reusing a Rekor entry whose OIDC identity no longer matches the current workflow misrepresents which workflow attested the content.
+
+**Reuse criteria summary:**
+
+| Condition | Action |
+|-----------|--------|
+| `content_hash` unchanged AND OIDC identity matches | Reuse existing Rekor entry; skip re-signing |
+| `content_hash` changed | Re-sign; update `attested_at` |
+| OIDC identity changed (workflow rename, repo move) | Re-sign regardless of content hash |
+
+## Manifest Size (Informative)
+
+Most registries will index 100–1,000 items; 10,000+ items is theoretical for the current version. At 1,000 items, the manifest is approximately 300KB–600KB uncompressed — manageable for HTTP clients with ETag-based caching and conditional GET (`If-None-Match`). The Registry Action SHOULD emit an `ETag` header (or equivalent) for its manifest serving infrastructure to enable clients to skip full re-download when the manifest has not changed.
+
+Registries experiencing manifest size pressure SHOULD add random jitter (±1 hour) to their crawl schedules to avoid synchronized manifest refreshes from large client populations.
+
+Delta-sync and manifest sharding are deferred to post-v1.0. These are not needed for the scale MOAT targets in its initial version.
 
 ---
 

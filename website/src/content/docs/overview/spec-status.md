@@ -9,7 +9,7 @@ MOAT is a working draft. The specifications are written and internally consisten
 
 ## Current version
 
-**Core spec:** v0.7.0 (Draft)
+**Core spec:** v0.7.1 (Draft)
 
 The core spec covers the registry manifest format, lockfile format, content hashing algorithm, trust tiers, and conforming client behavior requirements.
 
@@ -17,10 +17,10 @@ The core spec covers the registry manifest format, lockfile format, content hash
 
 | Spec | Version | Status |
 |---|---|---|
-| [Core spec](/spec/core) | 0.7.0 | Draft |
+| [Core spec](/spec/core) | 0.7.1 | Draft |
 | [moat-verify](/spec/moat-verify) | 0.1.0 | Draft |
-| [Publisher Action](/spec/publisher-action) | 0.1.0 | Draft |
-| [Registry Action](/spec/registry-action) | 0.1.0 | Draft |
+| [Publisher Action](/spec/publisher-action) | 0.2.0 | Draft |
+| [Registry Action](/spec/registry-action) | 0.2.0 | Draft |
 
 All four documents are complete enough to implement against. The version numbers reflect design maturity, not implementation coverage.
 

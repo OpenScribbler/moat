@@ -1,6 +1,6 @@
 # Registry Action Specification
 
-**Version:** 0.1.0 (Draft)
+**Version:** 0.2.0 (Draft)
 **Requires:** moat-spec.md ≥ 0.5.0
 **Part of:** [MOAT Specification](../moat-spec.md)
 
@@ -23,7 +23,7 @@
 8. Signs the assembled manifest with `cosign sign-blob`. The resulting bundle is written to `registry.json.sigstore` alongside `registry.json`.
 9. Pushes `registry.json` and `registry.json.sigstore` to the `moat-registry` branch with commit message `chore(moat): update registry manifest`. If the branch does not exist, the action creates it as an orphan. The `moat-registry` branch is never merged into the source branch — it contains only manifest data.
 
-**Branch isolation note:** The Registry Action pushes to `moat-registry`, not to the branch that triggered it. Pushes to `moat-registry` do not re-trigger the action, so recursive execution is structurally impossible. Registry operators MUST NOT configure the action to trigger on pushes to the `moat-registry` branch. The action MUST be configured with a schedule trigger (e.g., daily) as its primary crawl mechanism and SHOULD include `workflow_dispatch` for manual runs. The `paths: ['.moat/registry.yml']` push trigger is intentional — it makes an emergency revocation (editing `.moat/registry.yml`) immediately kick off a run.
+**Branch isolation note:** The Registry Action pushes to `moat-registry`, not to the branch that triggered it. Pushes to `moat-registry` do not re-trigger the action, so recursive execution is structurally impossible. Registry operators MUST NOT configure the action to trigger on pushes to the `moat-registry` branch. The action MUST be configured with a schedule trigger (e.g., daily) as its primary crawl mechanism and SHOULD include `workflow_dispatch` for manual runs. The `paths: ['.moat/registry.yml']` push trigger is intentional — it makes an emergency revocation (editing `.moat/registry.yml`) immediately kick off a run. When the registry repository is also a Publisher (self-publishing) or when the operator wants a compliant registry to bootstrap from two workflow files alone, the action SHOULD include a `workflow_run` trigger chaining this action after `moat-publisher.yml` completes; the `update-registry` job MUST then guard on `github.event.workflow_run.conclusion == 'success'` so the registry does not crawl after a failed publisher build.
 
 **All-sources-fail behavior:** If every source in `sources` fails to return content, the action MUST exit non-zero. A run that contacts no sources successfully produces no manifest update and must not silently succeed.
 

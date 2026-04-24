@@ -2,6 +2,25 @@
 
 All notable changes to the MOAT specification are documented in this file.
 
+## [0.7.1] — 2026-04-24 (Draft)
+
+Editorial and dogfooding release. One new normative SHOULD (`workflow_run` self-bootstrap for the Registry Action); two sub-spec MINOR bumps consolidating v0.7.0 normative changes; website spec mirrors re-synced from canonical; this repo's live workflows hard-synced from `reference/` so the advertised reference is what actually runs here. No breaking changes.
+
+### Added
+
+- **`workflow_run` trigger as self-bootstrap pattern (`specs/registry-action.md`, `reference/moat-registry.yml`)** — when the registry repository is also a Publisher (self-publishing) or when the operator wants a compliant registry to bootstrap from two workflow files alone, the Registry Action SHOULD include a `workflow_run` trigger chaining this action after `moat-publisher.yml` completes. The `update-registry` job MUST then guard on `github.event.workflow_run.conclusion == 'success'` so the registry does not crawl after a failed publisher build. Reference implementation updated to include the chain by default.
+
+### Changed
+
+- **Sub-spec version bumps** — `specs/publisher-action.md` and `specs/registry-action.md` both bumped from 0.1.0 → 0.2.0 to reflect the v0.7.0 normative changes (`.moat/` reservation MUST, actionable-error-message SHOULD, OIDC legacy-path fallback removal) and this release's `workflow_run` SHOULD. `specs/moat-verify.md` stays at 0.1.0 — no normative changes. Reference implementation version strings (`reference/moat-publisher.yml`, `reference/moat-registry.yml`) bumped to v0.2.0 to match.
+- **Live workflows re-synced from reference (`.github/workflows/moat-publisher.yml`, `.github/workflows/moat-registry.yml`)** — the repo's live workflows had drifted from `reference/` and were missing `agents`/`agent` category rename, tier-3 undiscovered-content detection, `TOOLING_DIRS` exclusion, tombstone logic, `get_existing_registry_state()`, `workflow_dispatch` inputs, and the new `workflow_run` trigger. Now byte-identical to `reference/`. No normative change — reference was already authoritative.
+
+### Fixed
+
+- **Website spec mirror drift (`website/src/content/docs/spec/core.md`, `website/src/content/docs/spec/registry-action.md`)** — both mirrors were stale against their canonical sources (228 and 32 lines short, respectively). Re-synced: core mirror now reflects the full v0.7.0 spec body including Trusted-Root Acquisition, Trust State Error Vocabulary, Version Transition, signing_profile v2 with repo-ID pinning, and Security Considerations. Registry-action mirror now includes Crawl Optimization and Manifest Size sections, the `(name, type)` uniqueness check, and the new workflow_run SHOULD. No normative change — editorial alignment with canonical specs.
+
+---
+
 ## [0.7.0] — 2026-04-24 (Draft)
 
 Two-track release: (1) filename and directory disambiguation for publisher and registry config files, and (2) normative hardening of signing-identity verification against repository rename attacks. No output-file format or wire-format changes. Publishers and registry operators migrate the rename in a single commit; see migration steps below. Clients that already pin `signing_profile` by Fulcio certificate extensions will pick up the rename-attack binding with no code changes.

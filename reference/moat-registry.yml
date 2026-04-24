@@ -9,9 +9,16 @@ name: MOAT Registry Action
 # change (e.g., adding a revocation) immediately kicks off a run — this is
 # the normative emergency revocation path.
 #
+# The `workflow_run` trigger chains this action after moat-publisher.yml so
+# that adding both workflow files is sufficient to bootstrap a compliant
+# registry — no manual dispatch required.
+#
 # Do NOT add 'moat-registry' to the push branches list.
 # ─────────────────────────────────────────────────────────────────────────────
 on:
+  workflow_run:
+    workflows: ["MOAT Publisher Action"]
+    types: [completed]
   schedule:
     - cron: '0 0 * * *'   # Daily at midnight UTC — adjust interval as needed
   push:
@@ -32,6 +39,7 @@ permissions:
 jobs:
   update-registry:
     runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
 
     steps:
       - name: Checkout registry repository
@@ -61,7 +69,7 @@ jobs:
         run: |
           python3 << 'PYEOF'
           """
-          MOAT Registry Action — reference implementation v0.1.0
+          MOAT Registry Action — reference implementation v0.2.0
 
           Reads .moat/registry.yml, crawls sources, determines trust tiers, signs
           per-item canonical payloads and the manifest, writes registry.json
@@ -228,7 +236,7 @@ jobs:
           def is_private_uri(uri):
               """True if the URI is not accessible to unauthenticated requests."""
               try:
-                  req = urllib.request.Request(uri, headers={"User-Agent": "moat-registry-action/0.1.0"})
+                  req = urllib.request.Request(uri, headers={"User-Agent": "moat-registry-action/0.2.0"})
                   urllib.request.urlopen(req, timeout=10)
                   return False
               except urllib.error.HTTPError as e:

@@ -55,7 +55,7 @@ jobs:
         run: |
           python3 << 'PYEOF'
           """
-          MOAT Publisher Action — reference implementation v0.1.0
+          MOAT Publisher Action — reference implementation v0.2.0
 
           Discovers content items, computes content hashes, signs canonical
           payloads with Sigstore keyless OIDC, and writes moat-attestation.json

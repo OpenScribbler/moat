@@ -55,7 +55,7 @@ jobs:
         run: |
           python3 << 'PYEOF'
           """
-          MOAT Publisher Action — reference implementation v0.1.0
+          MOAT Publisher Action — reference implementation v0.2.0
 
           Discovers content items, computes content hashes, signs canonical
           payloads with Sigstore keyless OIDC, and writes moat-attestation.json
@@ -87,6 +87,13 @@ jobs:
               ".lock", ".sum", ".mod",
           })
           VCS_DIRS = frozenset({".git", ".svn", ".hg", ".bzr", "_darcs", ".fossil"})
+          TOOLING_DIRS = frozenset({
+              ".github", ".gitlab",
+              "node_modules", ".venv", "venv", "__pycache__",
+              ".pytest_cache", ".mypy_cache", ".tox",
+              ".idea", ".vscode",
+              "dist", "build", "target",
+          })
           EXCLUDED_FILES = frozenset({"moat-attestation.json"})
           UTF8_BOM = b"\xef\xbb\xbf"
           CHUNK = 65536
@@ -204,12 +211,24 @@ jobs:
 
           # ─── Content discovery ────────────────────────────────────────────────────────
 
+          def _has_text_file(directory):
+              """Return True if directory contains at least one file with a text extension."""
+              for path in directory.rglob("*"):
+                  if not path.is_file():
+                      continue
+                  if any(part in VCS_DIRS or part in TOOLING_DIRS for part in path.parts):
+                      continue
+                  if _final_ext(path.name) in TEXT_EXTENSIONS:
+                      return True
+              return False
+
+
           def discover_items():
               root = Path(".")
               items = []
               type_map = {
                   "skills": "skill",
-                  "subagents": "subagent",
+                  "agents": "agent",
                   "rules": "rules",
                   "commands": "command",
               }
@@ -225,6 +244,7 @@ jobs:
                               })
 
               moat_yml = root / ".moat/publisher.yml"
+              moat_config = {}
               if moat_yml.exists():
                   with open(moat_yml) as f:
                       moat_config = yaml.safe_load(f) or {}
@@ -236,6 +256,41 @@ jobs:
                               "type": entry.get("type", "skill"),
                               "path": item_path,
                           })
+
+              # Tier-3: undiscovered content detection (specs/publisher-action.md).
+              # Warn about content-like dirs at repo root not covered by tier-1 or tier-2.
+              covered_roots = set(type_map.keys())
+              for entry in moat_config.get("items", []):
+                  p = entry.get("path", entry.get("name", ""))
+                  if p:
+                      covered_roots.add(p.split("/")[0])
+
+              unmatched = []
+              for child in sorted(root.iterdir()):
+                  if not child.is_dir():
+                      continue
+                  if child.name.startswith("."):
+                      continue
+                  if child.name in VCS_DIRS or child.name in TOOLING_DIRS:
+                      continue
+                  if child.name in covered_roots:
+                      continue
+                  if _has_text_file(child):
+                      unmatched.append(child.name)
+
+              if unmatched:
+                  print("")
+                  for name in unmatched:
+                      print(f"Warning: directory '{name}/' looks like it may contain content items but was not attested.")
+                  print("If these are MOAT content items, add them to .moat/publisher.yml:")
+                  print("")
+                  print("  items:")
+                  for name in unmatched:
+                      print(f"    - path: {name}")
+                      print(f"      type: skill")
+                      print(f"      name: {name}")
+                  print("")
+
               return items
 
 
@@ -379,22 +434,35 @@ jobs:
               is_private = check_visibility()
 
               items = discover_items()
-              if not items:
-                  print("No content items found. Exiting without updating attestation.")
-                  sys.exit(0)
 
-              # Load existing revocations to preserve them
-              existing = load_existing_attestation()
-              existing_revocations = (existing or {}).get("revocations", [])
+              # Canonical category dirs that exist but yielded no items,
+              # for the discovery summary "Skipped" list.
+              category_dirs = {
+                  "skills": "skill",
+                  "agents": "agent",
+                  "rules": "rules",
+                  "commands": "command",
+              }
+              root = Path(".")
+              empty_canonical_dirs = [
+                  f"{d}/ (empty)"
+                  for d in category_dirs
+                  if (root / d).is_dir()
+                  and not any(item["path"].parent == (root / d) for item in items)
+              ]
 
               attested_items = []
+              skipped_items = []
+              type_counts = {}
               for item in items:
                   name = item["name"]
-                  print(f"  Item: {name} ({item['type']})")
+                  item_type = item["type"]
+                  print(f"  Item: {name} ({item_type})")
                   try:
                       hash_value = moat_content_hash(item["path"])
                   except ValueError as e:
                       print(f"    WARNING: Hash failed — {e}; skipping.")
+                      skipped_items.append((item["path"], str(e)))
                       continue
 
                   print(f"    Content hash: {hash_value}")
@@ -409,10 +477,49 @@ jobs:
                       "rekor_log_id": log_id,
                       "rekor_log_index": log_index,
                   })
+                  type_counts[item_type] = type_counts.get(item_type, 0) + 1
+
+              # Discovery summary (specs/publisher-action.md §Undiscovered Content Detection).
+              # Canonical types ordered per the spec example; custom types appended in sort order.
+              display_plurals = {"skill": "skills", "agent": "agents", "rules": "rules", "command": "commands"}
+              breakdown_parts = [
+                  f"{type_counts[t]} {display_plurals[t]}"
+                  for t in display_plurals
+                  if t in type_counts
+              ]
+              for t in sorted(type_counts):
+                  if t not in display_plurals:
+                      breakdown_parts.append(f"{type_counts[t]} {t}s")
+              failed_entries = []
+              for path, reason in skipped_items:
+                  if "Symlink" in reason:
+                      short = "symlink rejected"
+                  elif "No files" in reason:
+                      short = "empty"
+                  else:
+                      short = "hash error"
+                  failed_entries.append(f"{path.as_posix()}/ ({short})")
+
+              all_skipped = empty_canonical_dirs + failed_entries
+              summary = f"Attested {len(attested_items)} items"
+              if breakdown_parts:
+                  summary += f": {', '.join(breakdown_parts)}"
+              summary += "."
+              if all_skipped:
+                  summary += f" Skipped: {', '.join(all_skipped)}."
+              print(summary)
+
+              if not items:
+                  print("No content items found. Exiting without updating attestation.")
+                  sys.exit(0)
 
               if not attested_items:
                   print("No items successfully attested. Exiting.")
                   sys.exit(1)
+
+              # Load existing revocations to preserve them.
+              existing = load_existing_attestation()
+              existing_revocations = (existing or {}).get("revocations", [])
 
               attestation = {
                   "schema_version": 1,

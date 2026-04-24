@@ -1,6 +1,6 @@
 # Publisher Action Specification
 
-**Version:** 0.1.0 (Draft)
+**Version:** 0.2.0 (Draft)
 **Requires:** moat-spec.md ≥ 0.5.0
 **Part of:** [MOAT Specification](../moat-spec.md)
 
