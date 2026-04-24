@@ -1,8 +1,8 @@
 # Model for Origin Attestation and Trust (MOAT) Specification
 
-**Version:** 0.6.1 (Draft)
+**Version:** 0.7.0 (Draft)
 **Status:** Draft
-**Date:** 2026-04-17
+**Date:** 2026-04-24
 **Editor:** Holden Hewett
 **License:** Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 **Repository:** https://github.com/OpenScribbler/moat

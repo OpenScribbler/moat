@@ -2,7 +2,7 @@
 
 All notable changes to the MOAT specification are documented in this file.
 
-## [Unreleased]
+## [0.7.0] — 2026-04-24 (Draft)
 
 Two-track release: (1) filename and directory disambiguation for publisher and registry config files, and (2) normative hardening of signing-identity verification against repository rename attacks. No output-file format or wire-format changes. Publishers and registry operators migrate the rename in a single commit; see migration steps below. Clients that already pin `signing_profile` by Fulcio certificate extensions will pick up the rename-attack binding with no code changes.
 
