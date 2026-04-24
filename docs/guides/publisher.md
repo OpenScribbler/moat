@@ -39,7 +39,7 @@ my-repo/
       rules.md
 ```
 
-**Tier 2 — `moat.yml` config:** For custom layouts, create `moat.yml` at the repo root:
+**Tier 2 — `.moat/publisher.yml` config:** For custom layouts, create `.moat/publisher.yml`:
 
 ```yaml
 items:
@@ -59,7 +59,7 @@ Tier 2 supplements Tier 1 — both are discovered if both are present.
 
 ### 1. Copy the workflow file
 
-Copy [`reference/moat.yml`](../../reference/moat.yml) from this repository to `.github/workflows/moat.yml` in your source repo. The recommended filename is `moat.yml` — you may use a different name, but the filename is encoded into the Rekor certificate and registries use it to verify your attestation (see [Workflow filename](#workflow-filename)).
+Copy [`reference/moat-publisher.yml`](../../reference/moat-publisher.yml) from this repository to `.github/workflows/moat-publisher.yml` in your source repo. The recommended filename is `moat-publisher.yml` — you may use a different name, but the filename is encoded into the Rekor certificate and registries use it to verify your attestation (see [Workflow filename](#workflow-filename)).
 
 ### 2. Configure the trigger
 
@@ -94,13 +94,13 @@ env:
 Push any change to your default branch to trigger the Publisher Action, or trigger it manually:
 
 ```bash
-gh workflow run moat.yml --repo <owner>/<repo>
+gh workflow run moat-publisher.yml --repo <owner>/<repo>
 ```
 
 Watch it run:
 
 ```bash
-gh run list --repo <owner>/<repo> --workflow=moat.yml --limit=5
+gh run list --repo <owner>/<repo> --workflow=moat-publisher.yml --limit=5
 gh run watch <run-id> --repo <owner>/<repo>
 ```
 
@@ -143,7 +143,7 @@ gh api "repos/<owner>/<repo>/contents/moat-attestation.json?ref=moat-attestation
 {
   "schema_version": 1,
   "attested_at": "2026-04-11T04:30:00Z",
-  "publisher_workflow_ref": ".github/workflows/moat.yml@refs/heads/main",
+  "publisher_workflow_ref": ".github/workflows/moat-publisher.yml@refs/heads/main",
   "private_repo": false,
   "items": [
     {
@@ -163,7 +163,7 @@ Check each field:
 | Field | Expected |
 |---|---|
 | `schema_version` | `1` |
-| `publisher_workflow_ref` | Your workflow path + ref, e.g. `.github/workflows/moat.yml@refs/heads/main` |
+| `publisher_workflow_ref` | Your workflow path + ref, e.g. `.github/workflows/moat-publisher.yml@refs/heads/main` |
 | `private_repo` | `false` for public repos; `true` only if you set `ALLOW_PRIVATE_REPO: 'true'` |
 | `items[].name` | Matches your content directory names |
 | `items[].rekor_log_index` | A positive integer (the Rekor entry index) |
@@ -229,7 +229,7 @@ print('OIDC subject:', uris[0] if uris else '(none)')
 
 Expected:
 ```
-OIDC subject: https://github.com/<owner>/<repo>/.github/workflows/moat.yml@refs/heads/main
+OIDC subject: https://github.com/<owner>/<repo>/.github/workflows/moat-publisher.yml@refs/heads/main
 ```
 
 ---
@@ -251,7 +251,7 @@ You don't need to notify registries — they crawl on schedule. If the registry 
 
 ## Workflow filename
 
-The Publisher Action can be named anything — the actual filename is recorded automatically in `publisher_workflow_ref` in `moat-attestation.json`, and registries read this field to derive the expected OIDC subject. The recommended filename is `.github/workflows/moat.yml`.
+The Publisher Action can be named anything — the actual filename is recorded automatically in `publisher_workflow_ref` in `moat-attestation.json`, and registries read this field to derive the expected OIDC subject. The recommended filename is `.github/workflows/moat-publisher.yml`.
 
 If you rename the workflow file after your first run, the existing Rekor entries in `moat-attestation.json` were signed with the old filename and will fail verification with registries that have already crawled you. To fix: retrigger the Publisher Action (which creates new Rekor entries with the new filename) and wait for registries to re-crawl.
 
@@ -262,7 +262,7 @@ If you rename the workflow file after your first run, the existing Rekor entries
 **Run succeeds but `moat-attestation` branch doesn't exist**
 
 The action only creates the branch if it finds content items. Check:
-- Your repo has at least one content directory (`skills/`, `subagents/`, `rules/`, `commands/`) or a `moat.yml` config
+- Your repo has at least one content directory (`skills/`, `subagents/`, `rules/`, `commands/`) or a `.moat/publisher.yml` config
 - Content directories are not empty
 
 **`rekor_log_index` is missing from an item**

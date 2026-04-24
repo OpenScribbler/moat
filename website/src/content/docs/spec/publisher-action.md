@@ -14,7 +14,7 @@ The Publisher Action is the primary adoption mechanism for the `Dual-Attested` t
 ## What It Does (on push)
 
 1. Detects source repository visibility. If `private` or `internal` and `allow-private-repo: true` is not set, exits immediately with a non-zero code and a clear error message. See Private Repository Guard.
-2. Discovers content items via two-tier model: canonical category directories (`skills/`, `subagents/`, `rules/`, `commands/`) or `moat.yml` if present.
+2. Discovers content items via two-tier model: canonical category directories (`skills/`, `subagents/`, `rules/`, `commands/`) or `.moat/publisher.yml` if present.
 3. Computes content hashes using the MOAT algorithm (`reference/moat_hash.py`). Errors (symlinks, empty directories) skip the item with a logged warning.
 4. Builds one attestation payload JSON per content item (schema below).
 5. Signs each payload with `cosign sign-blob` using Sigstore keyless OIDC. GitHub Actions provides the OIDC token automatically — no keys or secrets required. The workflow path and branch are encoded into the OIDC certificate at signing time and recorded automatically in `publisher_workflow_ref` in `moat-attestation.json`. Registries read this field to derive the expected OIDC subject for publisher verification — no manual filename configuration is needed.
@@ -24,6 +24,75 @@ The Publisher Action is the primary adoption mechanism for the `Dual-Attested` t
 9. If `registry-webhook` is configured and the repository is public, POSTs a signed notification payload to the webhook URL. On private or internal repositories, webhook delivery requires an additional explicit opt-in. See Webhook section.
 
 **Branch isolation note:** The Publisher Action pushes to `moat-attestation`, not to the branch that triggered it. Workflow triggers scoped to `main` (or equivalent) do not fire on pushes to `moat-attestation`, so recursive execution is structurally impossible. Publishers MUST NOT configure the action to trigger on pushes to the `moat-attestation` branch. Unlike the commit-back model, this approach works with standard branch protection on `main` — no PAT or bypass configuration is required.
+
+## Undiscovered Content Detection (normative)
+
+After tier-1 discovery (canonical category directories) and tier-2 discovery (`.moat/publisher.yml`) are complete, the action MUST inspect the repository root for directories with content-like structure that were not covered by either discovery tier.
+
+**Detection rule (normative — MUST):** A directory is "content-like" if it contains at least one file with a text extension (`.md`, `.yaml`, `.json`, `.py`, etc.) and is not one of: `.git`, `.github`, `.moat`, `node_modules`, `.venv`, `__pycache__`, or other VCS/tooling directories. If such a directory was not matched by discovery, it is reported as potentially undiscovered content.
+
+**Required action log output:**
+
+1. **Discovery summary (always):** After discovery, emit a log line of the form:
+   ```
+   Attested N items: X skills, Y agents, Z rules. Skipped: hooks/ (empty).
+   ```
+   Where `N` is the total attested count and the per-type breakdown covers all types with at least one item. "Skipped" lists directories that exist but contained no attested items (empty directories, or directories skipped due to symlinks or other errors).
+
+2. **Undiscovered content warning:** When a content-like directory is found but not covered by discovery, emit:
+   ```
+   Warning: directory 'tools/' looks like it may contain content items but was not attested.
+   If these are MOAT content items, add them to .moat/publisher.yml:
+
+     items:
+       - path: tools/my-tool
+         type: skill
+         name: my-tool
+   ```
+   The suggested `.moat/publisher.yml` snippet MUST list every unmatched directory as a separate entry with `path`, `type` (defaulting to `skill` as the most common type), and `name` (defaulting to the directory name). Publishers copy and edit this snippet — the action does not write `.moat/publisher.yml` automatically.
+
+This behavior is detection-only and non-blocking. Unmatched directories do not cause the action to fail. The warning is surfaced in the action log so publishers can review and optionally extend their coverage.
+
+---
+
+## `.moat/` Directory Reservation (normative)
+
+The `.moat/` directory at the repository root is reserved for MOAT protocol files. Publishers MUST NOT use this directory for content items, arbitrary configuration, or any purpose not defined by this specification.
+
+Currently defined files:
+
+- `.moat/publisher.yml` — tier-2 discovery config (this spec)
+- `.moat/registry.yml` — registry operator config ([registry-action](/spec/registry-action))
+
+**Unknown-file warning (normative — MUST):** The Publisher Action MUST emit a warning for any file under `.moat/` whose name matches `^[^.].*\.(yml|yaml)$` and is not a currently defined file. Example:
+
+```
+Warning: .moat/foo.yml is not a recognized MOAT config file. The .moat/ directory is reserved for MOAT protocol files; unexpected files here may indicate a typo or a forward-compatibility issue with a newer MOAT version.
+```
+
+Non-YAML files under `.moat/` (e.g., `.moat/README.md`, `.moat/.gitkeep`) MUST NOT trigger the warning.
+
+**Attestation exclusion (normative — MUST):** Files under `.moat/` MUST NOT be included in the attestation payload. They are protocol metadata, not content. Their presence or absence does not affect any `content_hash`.
+
+---
+
+## Actionable Error Messages (normative — SHOULD)
+
+The Publisher Action SHOULD emit actionable error messages for common misconfigurations. These messages are not failure gates — they surface in the action log to help publishers self-diagnose.
+
+**Config at wrong location:** If `moat.yml` exists at the repository root (legacy pre-v0.7.0 location) and `.moat/publisher.yml` does not, emit:
+
+```
+Warning: found moat.yml at repository root. MOAT v0.7.0+ expects this file at .moat/publisher.yml. Move it with: mkdir -p .moat && git mv moat.yml .moat/publisher.yml
+```
+
+**Workflow rename without `paths:` update:** If the workflow file is named `.github/workflows/moat-publisher.yml` but the workflow's `paths:` trigger (when present as an allow-list) still references `moat.yml`, the Publisher Action SHOULD emit:
+
+```
+Warning: .github/workflows/moat-publisher.yml has a paths: trigger referencing moat.yml. Update the trigger to reference .moat/publisher.yml, or the workflow will not fire on publisher config changes.
+```
+
+These messages apply only when the misconfiguration is detectable from the Publisher Action's runtime context. They are best-effort diagnostics, not completeness guarantees.
 
 ---
 
@@ -42,12 +111,12 @@ Serialization rules: UTF-8, no BOM, no trailing newline, no insignificant whites
 **Rekor entry:** `cosign sign-blob` creates a `hashedrekord` entry. The certificate subject encodes the GitHub Actions OIDC identity:
 
 ```
-https://github.com/{owner}/{repo}/.github/workflows/moat.yml@refs/heads/main
+https://github.com/{owner}/{repo}/.github/workflows/moat-publisher.yml@refs/heads/main
 ```
 
 This identity is what registries and `moat-verify` use to confirm the attestation came from a legitimate Publisher Action run on the claimed source repository. The Rekor certificate's `sub` claim encodes the repository, workflow path, and ref — no additional provenance fields in the payload are needed or verified.
 
-**Workflow filename and branch:** The Publisher Action may use any valid workflow filename. At runtime it reads its own path and branch from `GITHUB_WORKFLOW_REF` (a GitHub-injected environment variable) and records the result as `publisher_workflow_ref` in `moat-attestation.json`. The Registry Action reads this field when verifying publisher Rekor entries — the registry never needs to know the filename in advance. The recommended filename is `.github/workflows/moat.yml`, which the reference workflow uses by default. Registries that encounter a `moat-attestation.json` without `publisher_workflow_ref` (written before this field was introduced) fall back to assuming `.github/workflows/moat.yml@refs/heads/main`.
+**Workflow filename and branch:** The Publisher Action may use any valid workflow filename. At runtime it reads its own path and branch from `GITHUB_WORKFLOW_REF` (a GitHub-injected environment variable) and records the result as `publisher_workflow_ref` in `moat-attestation.json`. The Registry Action reads this field when verifying publisher Rekor entries — the registry never needs to know the filename in advance. The recommended filename is `.github/workflows/moat-publisher.yml`, which the reference workflow uses by default.
 
 ---
 
@@ -59,7 +128,7 @@ Location: `moat-attestation` branch root. One file per repo. The file is never p
 {
   "schema_version": 1,
   "attested_at": "2026-04-07T14:00:00Z",
-  "publisher_workflow_ref": ".github/workflows/moat.yml@refs/heads/main",
+  "publisher_workflow_ref": ".github/workflows/moat-publisher.yml@refs/heads/main",
   "private_repo": false,
   "items": [
     {
@@ -76,7 +145,7 @@ Location: `moat-attestation` branch root. One file per repo. The file is never p
 
 **`private_repo` field:** REQUIRED. `true` when the action ran on a `private` or `internal` repository; `false` for `public`. This annotation is visible to registries and conforming clients — they MAY use it to isolate, flag, or reject attestations from private repositories. Attestations created before this field was added will not have it; conforming registries SHOULD treat absent `private_repo` as unknown visibility rather than assuming public.
 
-**`publisher_workflow_ref` field:** OPTIONAL. The workflow path and ref that produced this attestation, derived from `GITHUB_WORKFLOW_REF` at signing time (e.g., `.github/workflows/moat.yml@refs/heads/main`). The Registry Action reads this field to construct the expected OIDC subject for publisher verification. Absent means the attestation was produced before this field was introduced; conforming registries MUST fall back to `.github/workflows/moat.yml@refs/heads/main` in that case.
+**`publisher_workflow_ref` field:** OPTIONAL. The workflow path and ref that produced this attestation, derived from `GITHUB_WORKFLOW_REF` at signing time (e.g., `.github/workflows/moat-publisher.yml@refs/heads/main`). The Registry Action reads this field to construct the expected OIDC subject for publisher verification. If absent, the Registry Action cannot construct the expected subject and MUST downgrade the item to `Signed` (no legacy-path fallback).
 
 **`source_ref` field (per item):** OPTIONAL. Full commit SHA at the time of attestation. Stored in `moat-attestation.json` as informational context only — it is not part of the signed payload and MUST NOT be used in trust decisions. The Rekor certificate's encoded ref is authoritative for provenance; `source_ref` here is for human auditing and tooling convenience.
 

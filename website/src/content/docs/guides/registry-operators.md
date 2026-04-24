@@ -29,9 +29,9 @@ The result is a tamper-evident, publicly auditable content index. Clients verify
 
 ## Setup
 
-### 1. Create `registry.yml`
+### 1. Create `.moat/registry.yml`
 
-Create `registry.yml` at the repository root. This is the registry configuration:
+Create `.moat/registry.yml`. This is the registry configuration:
 
 ```yaml
 schema_version: 1
@@ -67,7 +67,7 @@ Copy the workflow file from the [Registry Action spec](/spec/registry-action) to
 
 The workflow is pre-configured with:
 - A daily schedule (`cron: '0 0 * * *'`)
-- A push trigger on `registry.yml` changes (for emergency revocation)
+- A push trigger on `.moat/registry.yml` changes (for emergency revocation)
 - `workflow_dispatch` for manual runs
 
 ### 3. Verify required permissions
@@ -243,7 +243,7 @@ If verification fails, you'll see:
 
 ```
 Publisher Rekor verification failed for skills/my-summarizer (log index 12345678):
-  Expected OIDC subject: https://github.com/<owner>/<content-repo>/.github/workflows/moat.yml@refs/heads/main
+  Expected OIDC subject: https://github.com/<owner>/<content-repo>/.github/workflows/moat-publisher.yml@refs/heads/main
   Observed OIDC subject: https://github.com/<owner>/<content-repo>/.github/workflows/ci.yml@refs/heads/main
   Item will be indexed as Signed.
 ```
@@ -254,7 +254,7 @@ The item is still indexed — it just falls back to `Signed`.
 
 ## Adding sources
 
-Add source URIs to `registry.yml`:
+Add source URIs to `.moat/registry.yml`:
 
 ```yaml
 sources:
@@ -263,7 +263,7 @@ sources:
   - uri: https://github.com/org/shared-rules
 ```
 
-Push the change to `registry.yml` — this triggers the Registry Action via the path trigger, so you don't need to wait for the next scheduled run.
+Push the change to `.moat/registry.yml` — this triggers the Registry Action via the path trigger, so you don't need to wait for the next scheduled run.
 
 Sources that fail to respond (network error, non-existent repo, rate limit) are skipped with a warning — they don't abort the run. The manifest is updated with whichever sources succeeded.
 
@@ -271,7 +271,7 @@ Sources that fail to respond (network error, non-existent repo, rate limit) are 
 
 ## Revocation
 
-To revoke a content item, add an entry to `revocations` in `registry.yml` and push:
+To revoke a content item, add an entry to `revocations` in `.moat/registry.yml` and push:
 
 ```yaml
 revocations:
@@ -280,7 +280,7 @@ revocations:
     details_url: https://github.com/<owner>/<repo>/security/advisories/GHSA-xxxx
 ```
 
-The push triggers the Registry Action immediately (via the `registry.yml` path trigger). On the next run, the revoked item is removed from `content[]` and added to `revocations[]` in `registry.json`.
+The push triggers the Registry Action immediately (via the `.moat/registry.yml` path trigger). On the next run, the revoked item is removed from `content[]` and added to `revocations[]` in `registry.json`.
 
 **Reason code urgency signals** (informational — for display to end users):
 
@@ -291,7 +291,7 @@ The push triggers the Registry Action immediately (via the `registry.yml` path t
 | `policy_violation` | Informational |
 | `deprecated` | Low |
 
-Revocations are permanent in `registry.json`. If you un-revoke a hash later, remove the entry from `registry.yml` — the item will be re-indexed on the next crawl.
+Revocations are permanent in `registry.json`. If you un-revoke a hash later, remove the entry from `.moat/registry.yml` — the item will be re-indexed on the next crawl.
 
 ---
 

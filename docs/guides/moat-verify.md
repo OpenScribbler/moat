@@ -283,7 +283,7 @@ Expected output when attestation found:
 [✓] Publisher Rekor attestation verified
     Log ID:        <rekor-log-id>
     Log Index:     <index>
-    OIDC Identity: https://github.com/<owner>/<repo>/.github/workflows/moat.yml@refs/heads/main
+    OIDC Identity: https://github.com/<owner>/<repo>/.github/workflows/moat-publisher.yml@refs/heads/main
 ```
 
 Expected when `--source` is provided but the publisher has not run the Publisher Action:

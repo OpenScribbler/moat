@@ -40,7 +40,7 @@ The following components are fully specified and have reference implementations:
 **Reference implementations**
 - [`moat_verify.py`](https://github.com/OpenScribbler/moat/blob/main/reference/moat_verify.py) — the moat-verify reference implementation
 - [`moat_hash.py`](https://github.com/OpenScribbler/moat/blob/main/reference/moat_hash.py) — the content hashing reference implementation
-- `reference/moat.yml` — the Publisher Action workflow
+- `reference/moat-publisher.yml` — the Publisher Action workflow
 - `reference/moat-registry.yml` — the Registry Action workflow
 
 ---

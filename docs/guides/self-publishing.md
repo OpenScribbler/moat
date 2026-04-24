@@ -8,7 +8,7 @@
 
 A self-publishing repository runs both workflows:
 
-- **Publisher Action** (`moat.yml`) — signs content hashes and writes `moat-attestation.json` to the `moat-attestation` branch
+- **Publisher Action** (`.github/workflows/moat-publisher.yml`) — signs content hashes and writes `moat-attestation.json` to the `moat-attestation` branch
 - **Registry Action** (`moat-registry.yml`) — crawls the same repo, reads `moat-attestation.json`, verifies publisher Rekor entries, and publishes a signed `registry.json` manifest
 
 The content items, the publisher attestation, and the registry manifest all live in the same repository. This is valid — two distinct GitHub Actions OIDC identities are involved (one per workflow file), producing two independently verifiable Rekor entries per item.
@@ -28,7 +28,7 @@ This repository (`OpenScribbler/moat`) is a live working example of self-publish
 
 ## Setup
 
-### 1. Create `registry.yml`
+### 1. Create `.moat/registry.yml`
 
 ```yaml
 schema_version: 1
@@ -48,7 +48,7 @@ The source URI should point to the same repository. The Registry Action compares
 
 ### 2. Copy both workflow files
 
-Copy [`reference/moat.yml`](../../reference/moat.yml) to `.github/workflows/moat.yml`:
+Copy [`reference/moat-publisher.yml`](../../reference/moat-publisher.yml) to `.github/workflows/moat-publisher.yml`:
 
 ```yaml
 on:
@@ -67,11 +67,11 @@ on:
     - cron: '0 0 * * *'   # daily
   push:
     paths:
-      - 'registry.yml'
+      - '.moat/registry.yml'
   workflow_dispatch:
 ```
 
-**Important:** The Registry Action trigger must NOT include `push: branches: [main]`. It only needs the schedule, the `registry.yml` path trigger, and manual dispatch. If it triggered on every push to `main`, it would run every time the Publisher Action commits `moat-attestation.json` updates (which can happen on a different branch, but keep the triggers clean).
+**Important:** The Registry Action trigger must NOT include `push: branches: [main]`. It only needs the schedule, the `.moat/registry.yml` path trigger, and manual dispatch. If it triggered on every push to `main`, it would run every time the Publisher Action commits `moat-attestation.json` updates (which can happen on a different branch, but keep the triggers clean).
 
 ### 3. Verify permissions
 
@@ -91,7 +91,7 @@ The run order matters: the Publisher Action must complete before the Registry Ac
 
 **First-time setup:**
 
-1. Push your changes (adds workflow files + `registry.yml`) → triggers Publisher Action automatically
+1. Push your changes (adds workflow files + `.moat/registry.yml`) → triggers Publisher Action automatically
 2. Wait for Publisher Action to complete (creates `moat-attestation` branch with `moat-attestation.json`)
 3. Manually trigger the Registry Action:
 
@@ -125,7 +125,7 @@ gh api "repos/<owner>/<repo>/contents/moat-attestation.json?ref=moat-attestation
 ```
 
 Confirm:
-- `publisher_workflow_ref` is present and matches `.github/workflows/moat.yml@refs/heads/main`
+- `publisher_workflow_ref` is present and matches `.github/workflows/moat-publisher.yml@refs/heads/main`
 - Each content item has a `rekor_log_index`
 
 ### Step 2 — Verify the registry manifest
@@ -207,7 +207,7 @@ print('Registry entry hash match:', entry_hash == expected)
 "
 ```
 
-Both entries should match. They cover the same canonical payload `{"_version":1,"content_hash":"<hex>"}` but were signed by different OIDC identities (`moat.yml` vs `moat-registry.yml`).
+Both entries should match. They cover the same canonical payload `{"_version":1,"content_hash":"<hex>"}` but were signed by different OIDC identities (`moat-publisher.yml` vs `moat-registry.yml`).
 
 ---
 
@@ -217,7 +217,7 @@ Both entries should match. They cover the same canonical payload `{"_version":1,
 
 The independence guarantee in self-publishing comes from OIDC subject binding, not organizational separation:
 
-- Publisher OIDC subject: `https://github.com/<owner>/<repo>/.github/workflows/moat.yml@refs/heads/main`
+- Publisher OIDC subject: `https://github.com/<owner>/<repo>/.github/workflows/moat-publisher.yml@refs/heads/main`
 - Registry OIDC subject: `https://github.com/<owner>/<repo>/.github/workflows/moat-registry.yml@refs/heads/main`
 
 These are two distinct, independently verifiable Rekor entries. Compromising one workflow's execution context does not automatically compromise the other — a supply-chain attacker who can manipulate the Publisher Action cannot forge the registry's OIDC identity, and vice versa.
@@ -251,8 +251,8 @@ gh workflow run moat-registry.yml --repo <owner>/<repo>
 
 **`self_published` is `false` in `registry.json`**
 
-The `sources[].uri` in `registry.yml` does not match the registry repository's own URI. Confirm the URI is exactly `https://github.com/<owner>/<repo>` with no trailing slash.
+The `sources[].uri` in `.moat/registry.yml` does not match the registry repository's own URI. Confirm the URI is exactly `https://github.com/<owner>/<repo>` with no trailing slash.
 
 **Publisher Action triggers Registry Action recursively**
 
-This cannot happen by design — the Publisher Action pushes to the `moat-attestation` branch, not to `main`. The Registry Action is only triggered by changes to `registry.yml`, by schedule, or by `workflow_dispatch`. Verify neither workflow has an accidental `push: branches: [main, moat-attestation]` trigger.
+This cannot happen by design — the Publisher Action pushes to the `moat-attestation` branch, not to `main`. The Registry Action is only triggered by changes to `.moat/registry.yml`, by schedule, or by `workflow_dispatch`. Verify neither workflow has an accidental `push: branches: [main, moat-attestation]` trigger.

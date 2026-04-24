@@ -29,7 +29,7 @@ You don't set up GitHub Actions. You don't install tools. You don't create accou
 
 You've heard about MOAT and you want the strongest trust signal available. You want both the registry *and* your own CI to independently attest the same content hash — so even if a registry is compromised, your independent attestation survives.
 
-**What you do:** Copy one workflow file into `.github/workflows/moat.yml`. That's it.
+**What you do:** Copy one workflow file into `.github/workflows/moat-publisher.yml`. That's it.
 
 On every push to your default branch, the [Publisher Action](/spec/publisher-action) runs automatically:
 
@@ -54,7 +54,7 @@ You want to offer a curated collection of AI agent content — maybe you run a c
 
 **What you do:** Create a GitHub repo with two files:
 
-1. **`registry.yml`** — a config listing the source repos you want to index
+1. **`.moat/registry.yml`** — a config listing the source repos you want to index
 2. **`.github/workflows/moat-registry.yml`** — the [Registry Action](/spec/registry-action) workflow (copy from the reference template)
 
 The Registry Action runs on a daily schedule. For each source repo in your config, it:
@@ -65,7 +65,7 @@ The Registry Action runs on a daily schedule. For each source repo in your confi
 4. Checks for publisher attestations and determines trust tiers
 5. Publishes a signed `registry.json` manifest
 
-You decide what to include. You can add or remove sources at any time by editing `registry.yml`. Publishers don't submit to you — you choose what to index, like a search engine choosing what to crawl.
+You decide what to include. You can add or remove sources at any time by editing `.moat/registry.yml`. Publishers don't submit to you — you choose what to index, like a search engine choosing what to crawl.
 
 **What the end user sees:** Your manifest, listing every content item you've indexed with its content hash, trust tier, source URI, and attestation timestamp. They add your registry to their install tool, and the tool verifies everything on install.
 
@@ -79,7 +79,7 @@ You create AI agent content and you want to distribute it directly — no third-
 
 **What you do:** Add both workflow files to your repo:
 
-- `.github/workflows/moat.yml` ([Publisher Action](/spec/publisher-action))
+- `.github/workflows/moat-publisher.yml` ([Publisher Action](/spec/publisher-action))
 - `.github/workflows/moat-registry.yml` ([Registry Action](/spec/registry-action))
 
 Both workflows run on push. The Publisher Action attests your content from one CI identity; the Registry Action crawls the same repo, verifies the publisher attestation, and publishes a signed manifest from a different CI identity.

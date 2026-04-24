@@ -7,32 +7,32 @@ description: "Specification for the MOAT Registry Action GitHub Actions workflow
 **Version:** 0.1.0 (Draft) · **Requires:** moat-spec.md ≥ 0.5.0
 :::
 
-The Registry Action is the standard mechanism for producing a MOAT registry manifest. Any GitHub repository becomes a registry with a single workflow file and a `registry.yml` config — no key management, no MOAT-specific knowledge required.
+The Registry Action is the standard mechanism for producing a MOAT registry manifest. Any GitHub repository becomes a registry with a single workflow file and a `.moat/registry.yml` config — no key management, no MOAT-specific knowledge required.
 
 ---
 
-## What It Does (on schedule / on `registry.yml` change)
+## What It Does (on schedule / on `.moat/registry.yml` change)
 
-1. Reads `registry.yml` at the repository root. If the file is absent or invalid, exits non-zero with a clear error message identifying the violation.
+1. Reads `.moat/registry.yml` at the repository root. If the file is absent or invalid, exits non-zero with a clear error message identifying the violation.
 2. For each source URI in `sources`:
    a. Fetches the source repository at HEAD using an authenticated GitHub API request. Source failures (network error, non-existent repo, rate limit) are non-fatal — the run continues and the failure is logged per source.
    b. Checks source repository visibility. If private and `allow-private-source: true` is not set, skips the source with a warning. See Private Repository Guard.
    c. Attempts to fetch `moat-attestation.json` from the source's `moat-attestation` branch. If the branch or file does not exist, the source contributes Signed items only.
-3. Discovers content items from each source via the same two-tier model as the Publisher Action: canonical category directories (`skills/`, `subagents/`, `rules/`, `commands/`) or `moat.yml` if present.
+3. Discovers content items from each source via the same two-tier model as the Publisher Action: canonical category directories (`skills/`, `subagents/`, `rules/`, `commands/`) or `.moat/publisher.yml` if present.
 4. Computes content hashes for all discovered items using the MOAT algorithm (`reference/moat_hash.py`).
 5. Determines trust tier per item. See Trust Tier Determination.
 6. Signs each Signed or Dual-Attested item's canonical payload with `cosign sign-blob` using Sigstore keyless OIDC. GitHub Actions provides the OIDC token automatically — no keys or secrets required. Records the Rekor `logIndex` per item.
-7. Assembles the registry manifest (`registry.json`) with all indexed items, revocations (registry-initiated from `registry.yml` plus publisher-initiated from `moat-attestation.json` sources), and metadata fields including the runtime-derived `registry_signing_profile`.
+7. Assembles the registry manifest (`registry.json`) with all indexed items, revocations (registry-initiated from `.moat/registry.yml` plus publisher-initiated from `moat-attestation.json` sources), and metadata fields including the runtime-derived `registry_signing_profile`.
 8. Signs the assembled manifest with `cosign sign-blob`. The resulting bundle is written to `registry.json.sigstore` alongside `registry.json`.
 9. Pushes `registry.json` and `registry.json.sigstore` to the `moat-registry` branch with commit message `chore(moat): update registry manifest`. If the branch does not exist, the action creates it as an orphan. The `moat-registry` branch is never merged into the source branch — it contains only manifest data.
 
-**Branch isolation note:** The Registry Action pushes to `moat-registry`, not to the branch that triggered it. Pushes to `moat-registry` do not re-trigger the action, so recursive execution is structurally impossible. Registry operators MUST NOT configure the action to trigger on pushes to the `moat-registry` branch. The action MUST be configured with a schedule trigger (e.g., daily) as its primary crawl mechanism and SHOULD include `workflow_dispatch` for manual runs. The `paths: ['registry.yml']` push trigger is intentional — it makes an emergency revocation (editing `registry.yml`) immediately kick off a run.
+**Branch isolation note:** The Registry Action pushes to `moat-registry`, not to the branch that triggered it. Pushes to `moat-registry` do not re-trigger the action, so recursive execution is structurally impossible. Registry operators MUST NOT configure the action to trigger on pushes to the `moat-registry` branch. The action MUST be configured with a schedule trigger (e.g., daily) as its primary crawl mechanism and SHOULD include `workflow_dispatch` for manual runs. The `paths: ['.moat/registry.yml']` push trigger is intentional — it makes an emergency revocation (editing `.moat/registry.yml`) immediately kick off a run.
 
 **All-sources-fail behavior:** If every source in `sources` fails to return content, the action MUST exit non-zero. A run that contacts no sources successfully produces no manifest update and must not silently succeed.
 
 ---
 
-## `registry.yml` Config Format (normative)
+## `.moat/registry.yml` Config Format (normative)
 
 ```yaml
 schema_version: 1
@@ -65,7 +65,7 @@ revocations: []
 | `revocations[].reason` | REQUIRED | One of: `malicious`, `compromised`, `deprecated`, `policy_violation`. |
 | `revocations[].details_url` | REQUIRED | URL to public revocation details. |
 
-**Emergency revocation path:** The Registry Action triggers on pushes to `registry.yml`. Adding a revocation entry to `registry.yml` and pushing immediately triggers a run, propagating the hard block to the manifest without waiting for the next scheduled crawl. This is the normative fast path for urgent registry-initiated revocations.
+**Emergency revocation path:** The Registry Action triggers on pushes to `.moat/registry.yml`. Adding a revocation entry to `.moat/registry.yml` and pushing immediately triggers a run, propagating the hard block to the manifest without waiting for the next scheduled crawl. This is the normative fast path for urgent registry-initiated revocations.
 
 ---
 
@@ -91,9 +91,7 @@ For each discovered content item, the action applies these rules in order:
    https://github.com/{owner}/{repo}/{publisher_workflow_ref}
    ```
    where `{owner}` and `{repo}` are derived from the source `uri`, and `{publisher_workflow_ref}` is read from
-   `moat-attestation.json` (e.g., `.github/workflows/moat.yml@refs/heads/main`). If `publisher_workflow_ref` is
-   absent — attestations written before the field was introduced — the action MUST fall back to
-   `.github/workflows/moat.yml@refs/heads/main`.
+   `moat-attestation.json` (e.g., `.github/workflows/moat-publisher.yml@refs/heads/main`).
 
 5. Confirming the signed payload in the Rekor entry decodes to a valid MOAT attestation payload (see [Per-Item Canonical Payload](#per-item-canonical-payload)) with a `content_hash` matching the action's computed hash.
 
@@ -101,7 +99,7 @@ If any step fails, the item falls back to `Signed`. The fallback is non-fatal fo
 
 ```
 Publisher Rekor verification failed for skills/my-skill (log index 12345678):
-  Expected OIDC subject: https://github.com/alice/my-skills/.github/workflows/moat.yml@refs/heads/main
+  Expected OIDC subject: https://github.com/alice/my-skills/.github/workflows/moat-publisher.yml@refs/heads/main
   Observed OIDC subject: https://github.com/alice/my-skills/.github/workflows/ci.yml@refs/heads/main
   Item will be indexed as Signed.
 ```
@@ -128,7 +126,7 @@ https://github.com/{owner}/{repo}/.github/workflows/moat-registry.yml@refs/heads
 
 This identity is what `moat-verify` and conforming clients use to confirm registry attestations came from a legitimate Registry Action run on the declared registry repository.
 
-**`registry_signing_profile` derivation:** The action derives the registry's signing identity from its own OIDC token at runtime and writes it to the manifest's `registry_signing_profile` field automatically. Registry operators do not declare their signing identity in `registry.yml` — the OIDC token is the authoritative source and self-declaration is redundant and error-prone.
+**`registry_signing_profile` derivation:** The action derives the registry's signing identity from its own OIDC token at runtime and writes it to the manifest's `registry_signing_profile` field automatically. Registry operators do not declare their signing identity in `.moat/registry.yml` — the OIDC token is the authoritative source and self-declaration is redundant and error-prone.
 
 ---
 
@@ -136,13 +134,13 @@ This identity is what `moat-verify` and conforming clients use to confirm regist
 
 The manifest's `revocations` array is populated from two sources per run:
 
-**Registry-initiated revocations** — from the `revocations` array in `registry.yml`. These are hard blocks for conforming clients. The `source` field is set to `"registry"`.
+**Registry-initiated revocations** — from the `revocations` array in `.moat/registry.yml`. These are hard blocks for conforming clients. The `source` field is set to `"registry"`.
 
 **Publisher-initiated revocations** — from the `revocations` array in each source's `moat-attestation.json`. These are warnings for conforming clients. The `source` field is set to `"publisher"`.
 
 When both a registry-initiated and publisher-initiated revocation exist for the same content hash, the registry-initiated entry takes precedence and the publisher entry is omitted from the manifest.
 
-Revocation entries from `moat-attestation.json` are propagated on each scheduled crawl. The maximum propagation delay for publisher-initiated revocations is equal to the registry's crawl interval (the time between scheduled runs). Registry operators SHOULD configure a crawl interval of 24 hours or less. For urgent revocations requiring immediate propagation, publishers SHOULD contact the registry operator directly — registry-initiated revocation via `registry.yml` push is the normative fast path.
+Revocation entries from `moat-attestation.json` are propagated on each scheduled crawl. The maximum propagation delay for publisher-initiated revocations is equal to the registry's crawl interval (the time between scheduled runs). Registry operators SHOULD configure a crawl interval of 24 hours or less. For urgent revocations requiring immediate propagation, publishers SHOULD contact the registry operator directly — registry-initiated revocation via `.moat/registry.yml` push is the normative fast path.
 
 ---
 
@@ -152,7 +150,7 @@ A publisher may run both the Publisher Action and the Registry Action from the s
 
 The independence guarantee comes from the OIDC subject binding, not from organizational separation. The two workflow files produce two distinct OIDC subjects:
 
-- Publisher Action: `.../{publisher_workflow_ref}` (default: `.github/workflows/moat.yml@refs/heads/main`)
+- Publisher Action: `.../{publisher_workflow_ref}` (canonical: `.github/workflows/moat-publisher.yml@refs/heads/main`)
 - Registry Action: `.../.github/workflows/moat-registry.yml@refs/heads/main`
 
 These map to two distinct, independently verifiable Rekor entries. Compromising one workflow's execution context does not automatically compromise the other.
@@ -170,7 +168,7 @@ Source repository visibility is checked at crawl time. The action applies three-
 | Visibility | Detection | Action behavior |
 |---|---|---|
 | `public` | Repository accessible to unauthenticated requests | Proceed normally |
-| `private` | Repository returns 403/404 to unauthenticated requests, OR `private_repo: true` in `moat-attestation.json` | Requires `allow-private-source: true` on the source entry in `registry.yml` |
+| `private` | Repository returns 403/404 to unauthenticated requests, OR `private_repo: true` in `moat-attestation.json` | Requires `allow-private-source: true` on the source entry in `.moat/registry.yml` |
 | `internal` | Same as `private` | Requires `allow-private-source: true` |
 
 Without `allow-private-source: true`, the action MUST skip the source and emit a warning. It MUST NOT fail the run — other sources continue normally.
