@@ -460,6 +460,7 @@ jobs:
               try:
                   result = subprocess.run(
                       ["cosign", "sign-blob",
+                       "--new-bundle-format",
                        "--bundle", bundle_path,
                        "--yes",
                        payload_path],
@@ -471,11 +472,13 @@ jobs:
                   with open(bundle_path) as f:
                       bundle = json.load(f)
 
-                  log_index = (
-                      bundle.get("rekorBundle", {})
-                      .get("Payload", {})
-                      .get("logIndex")
+                  tlog_entries = (
+                      bundle.get("verificationMaterial", {})
+                      .get("tlogEntries", [])
                   )
+                  if not tlog_entries:
+                      raise RuntimeError("No tlogEntries in cosign v0.3 bundle")
+                  log_index = tlog_entries[0].get("logIndex")
                   if log_index is None:
                       raise RuntimeError("No logIndex in cosign bundle")
 
@@ -490,6 +493,7 @@ jobs:
               bundle_path = str(manifest_path) + ".sigstore"
               result = subprocess.run(
                   ["cosign", "sign-blob",
+                   "--new-bundle-format",
                    "--bundle", bundle_path,
                    "--yes",
                    str(manifest_path)],

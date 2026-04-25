@@ -314,6 +314,7 @@ jobs:
               try:
                   result = subprocess.run(
                       ["cosign", "sign-blob",
+                       "--new-bundle-format",
                        "--bundle", bundle_path,
                        "--yes",
                        payload_path],
@@ -325,16 +326,15 @@ jobs:
                   with open(bundle_path) as f:
                       bundle = json.load(f)
 
-                  log_id = (
-                      bundle.get("rekorBundle", {})
-                      .get("Payload", {})
-                      .get("logID", "")
+                  tlog_entries = (
+                      bundle.get("verificationMaterial", {})
+                      .get("tlogEntries", [])
                   )
-                  log_index = (
-                      bundle.get("rekorBundle", {})
-                      .get("Payload", {})
-                      .get("logIndex")
-                  )
+                  if not tlog_entries:
+                      raise RuntimeError("No tlogEntries in cosign v0.3 bundle")
+                  tlog = tlog_entries[0]
+                  log_id = tlog.get("logId", {}).get("keyId", "")
+                  log_index = tlog.get("logIndex")
                   if log_index is None:
                       raise RuntimeError("No logIndex in cosign bundle")
 

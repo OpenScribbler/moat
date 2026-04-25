@@ -423,6 +423,8 @@ MOAT does not defend against manifest replay attacks within the valid window. Fo
 
 The normative signing mechanism for this version of MOAT is Sigstore keyless OIDC signing via Fulcio/Rekor.
 
+**Bundle format (normative):** All cosign signatures produced by conforming Publisher Actions, Registry Actions, and any other MOAT-conforming signer MUST be Sigstore protobuf bundle v0.3 (`mediaType: application/vnd.dev.sigstore.bundle.v0.3+json`). Conforming signers invoking `cosign sign-blob` MUST pass `--new-bundle-format`. The legacy JSON bundle layout (top-level `base64Signature` / `cert` / `rekorBundle.Payload.logIndex`) is not supported by this version of MOAT — strict consumers (e.g., sigstore-go) reject it, and conforming clients MAY refuse to parse it. Verifiers locate the Rekor log identity at `verificationMaterial.tlogEntries[].logId.keyId` and the log index at `verificationMaterial.tlogEntries[].logIndex`.
+
 **Signing input:** The registry CI signs the manifest JSON file with `cosign sign-blob`. The input to signing is
 the raw bytes of the manifest file as it will be served — after any transport-layer decompression, with no
 additional normalization. The manifest MUST be served as UTF-8 without a byte-order mark. Once signed and

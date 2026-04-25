@@ -2,6 +2,21 @@
 
 All notable changes to the MOAT specification are documented in this file.
 
+## [Unreleased]
+
+Breaking change: the cosign bundle format is now pinned to Sigstore protobuf bundle v0.3. Conforming Publisher Actions and Registry Actions MUST invoke `cosign sign-blob --new-bundle-format`. The legacy JSON bundle layout (top-level `base64Signature` / `cert` / `rekorBundle`) is no longer supported. Strict consumers (e.g., sigstore-go) reject legacy bundles, so any registry that emitted them is unverifiable by modern clients and MUST republish.
+
+### Changed
+
+- **Bundle format pinned to v0.3 (`moat-spec.md` §Signature Envelope)** — new normative MUST: all cosign signatures produced by conforming signers MUST be Sigstore protobuf bundle v0.3 (`mediaType: application/vnd.dev.sigstore.bundle.v0.3+json`). Conforming signers invoking `cosign sign-blob` MUST pass `--new-bundle-format`. The Rekor log identity is located at `verificationMaterial.tlogEntries[].logId.keyId` and the log index at `verificationMaterial.tlogEntries[].logIndex`. Conforming clients MAY refuse to parse legacy bundles.
+- **Publisher Action signing step (`specs/publisher-action.md`)** — step 5 now requires `--new-bundle-format`; step 6 reflects v0.3 bundle parsing paths for `rekor_log_id` and `rekor_log_index`. Reference implementation (`reference/moat-publisher.yml`) updated accordingly.
+- **Registry Action signing steps (`specs/registry-action.md`)** — steps 6 and 8 now require `--new-bundle-format` for both per-item canonical-payload signing and manifest signing. Reference implementation (`reference/moat-registry.yml`) updated accordingly.
+- **`moat-verify` reference (`reference/moat_verify.py`)** — removed the legacy `.cert` (top-level base64-PEM) fallback in `_oidc_from_bundle`; v0.3 paths are the only supported sources for the signing certificate. `_build_bundle` (used to reconstruct a bundle from a Rekor entry for online `cosign verify-blob`) now emits `mediaType: application/vnd.dev.sigstore.bundle.v0.3+json` and uses the v0.3 `verificationMaterial.certificate` shape.
+
+### Removed
+
+- **Legacy cosign bundle support** — the legacy JSON bundle layout (top-level `base64Signature`, `cert`, `rekorBundle.Payload.{logID,logIndex}`) is no longer accepted by reference tooling and is not permitted for conforming signers. Registries serving legacy bundles at `{manifest_uri}.sigstore` will fail verification by strict clients.
+
 ## [0.7.1] — 2026-04-24 (Draft)
 
 Editorial and dogfooding release. One new normative SHOULD (`workflow_run` self-bootstrap for the Registry Action); two sub-spec MINOR bumps consolidating v0.7.0 normative changes; website spec mirrors re-synced from canonical; this repo's live workflows hard-synced from `reference/` so the advertised reference is what actually runs here. No breaking changes.

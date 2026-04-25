@@ -118,7 +118,7 @@ def _extract_oidc(stdout: str, stderr: str) -> tuple[str, str]:
 def _oidc_from_bundle(bundle: dict | str) -> tuple[str, str]:
     """
     Extract (OIDC subject, OIDC issuer) by parsing the signing certificate
-    embedded in a Sigstore bundle (modern v0.1+ or legacy format).
+    embedded in a v0.3 Sigstore bundle.
     Falls back to ("unknown", "unknown") on any parse failure.
     """
     b: dict
@@ -132,26 +132,18 @@ def _oidc_from_bundle(bundle: dict | str) -> tuple[str, str]:
 
     cert_pem: str | None = None
 
-    # Modern bundle: verificationMaterial.x509CertificateChain or .certificate
+    # v0.3 bundle: verificationMaterial.certificate.rawBytes (singular cert),
+    # or verificationMaterial.x509CertificateChain.certificates[0].rawBytes.
     vm = b.get("verificationMaterial", {})
-    chain = vm.get("x509CertificateChain", {}).get("certificates", [])
-    if chain:
-        raw = chain[0].get("rawBytes", "")
-        if raw:
-            cert_pem = _rawbytes_to_pem(raw)
+    raw = vm.get("certificate", {}).get("rawBytes", "")
+    if raw:
+        cert_pem = _rawbytes_to_pem(raw)
     if not cert_pem:
-        raw = vm.get("certificate", {}).get("rawBytes", "")
-        if raw:
-            cert_pem = _rawbytes_to_pem(raw)
-
-    # Legacy bundle: .cert is base64(PEM)
-    if not cert_pem:
-        cert_b64 = b.get("cert", "")
-        if cert_b64:
-            try:
-                cert_pem = base64.b64decode(cert_b64).decode("utf-8")
-            except Exception:
-                pass
+        chain = vm.get("x509CertificateChain", {}).get("certificates", [])
+        if chain:
+            raw = chain[0].get("rawBytes", "")
+            if raw:
+                cert_pem = _rawbytes_to_pem(raw)
 
     if not cert_pem:
         return "unknown", "unknown"
@@ -253,7 +245,7 @@ def _decode_rekor_body(entry: dict) -> dict:
 
 def _build_bundle(entry: dict, body: dict) -> dict:
     """
-    Reconstruct a Sigstore bundle (v0.1) from a Rekor API log entry.
+    Reconstruct a v0.3 Sigstore bundle from a Rekor API log entry.
     Used for online Step 4 cosign verify-blob.
 
     Rekor hashedrekord body layout:
@@ -300,9 +292,9 @@ def _build_bundle(entry: dict, body: dict) -> dict:
         tlog["inclusionProof"] = proof
 
     return {
-        "mediaType": "application/vnd.dev.sigstore.bundle+json;version=0.1",
+        "mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
         "verificationMaterial": {
-            "x509CertificateChain": {"certificates": [{"rawBytes": raw_bytes_b64}]},
+            "certificate": {"rawBytes": raw_bytes_b64},
             "tlogEntries": [tlog],
         },
         "messageSignature": {
