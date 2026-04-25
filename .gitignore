@@ -13,3 +13,6 @@ CLAUDE.md
 
 # Generated test artifacts (cosign bundles, blobs, identity metadata)
 reference/test_artifacts/
+
+# bv (beads viewer) local config and caches
+.bv/

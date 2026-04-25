@@ -7,9 +7,8 @@ This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get sta
 ```bash
 bd ready              # Find available work
 bd show <id>          # View issue details
-bd update <id> --status in_progress  # Claim work
+bd update <id> --claim  # Claim work
 bd close <id>         # Complete work
-bd sync               # Sync with git
 ```
 
 ## Landing the Plane (Session Completion)
@@ -24,7 +23,6 @@ bd sync               # Sync with git
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   bd sync
    git push
    git status  # MUST show "up to date with origin"
    ```
@@ -38,3 +36,24 @@ bd sync               # Sync with git
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
 
+
+## bv + br (Graph-Aware Triage)
+
+**Scope:** `bv` handles triage/planning. `br` handles creating, updating, closing issues.
+**CRITICAL:** Use `--robot-*` flags only — bare `bv` launches an interactive TUI that blocks your session.
+
+### Entry point
+```bash
+bv --robot-triage                    # start here — ranked work + dependency graph
+bv --robot-triage --format toon      # token-efficient version
+bv --robot-next                      # single top pick only
+```
+
+### Workflow
+1. `bv --robot-triage` — find highest-impact work
+2. `br update <id> --status=in_progress` — claim it
+3. implement
+4. `br close <id>`
+5. `br sync --flush-only` + `git push`
+
+*Full flag reference: `bv --help`, `br --help`*
