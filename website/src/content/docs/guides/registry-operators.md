@@ -310,6 +310,27 @@ Revocations are permanent in `registry.json`. If you un-revoke a hash later, rem
 
 If every source in `sources` fails, the action exits non-zero and does not update `registry.json`. Check the action log for per-source error messages. Common causes: private repository without `allow-private-source: true`, invalid URI format, GitHub API rate limit.
 
+**Private source skipped — the warning you'll see**
+
+When a source repo is private (or internal) and you have not set `allow-private-source: true` for it in `.moat/registry.yml`, the action prints this in the `Run MOAT registry action` step and skips the source:
+
+```
+Processing source: https://github.com/<owner>/<repo>
+  Self-publishing detected.
+  WARNING: Source is private; skipping (set allow-private-source: true to index).
+```
+
+The `Self-publishing detected.` line only appears if the source URI matches the registry's own repo. The warning itself fires for any private source.
+
+If that source was the only one configured, the next thing in the log is the fatal error and the failed exit:
+
+```
+error: all sources failed — no manifest update produced
+##[error]Process completed with exit code 1.
+```
+
+The actionable line is the WARNING — it names the field you need to set. The "all sources failed" line is just the consequence. Set `allow-private-source: true` on that source's entry and re-run, or make the source repo public.
+
 **Items show as `Signed` instead of `Dual-Attested`**
 
 See the trust tier section above. Check the action log for `Publisher Rekor verification failed` messages. If the publisher recently renamed their workflow file, their old Rekor entries won't match and they need to retrigger their Publisher Action.

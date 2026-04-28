@@ -81,15 +81,14 @@ The `paths-ignore` guard is belt-and-suspenders — recursive execution is struc
 
 ### 3. Private repositories (optional)
 
-By default the action exits with an error on the first run if your repository is `private` or `internal`. The exact failure message in the Actions log is:
+By default the action exits with an error on the first run if your repository is `private` or `internal`. The Actions log for the failed `Run MOAT publisher action` step shows exactly this:
 
 ```
-error: repository visibility is 'private'. Set ALLOW_PRIVATE_REPO: 'true'
-to attest private repositories. Note: content hashes and repository
-identity will be permanently recorded in the public Rekor transparency log.
+error: repository visibility is 'private'. Set ALLOW_PRIVATE_REPO: 'true' to attest private repositories. Note: content hashes and repository identity will be permanently recorded in the public Rekor transparency log.
+##[error]Process completed with exit code 1.
 ```
 
-This is the spec's Private Repository Guard working as designed. No signing happens before the guard fires, so a failed first run does not leak anything to Rekor.
+The job then fails at the `attest` step. This is the spec's Private Repository Guard working as designed. No signing happens before the guard fires, so a failed first run does not leak anything to Rekor.
 
 If you intentionally want to attest a private repo, set the env var in the workflow:
 

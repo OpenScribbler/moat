@@ -197,7 +197,34 @@ For content distributed to high-security environments, consider whether cross-re
 
 ## Private repositories
 
-If your repo is `private` or `internal`, both actions exit non-zero by default and refuse to run. To opt in, you must flip **two independent guards** — one in each workflow:
+If your repo is `private` or `internal`, both actions exit non-zero by default and refuse to run.
+
+### What you'll see when the guards fire
+
+When you push the workflows to a private repo without flipping the opt-in flags, both Actions runs fail. This is the spec's Private Repository Guard.
+
+The Publisher Action prints (in the `Run MOAT publisher action` step):
+
+```
+error: repository visibility is 'private'. Set ALLOW_PRIVATE_REPO: 'true' to attest private repositories. Note: content hashes and repository identity will be permanently recorded in the public Rekor transparency log.
+##[error]Process completed with exit code 1.
+```
+
+The Registry Action prints (in the `Run MOAT registry action` step):
+
+```
+Processing source: https://github.com/<owner>/<repo>
+  Self-publishing detected.
+  WARNING: Source is private; skipping (set allow-private-source: true to index).
+error: all sources failed — no manifest update produced
+##[error]Process completed with exit code 1.
+```
+
+No signing happens before either guard fires, so a failed first run does not leak anything to Rekor.
+
+### Opting in
+
+To opt in, you must flip **two independent guards** — one in each workflow:
 
 1. In `.github/workflows/moat-publisher.yml`, set the env var:
 
