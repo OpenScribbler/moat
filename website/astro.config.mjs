@@ -42,6 +42,7 @@ export default defineConfig({
           items: [
             { label: 'For publishers', slug: 'guides/publishers' },
             { label: 'For registry operators', slug: 'guides/registry-operators' },
+            { label: 'Self-publishing (both actions)', slug: 'guides/self-publishing' },
             { label: 'For consumers', slug: 'guides/consumers' },
           ],
         },

@@ -81,14 +81,31 @@ The `paths-ignore` guard is belt-and-suspenders — recursive execution is struc
 
 ### 3. Private repositories (optional)
 
-By default the action exits with an error if your repository is `private` or `internal`. If you intentionally want to attest a private repo, set:
+By default the action exits with an error on the first run if your repository is `private` or `internal`. The exact failure message in the Actions log is:
+
+```
+error: repository visibility is 'private'. Set ALLOW_PRIVATE_REPO: 'true'
+to attest private repositories. Note: content hashes and repository
+identity will be permanently recorded in the public Rekor transparency log.
+```
+
+This is the spec's Private Repository Guard working as designed. No signing happens before the guard fires, so a failed first run does not leak anything to Rekor.
+
+If you intentionally want to attest a private repo, set the env var in the workflow:
 
 ```yaml
 env:
   ALLOW_PRIVATE_REPO: 'true'
 ```
 
-**Note:** Content hashes and repository identity are permanently recorded in the public Rekor transparency log regardless of repository visibility. The content itself is not uploaded, but the metadata is public and irreversible.
+**What is and isn't logged.** Read this carefully before flipping the flag — opting in is one-way, since Rekor entries cannot be deleted:
+
+- **Logged to public Rekor:** the SHA-256 hash of each content item, your repository identity (`<owner>/<repo>`), the workflow file path, and the timestamp. Anyone in the world can see that your repo signed *something* and roughly what it was structured like.
+- **NOT logged:** the actual file contents. Content bytes never leave your repository. Only their hashes are signed.
+
+For a brand-new private repo with no prior public footprint, the metadata exposure may be material. For a repo whose existence and structure are already publicly known (a private fork of a public project, an org's known internal tooling), the additional exposure is small.
+
+If you're self-publishing (running both actions in this repo), you also need to set `allow-private-source: true` on the source entry in `.moat/registry.yml`. See the [self-publishing guide](/guides/self-publishing#private-repositories) for the full picture.
 
 ---
 

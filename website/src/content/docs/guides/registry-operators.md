@@ -105,6 +105,15 @@ A successful run commits `registry.json` and `registry.json.sigstore` to your `m
 Manifest committed and pushed.
 ```
 
+### What if a source has no `moat-attestation.json` yet?
+
+The Registry Action does not block on missing publisher attestations. If a source repo has not yet run its Publisher Action — or has run it but the `moat-attestation` branch is empty — the registry indexes that source's items as `Signed`, not `Dual-Attested`, and continues normally.
+
+This matters most in two situations:
+
+1. **You operate the registry and run sources you also publish from.** If you push the `.moat/registry.yml` config in the same commit as the publisher workflow, the registry will probably finish before the publisher creates the `moat-attestation` branch. First-run items show up as `Signed`. Re-trigger the registry after the publisher completes; items get promoted to `Dual-Attested`. See the [self-publishing guide](/guides/self-publishing#what-to-expect-on-the-first-push) for the recommended sequence.
+2. **You added a new source that is still adopting the Publisher Action.** Their items show as `Signed` on every crawl until they push their workflow. No action needed on your side — the next crawl after they ship will promote automatically.
+
 ---
 
 ## Verify the manifest
