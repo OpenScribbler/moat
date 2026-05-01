@@ -449,7 +449,8 @@
     .step-sentinel {
       min-height: 60vh;
     }
-    .step-sentinel:first-child { min-height: 35vh; }
+    .step-sentinel:first-child  { min-height: 20vh; }
+    .step-sentinel:nth-child(2) { min-height: 35vh; }
 
     /* SVG state animations */
     .node {
@@ -751,7 +752,6 @@
       <p class="subhead">Keyless signing &nbsp;·&nbsp; Logged by default &nbsp;·&nbsp; Tamper-evident by design</p>
       <div class="hero-ctas">
         <a href="#" class="cta-primary">Read the spec →</a>
-        <a href="#flow" class="cta-secondary">Watch the flow ↓</a>
       </div>
     </div>
   </section>
@@ -1050,6 +1050,7 @@
            as each crosses the middle band of the viewport (rootMargin
            -40% / -40%) the matching caption + diagram state activates. -->
       <div class="step-sentinels" aria-hidden="true">
+        <div class="step-sentinel" data-step="intro"></div>
         <div class="step-sentinel" data-step="signed"></div>
         <div class="step-sentinel" data-step="attested"></div>
         <div class="step-sentinel" data-step="verified"></div>
@@ -1230,7 +1231,10 @@
       function setStep(step) {
         clearAll();
         updateCaption(step);
-        if (step === 'signed') {
+        if (step === 'intro') {
+          nodes.rekor.classList.add('active');
+          lines.anchor.classList.add('active');
+        } else if (step === 'signed') {
           nodes.publisher.classList.add('active');
           nodes.rekor.classList.add('active');
           lines.anchor.classList.add('active');
@@ -1272,18 +1276,25 @@
       // above.
       var sentinels = document.querySelectorAll('.step-sentinels .step-sentinel');
 
-      // Default landing state: signed. The first sentinel will re-trigger
-      // the same state as it crosses the trigger band, so this is just
-      // for the brief moment before that fires (or for browsers without
-      // IntersectionObserver, which fall through to this state).
-      setStep('signed');
+      // Default landing state: all nodes dimmed. The intro sentinel fires
+      // as soon as the diagram pins and the user starts scrolling, activating
+      // the Rekor node and log-entry line. Signed/attested/verified fire
+      // progressively as each sentinel crosses the trigger band.
 
       if ('IntersectionObserver' in window && sentinels.length) {
+        var stepOrder = ['intro', 'signed', 'attested', 'verified'];
         var stepObserver = new IntersectionObserver(function (entries) {
           entries.forEach(function (e) {
+            var step = e.target.dataset.step;
+            var idx = stepOrder.indexOf(step);
             if (e.isIntersecting) {
-              setStep(e.target.dataset.step);
+              setStep(step);
+            } else if (e.boundingClientRect.top > 0) {
+              // Exited from below the trigger zone — user scrolled UP past this sentinel.
+              // Revert to the previous step; clear everything if we're past the first.
+              if (idx > 0) { setStep(stepOrder[idx - 1]); } else { clearAll(); }
             }
+            // top < 0: exited above — user scrolled down past it. Next sentinel handles it.
           });
         }, { rootMargin: '-40% 0px -40% 0px', threshold: 0 });
         sentinels.forEach(function (s) { stepObserver.observe(s); });
