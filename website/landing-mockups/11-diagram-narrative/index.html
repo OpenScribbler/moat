@@ -917,9 +917,9 @@
               <line x1="140" y1="81" x2="140" y2="63" stroke="var(--signed)" stroke-width="1.5" marker-end="url(#m11-mob-signed)"/>
               <text x="147" y="75" font-family="'JetBrains Mono', monospace" font-size="9" fill="var(--signed)">log entry</text>
 
-              <!-- Publisher (y=82, h=200) -->
+              <!-- Publisher (y=82, h=206) -->
               <g>
-                <rect x="5" y="82" width="270" height="200" rx="10"
+                <rect x="5" y="82" width="270" height="206" rx="10"
                       fill="var(--node-fill)" stroke="var(--signed)" stroke-width="1.5"/>
                 <rect x="5" y="82" width="270" height="30" rx="10" fill="var(--signed-soft)"/>
                 <rect x="5" y="106" width="270" height="6" fill="var(--signed-soft)"/>
@@ -928,53 +928,49 @@
                 <text x="20" y="152" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">$ moat-publisher</text>
                 <text x="20" y="170" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">→ generates manifest</text>
                 <text x="20" y="188" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">→ signs (keyless OIDC)</text>
-                <text x="20" y="208" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">Add one GitHub Actions workflow.</text>
-                <text x="20" y="224" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">Moat generates a signed manifest,</text>
-                <text x="20" y="240" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">anchors it to a transparency log,</text>
-                <text x="20" y="256" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">and pushes it to your registry</text>
-                <text x="20" y="272" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">branch.</text>
+                <foreignObject x="20" y="204" width="240" height="74">
+                  <div xmlns="http://www.w3.org/1999/xhtml" lang="en" style="font-family:Inter,sans-serif;font-size:12px;line-height:1.4;color:var(--ink-soft);text-align:justify;hyphens:auto;-webkit-hyphens:auto">Add one GitHub Actions workflow. Moat generates a signed manifest, anchors it to a transparency log, and pushes it to your registry branch.</div>
+                </foreignObject>
               </g>
 
               <!-- Publisher → Registry arrow (push manifest) -->
-              <line x1="140" y1="283" x2="140" y2="305" stroke="var(--attested)" stroke-width="2" marker-end="url(#m11-mob-attested)"/>
-              <text x="147" y="297" font-family="'JetBrains Mono', monospace" font-size="9" fill="var(--attested)">push</text>
+              <line x1="140" y1="289" x2="140" y2="311" stroke="var(--attested)" stroke-width="2" marker-end="url(#m11-mob-attested)"/>
+              <text x="147" y="303" font-family="'JetBrains Mono', monospace" font-size="9" fill="var(--attested)">push</text>
 
-              <!-- Registry (y=306, h=174) -->
+              <!-- Registry (y=312, h=186) -->
               <g>
-                <rect x="5" y="306" width="270" height="174" rx="10"
+                <rect x="5" y="312" width="270" height="186" rx="10"
                       fill="var(--node-fill)" stroke="var(--attested)" stroke-width="1.5"/>
-                <rect x="5" y="306" width="270" height="30" rx="10" fill="var(--attested-soft)"/>
-                <rect x="5" y="330" width="270" height="6" fill="var(--attested-soft)"/>
-                <text x="20" y="326" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="600" fill="var(--attested)" letter-spacing="0.06em">REGISTRY ATTESTS.</text>
-                <text x="20" y="356" font-family="Inter, sans-serif" font-size="14" font-weight="500" fill="var(--ink)">attests &amp; indexes</text>
-                <text x="20" y="374" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">→ what was attested</text>
-                <text x="20" y="392" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">→ when, by whom</text>
-                <text x="20" y="410" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">→ public, queryable</text>
-                <text x="20" y="430" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">The registry indexes the signed</text>
-                <text x="20" y="446" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">manifest. Anyone can query what</text>
-                <text x="20" y="462" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">was attested, when, and by whom.</text>
+                <rect x="5" y="312" width="270" height="30" rx="10" fill="var(--attested-soft)"/>
+                <rect x="5" y="336" width="270" height="6" fill="var(--attested-soft)"/>
+                <text x="20" y="332" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="600" fill="var(--attested)" letter-spacing="0.06em">REGISTRY ATTESTS.</text>
+                <text x="20" y="362" font-family="Inter, sans-serif" font-size="14" font-weight="500" fill="var(--ink)">attests &amp; indexes</text>
+                <text x="20" y="380" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">→ what was attested</text>
+                <text x="20" y="398" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">→ when, by whom</text>
+                <text x="20" y="416" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">→ public, queryable</text>
+                <foreignObject x="20" y="432" width="240" height="58">
+                  <div xmlns="http://www.w3.org/1999/xhtml" lang="en" style="font-family:Inter,sans-serif;font-size:12px;line-height:1.4;color:var(--ink-soft);text-align:justify;hyphens:auto;-webkit-hyphens:auto">The registry indexes the signed manifest. Anyone can query what was attested, when, and by whom.</div>
+                </foreignObject>
               </g>
 
               <!-- Registry → Consumer arrow (fetch attestation) -->
-              <line x1="140" y1="481" x2="140" y2="503" stroke="var(--verified)" stroke-width="2" marker-end="url(#m11-mob-verified)"/>
-              <text x="147" y="495" font-family="'JetBrains Mono', monospace" font-size="9" fill="var(--verified)">fetch</text>
+              <line x1="140" y1="499" x2="140" y2="521" stroke="var(--verified)" stroke-width="2" marker-end="url(#m11-mob-verified)"/>
+              <text x="147" y="513" font-family="'JetBrains Mono', monospace" font-size="9" fill="var(--verified)">fetch</text>
 
-              <!-- Consumer (y=504, h=204) -->
+              <!-- Consumer (y=522, h=182) -->
               <g>
-                <rect x="5" y="504" width="270" height="204" rx="10"
+                <rect x="5" y="522" width="270" height="182" rx="10"
                       fill="var(--node-fill)" stroke="var(--verified)" stroke-width="1.5"/>
-                <rect x="5" y="504" width="270" height="30" rx="10" fill="var(--verified-soft)"/>
-                <rect x="5" y="528" width="270" height="6" fill="var(--verified-soft)"/>
-                <text x="20" y="524" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="600" fill="var(--verified)" letter-spacing="0.06em">CONSUMER VERIFIES.</text>
-                <text x="20" y="554" font-family="Inter, sans-serif" font-size="14" font-weight="500" fill="var(--ink)">verify before install</text>
-                <text x="20" y="572" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">$ moat-verify ./skill</text>
-                <text x="20" y="590" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">→ hash + sig OK</text>
-                <text x="20" y="608" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--verified)">✓ installed</text>
-                <text x="20" y="628" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">Run moat-verify before installing.</text>
-                <text x="20" y="644" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">It checks the content hash against</text>
-                <text x="20" y="660" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">the registry attestation and</text>
-                <text x="20" y="676" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">confirms the signature is logged</text>
-                <text x="20" y="692" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">in Rekor. Tampered content fails.</text>
+                <rect x="5" y="522" width="270" height="30" rx="10" fill="var(--verified-soft)"/>
+                <rect x="5" y="546" width="270" height="6" fill="var(--verified-soft)"/>
+                <text x="20" y="542" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="600" fill="var(--verified)" letter-spacing="0.06em">CONSUMER VERIFIES.</text>
+                <text x="20" y="572" font-family="Inter, sans-serif" font-size="14" font-weight="500" fill="var(--ink)">verify before install</text>
+                <text x="20" y="590" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">$ moat-verify ./skill</text>
+                <text x="20" y="608" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">→ hash + sig OK</text>
+                <text x="20" y="626" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--verified)">✓ installed</text>
+                <foreignObject x="20" y="642" width="240" height="58">
+                  <div xmlns="http://www.w3.org/1999/xhtml" lang="en" style="font-family:Inter,sans-serif;font-size:12px;line-height:1.4;color:var(--ink-soft);text-align:justify;hyphens:auto;-webkit-hyphens:auto">Run moat-verify before installing. It checks the content hash and Rekor signature. Tampered content fails.</div>
+                </foreignObject>
               </g>
             </svg>
           </div>
