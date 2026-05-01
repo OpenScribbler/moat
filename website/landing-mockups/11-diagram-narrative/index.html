@@ -273,16 +273,12 @@
     .cta-secondary:hover { border-color: var(--verified); }
 
     /* ─── Trust-flow section (sticky scrollytelling) ───────────────
-       Pattern follows Pudding/Scrollama canonical sticky-pin layout:
-       a sticky `.scrolly-figure` holds the diagram, which pins to
-       `top: 4.5rem` (just below the sticky site header) for the
-       duration of the section. Sibling step cards stack below in
-       normal flow and each occupies ~75vh of scroll budget — that
-       gives enough dwell time for the IntersectionObserver to fire
-       once per step as the card crosses the viewport's middle band
-       (-40% / -40% rootMargin). When the section ends, sticky
-       releases naturally — the next section follows immediately,
-       no min-height padding the bottom. */
+       Sticky-pin layout: `.scrolly-figure` pins to `top: 5.5rem`
+       for the duration of the section. A 320vh scroll spacer below
+       provides the scroll budget (4 steps × 80vh). Step state is
+       computed synchronously from scrollY on each scroll event —
+       no IntersectionObserver. When the section ends, sticky
+       releases naturally. */
     .trust-flow {
       padding: 4rem 0 4rem;
       position: relative;
@@ -436,21 +432,13 @@
       margin: 0;
     }
 
-    /* Invisible scroll sentinels — sit below the sticky figure, in normal
-       flow. Each sentinel is one viewport tall (75vh) and gets observed
-       by the IntersectionObserver. As each sentinel crosses the middle
-       band of the viewport, it triggers the matching state. The
-       sentinels themselves are visually empty; only their presence in
-       the document drives the scroll budget that keeps the figure
-       pinned. */
+    /* Scroll spacer — provides the scroll budget that keeps the sticky
+       figure pinned while the user scrolls through each step. Height is
+       4 steps × 80vh. Step boundaries are computed from scrollY in JS;
+       no sentinel divs or IntersectionObserver needed. */
     .step-sentinels {
-      margin-top: 0.5rem;
+      height: 320vh;
     }
-    .step-sentinel {
-      min-height: 60vh;
-    }
-    .step-sentinel:first-child  { min-height: 20vh; }
-    .step-sentinel:nth-child(2) { min-height: 35vh; }
 
     /* SVG state animations */
     .node {
@@ -1046,15 +1034,9 @@
           </div>
       </div>
 
-      <!-- Invisible sentinels drive the scroll budget. Each is 75vh tall;
-           as each crosses the middle band of the viewport (rootMargin
-           -40% / -40%) the matching caption + diagram state activates. -->
-      <div class="step-sentinels" aria-hidden="true">
-        <div class="step-sentinel" data-step="intro"></div>
-        <div class="step-sentinel" data-step="signed"></div>
-        <div class="step-sentinel" data-step="attested"></div>
-        <div class="step-sentinel" data-step="verified"></div>
-      </div>
+      <!-- Scroll spacer: 320vh keeps the sticky figure pinned for 4 steps.
+           Step state is computed from scrollY in JS — no sentinel divs. -->
+      <div class="step-sentinels" aria-hidden="true"></div>
     </div>
   </section>
 
@@ -1265,40 +1247,53 @@
         }
       }
 
-      // Scroll-driven step progression. The diagram + caption rail are
-      // pinned within the trust-flow section. Three invisible sentinels
-      // below the figure each occupy ~75vh of scroll budget. An
-      // IntersectionObserver with rootMargin '-40% 0px -40% 0px' fires
-      // when a sentinel crosses the middle 20% band of the viewport — at
-      // that moment we set the diagram to that step's state and the
-      // caption rail cross-fades to the matching panel. Scrolling up
-      // reverses the sequence naturally as sentinels re-enter from
-      // above.
-      var sentinels = document.querySelectorAll('.step-sentinels .step-sentinel');
+      // Pure scroll-position state machine. Step is a deterministic function
+      // of scrollY — no IntersectionObserver, no async edge cases, no
+      // on-load false fires. The sticky figure pins when scrollY reaches
+      // stickStart; each 80vh of scroll past that advances one step.
+      var stickyFig   = document.querySelector('.scrolly-figure');
+      var stickyTopPx = parseFloat(getComputedStyle(stickyFig).top) || 88;
+      var stepOrder   = ['intro', 'signed', 'attested', 'verified'];
+      var activeStep  = null;
 
-      // Default landing state: all nodes dimmed. The intro sentinel fires
-      // as soon as the diagram pins and the user starts scrolling, activating
-      // the Rekor node and log-entry line. Signed/attested/verified fire
-      // progressively as each sentinel crosses the trigger band.
-
-      if ('IntersectionObserver' in window && sentinels.length) {
-        var stepOrder = ['intro', 'signed', 'attested', 'verified'];
-        var stepObserver = new IntersectionObserver(function (entries) {
-          entries.forEach(function (e) {
-            var step = e.target.dataset.step;
-            var idx = stepOrder.indexOf(step);
-            if (e.isIntersecting) {
-              setStep(step);
-            } else if (e.boundingClientRect.top > 0) {
-              // Exited from below the trigger zone — user scrolled UP past this sentinel.
-              // Revert to the previous step; clear everything if we're past the first.
-              if (idx > 0) { setStep(stepOrder[idx - 1]); } else { clearAll(); }
-            }
-            // top < 0: exited above — user scrolled down past it. Next sentinel handles it.
-          });
-        }, { rootMargin: '-40% 0px -40% 0px', threshold: 0 });
-        sentinels.forEach(function (s) { stepObserver.observe(s); });
+      // offsetTop is relative to the nearest positioned ancestor (the
+      // container div), not the document — so use getBoundingClientRect
+      // + scrollY to get the true document position.
+      function getStickStart() {
+        return stickyFig.getBoundingClientRect().top + window.scrollY - stickyTopPx;
       }
+      var stickStart = getStickStart();
+
+      window.addEventListener('resize', function () {
+        stickStart = getStickStart();
+      }, { passive: true });
+
+      function getStep() {
+        if (window.innerWidth <= 960) return 'none';
+        var scrolled = window.scrollY - stickStart;
+        if (scrolled < 0) return 'none';
+        var stepH = window.innerHeight * 0.8;
+        var idx = Math.min(stepOrder.length - 1, Math.floor(scrolled / stepH));
+        return stepOrder[idx];
+      }
+
+      var ticking = false;
+      function onScroll() {
+        if (!ticking) {
+          requestAnimationFrame(function () {
+            var step = getStep();
+            if (step !== activeStep) {
+              activeStep = step;
+              if (step === 'none') { clearAll(); updateCaption(null); } else { setStep(step); }
+            }
+            ticking = false;
+          });
+          ticking = true;
+        }
+      }
+
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
     })();
   </script>
 </body>
