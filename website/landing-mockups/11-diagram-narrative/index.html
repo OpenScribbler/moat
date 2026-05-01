@@ -1,0 +1,1294 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Moat — AI agent content, verified at install. (Mockup 11 · Diagram-Narrative Hybrid)</title>
+  <meta name="description" content="Model for Origin Attestation and Trust — an open protocol for provenance and integrity of AI agent content." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <script>
+    (function () {
+      try {
+        var stored = localStorage.getItem('moat-mockup-11-theme');
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = stored || (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    })();
+  </script>
+
+  <style>
+    /* ─── Flexoki palette · light ───────────────────────────────── */
+    html[data-theme="light"] {
+      --paper:     #fffcf0;
+      --base-50:   #f2f0e5;
+      --base-100:  #e6e4d9;
+      --base-150:  #dad8ce;
+      --base-200:  #cecdc3;
+      --base-300:  #b7b5ac;
+      --base-500:  #6f6e69;
+      --base-600:  #575653;
+      --base-700:  #403e3c;
+      --base-800:  #282726;
+      --base-900:  #100f0f;
+
+      --bg:           var(--paper);
+      --bg-soft:      var(--base-50);
+      --bg-card:      #ffffff;
+      --bg-elev:      #ffffff;
+
+      --ink:          var(--base-900);
+      --ink-soft:     var(--base-700);
+      --ink-muted:    var(--base-500);
+      --ink-faint:    var(--base-300);
+
+      --border:       var(--base-100);
+      --border-strong:var(--base-200);
+
+      --signed:       #66800b;
+      --signed-soft:  rgba(102, 128, 11, 0.10);
+      --signed-glow:  rgba(102, 128, 11, 0.32);
+      --attested:     #205ea6;
+      --attested-soft:rgba(32, 94, 166, 0.10);
+      --attested-glow:rgba(32, 94, 166, 0.32);
+      --verified:     #24837b;
+      --verified-soft:rgba(36, 131, 123, 0.10);
+      --verified-glow:rgba(36, 131, 123, 0.32);
+      --rekor:        #ad8301;
+      --rekor-soft:   rgba(173, 131, 1, 0.10);
+      --rekor-glow:   rgba(173, 131, 1, 0.32);
+
+      --diagram-bg:        #ffffff;
+      --diagram-grid:      var(--base-100);
+      --node-fill:         #ffffff;
+      --node-stroke-dim:   var(--base-200);
+      --node-text-dim:     var(--base-500);
+
+      --shadow-card: 0 1px 2px rgba(16, 15, 15, 0.04), 0 8px 28px rgba(16, 15, 15, 0.06);
+      --shadow-elev: 0 12px 40px -8px rgba(16, 15, 15, 0.18);
+    }
+
+    /* ─── Flexoki palette · dark ────────────────────────────────── */
+    html[data-theme="dark"] {
+      --paper:     #fffcf0;
+      --base-50:   #f2f0e5;
+      --base-100:  #e6e4d9;
+      --base-300:  #b7b5ac;
+      --base-500:  #6f6e69;
+      --base-700:  #403e3c;
+      --base-800:  #282726;
+      --base-850:  #1c1b1a;
+      --base-900:  #100f0f;
+
+      --bg:           var(--base-900);
+      --bg-soft:      var(--base-850);
+      --bg-card:      var(--base-800);
+      --bg-elev:      #2e2c2a;
+
+      --ink:          var(--paper);
+      --ink-soft:     var(--base-300);
+      --ink-muted:    var(--base-500);
+      --ink-faint:    var(--base-700);
+
+      --border:       var(--base-800);
+      --border-strong:var(--base-700);
+
+      --signed:       #879a39;
+      --signed-soft:  rgba(135, 154, 57, 0.16);
+      --signed-glow:  rgba(135, 154, 57, 0.45);
+      --attested:     #4385be;
+      --attested-soft:rgba(67, 133, 190, 0.16);
+      --attested-glow:rgba(67, 133, 190, 0.45);
+      --verified:     #3aa99f;
+      --verified-soft:rgba(58, 169, 159, 0.16);
+      --verified-glow:rgba(58, 169, 159, 0.45);
+      --rekor:        #d0a215;
+      --rekor-soft:   rgba(208, 162, 21, 0.16);
+      --rekor-glow:   rgba(208, 162, 21, 0.45);
+
+      --diagram-bg:        var(--base-850);
+      --diagram-grid:      var(--base-800);
+      --node-fill:         var(--base-800);
+      --node-stroke-dim:   var(--base-700);
+      --node-text-dim:     var(--base-500);
+
+      --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 28px rgba(0, 0, 0, 0.45);
+      --shadow-elev: 0 24px 60px -12px rgba(0, 0, 0, 0.6);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+      scroll-behavior: smooth;
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+
+    a { color: var(--verified); text-decoration: none; }
+    a:hover { color: var(--ink); }
+
+    code {
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+      font-size: 0.9em; background: var(--bg-soft);
+      padding: 0.1em 0.4em; border-radius: 3px;
+      color: var(--verified); border: 1px solid var(--border);
+    }
+
+    .container { max-width: 1180px; margin: 0 auto; padding: 0 2rem; }
+
+    /* ─── Mockup banner ─── */
+    .mockup-banner {
+      background: var(--bg-soft); border-bottom: 1px solid var(--border);
+      color: var(--ink-muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem; padding: 0.5rem 0; text-align: center;
+      letter-spacing: 0.04em;
+    }
+    .mockup-banner a { color: var(--verified); }
+
+    /* ─── Header ─── */
+    .site-header {
+      position: sticky; top: 0; z-index: 100;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 0;
+    }
+    .site-header .container {
+      display: flex; align-items: center; gap: 2rem;
+    }
+    .logo {
+      display: inline-flex; align-items: center; gap: 0.55rem;
+      font-weight: 700; font-size: 1rem; letter-spacing: 0.04em;
+      color: var(--ink);
+    }
+    .logo-mark {
+      width: 1.5rem; height: 1.5rem;
+      background: linear-gradient(135deg, var(--verified), var(--attested));
+      border-radius: 50% 50% 4px 4px;
+      box-shadow: 0 0 14px var(--verified-glow);
+    }
+    .site-header nav { display: flex; gap: 1.5rem; flex: 1; }
+    .site-header nav a { color: var(--ink-soft); font-size: 0.88rem; font-weight: 500; }
+    .site-header nav a:hover { color: var(--ink); }
+
+    .header-tools { display: flex; align-items: center; gap: 0.6rem; }
+    .theme-toggle {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 2rem; height: 2rem;
+      background: transparent; border: 1px solid var(--border-strong);
+      border-radius: 6px; color: var(--ink-soft);
+      cursor: pointer; transition: all 0.18s ease;
+    }
+    .theme-toggle:hover { color: var(--ink); border-color: var(--ink-muted); }
+    .theme-toggle svg { width: 16px; height: 16px; }
+    html[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+    html[data-theme="light"] .theme-toggle .icon-sun { display: none; }
+
+    .header-cta {
+      padding: 0.5rem 0.95rem;
+      background: var(--ink); color: var(--bg) !important;
+      border-radius: 6px; font-size: 0.85rem; font-weight: 600;
+    }
+    .header-cta:hover { background: var(--ink-soft); color: var(--bg) !important; }
+
+    /* ─── Hero ─── */
+    .hero {
+      padding: 4rem 0 4rem;
+      text-align: center;
+      position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: ''; position: absolute;
+      inset: 0; pointer-events: none; z-index: 0;
+      background:
+        radial-gradient(ellipse 60% 40% at 50% 30%, var(--verified-soft), transparent 60%);
+    }
+    .hero .container { position: relative; z-index: 1; }
+
+    .spec-tag {
+      display: inline-flex; align-items: center; gap: 0.55rem;
+      padding: 0.35rem 0.9rem;
+      background: var(--verified-soft);
+      border: 1px solid color-mix(in srgb, var(--verified) 35%, transparent);
+      border-radius: 999px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem; color: var(--verified);
+      letter-spacing: 0.04em;
+      margin-bottom: 1.75rem;
+    }
+    .spec-tag::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--verified); box-shadow: 0 0 8px var(--verified-glow);
+    }
+
+    h1 {
+      font-size: clamp(2.4rem, 5vw, 4rem);
+      font-weight: 700; line-height: 1.05;
+      letter-spacing: -0.035em;
+      margin: 0 auto 1.4rem;
+      max-width: 22ch;
+      color: var(--ink);
+    }
+    h1 .accent { color: var(--verified); }
+    .tagline {
+      font-size: 1.15rem; color: var(--ink-soft);
+      max-width: 36rem; line-height: 1.55;
+      margin: 0 auto 0.85rem;
+    }
+    .subhead {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem; color: var(--ink-muted);
+      margin-bottom: 2rem;
+    }
+    .hero-ctas {
+      display: flex; gap: 0.7rem; justify-content: center; flex-wrap: wrap;
+    }
+    .cta-primary, .cta-secondary {
+      padding: 0.78rem 1.4rem;
+      border-radius: 8px;
+      font-size: 0.92rem; font-weight: 600;
+      transition: all 0.18s ease;
+      display: inline-flex; align-items: center; gap: 0.4rem;
+    }
+    .cta-primary {
+      background: var(--ink); color: var(--bg) !important;
+    }
+    .cta-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px -6px var(--verified-glow);
+    }
+    .cta-secondary {
+      background: var(--bg-card); color: var(--ink) !important;
+      border: 1px solid var(--border-strong);
+    }
+    .cta-secondary:hover { border-color: var(--verified); }
+
+    /* ─── Trust-flow section (sticky scrollytelling) ───────────────
+       Pattern follows Pudding/Scrollama canonical sticky-pin layout:
+       a sticky `.scrolly-figure` holds the diagram, which pins to
+       `top: 4.5rem` (just below the sticky site header) for the
+       duration of the section. Sibling step cards stack below in
+       normal flow and each occupies ~75vh of scroll budget — that
+       gives enough dwell time for the IntersectionObserver to fire
+       once per step as the card crosses the viewport's middle band
+       (-40% / -40% rootMargin). When the section ends, sticky
+       releases naturally — the next section follows immediately,
+       no min-height padding the bottom. */
+    .trust-flow {
+      padding: 4rem 0 4rem;
+      position: relative;
+      background: var(--bg-soft);
+      border-top: 1px solid var(--border);
+    }
+    .trust-flow .container { position: relative; }
+
+    /* Tighten the boundary between the scrollytelling section and the
+       section that follows. Default `.standard` adds 6rem of top padding
+       which, on top of an empty eyebrow paragraph, made the trust-flow
+       end feel like a void. With the solid section background continuing
+       up to the next section's content, this trim is safe. */
+    .trust-flow + section.standard { padding-top: 3.5rem; }
+
+    .scrolly-figure {
+      position: sticky;
+      top: 5.5rem;        /* 88px — clears the 65px sticky header AND
+                             the diagram-stage's "fig.01 / trust flow"
+                             label that sits at top:-10px of the stage. */
+      z-index: 1;
+    }
+
+    .scroll-eyebrow-row {
+      display: flex; align-items: baseline; gap: 1.25rem;
+      margin-bottom: 0.75rem;
+    }
+    .section-eyebrow {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem; color: var(--verified);
+      text-transform: uppercase; letter-spacing: 0.1em;
+      font-weight: 500;
+      display: inline-flex; align-items: center; gap: 0.5rem;
+    }
+    .section-eyebrow::before {
+      content: 'fig.01'; color: var(--ink-faint);
+      font-weight: 400; letter-spacing: 0.06em;
+    }
+    .scroll-eyebrow-row h2 { margin: 0; flex: 1; }
+
+    .diagram-stage {
+      background: var(--diagram-bg);
+      border: 1px solid var(--border-strong);
+      border-radius: 14px;
+      padding: 1.5rem 1.5rem 1rem;
+      position: relative;
+      box-shadow: var(--shadow-elev);
+      max-width: 1180px;
+      margin: 0 auto;
+      width: 100%;
+    }
+    .diagram-stage::before {
+      content: 'fig.01 / trust flow';
+      position: absolute;
+      top: -10px; left: 1.5rem;
+      background: var(--bg);
+      padding: 0 0.65rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem; color: var(--ink-muted);
+      letter-spacing: 0.08em;
+    }
+    .diagram-step-pill {
+      position: absolute; top: 1rem; right: 1.25rem;
+      display: flex; align-items: center; gap: 0.35rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem; color: var(--ink-muted);
+      letter-spacing: 0.06em;
+      z-index: 2;
+    }
+    .step-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--ink-faint);
+      transition: background 0.4s ease, box-shadow 0.4s ease;
+    }
+    .step-dot.active.signed   { background: var(--signed);   box-shadow: 0 0 8px var(--signed-glow); }
+    .step-dot.active.attested { background: var(--attested); box-shadow: 0 0 8px var(--attested-glow); }
+    .step-dot.active.verified { background: var(--verified); box-shadow: 0 0 8px var(--verified-glow); }
+
+    .diagram-svg {
+      width: 100%; height: auto; display: block;
+      max-height: 52vh;
+    }
+    .diagram-svg-mobile { display: none; }
+
+    /* Caption rail — lives INSIDE the sticky figure, directly below the
+       diagram-stage. All three captions stack at the same absolute
+       position; only the active one is visible (opacity: 1). This is the
+       "static area whose content changes" — caption text cross-fades as
+       the user scrolls past invisible sentinels below the figure. */
+    .caption-rail {
+      position: relative;
+      max-width: 760px; width: 100%;
+      margin: 1.25rem auto 0;
+      min-height: 11rem;
+    }
+    .caption {
+      position: absolute; inset: 0;
+      padding: 1.6rem 1.6rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity 0.55s ease, transform 0.55s ease,
+                  border-color 0.55s ease, box-shadow 0.55s ease;
+      pointer-events: none;
+    }
+    .caption.active {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+    .caption.signed-step.active {
+      border-color: color-mix(in srgb, var(--signed) 55%, transparent);
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--signed) 35%, transparent),
+                  0 12px 32px -10px var(--signed-glow);
+    }
+    .caption.attested-step.active {
+      border-color: color-mix(in srgb, var(--attested) 55%, transparent);
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--attested) 35%, transparent),
+                  0 12px 32px -10px var(--attested-glow);
+    }
+    .caption.verified-step.active {
+      border-color: color-mix(in srgb, var(--verified) 55%, transparent);
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--verified) 35%, transparent),
+                  0 12px 32px -10px var(--verified-glow);
+    }
+    .caption .step-eyebrow {
+      display: inline-flex; align-items: center; gap: 0.55rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.76rem; letter-spacing: 0.08em; text-transform: uppercase;
+      margin-bottom: 0.55rem; font-weight: 500;
+    }
+    .caption .step-eyebrow::before {
+      content: ''; width: 8px; height: 8px; border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 12px currentColor;
+    }
+    .caption.signed-step   .step-eyebrow { color: var(--signed); }
+    .caption.attested-step .step-eyebrow { color: var(--attested); }
+    .caption.verified-step .step-eyebrow { color: var(--verified); }
+    .caption h3 {
+      font-size: 1.2rem;
+      font-weight: 700; letter-spacing: -0.02em;
+      line-height: 1.25;
+      margin-bottom: 0.4rem; color: var(--ink);
+    }
+    .caption p {
+      font-size: 0.95rem; color: var(--ink-soft);
+      line-height: 1.55;
+      margin: 0;
+    }
+
+    /* Invisible scroll sentinels — sit below the sticky figure, in normal
+       flow. Each sentinel is one viewport tall (75vh) and gets observed
+       by the IntersectionObserver. As each sentinel crosses the middle
+       band of the viewport, it triggers the matching state. The
+       sentinels themselves are visually empty; only their presence in
+       the document drives the scroll budget that keeps the figure
+       pinned. */
+    .step-sentinels {
+      margin-top: 0.5rem;
+    }
+    .step-sentinel {
+      min-height: 60vh;
+    }
+    .step-sentinel:first-child { min-height: 35vh; }
+
+    /* SVG state animations */
+    .node {
+      transition: filter 0.6s ease, opacity 0.6s ease;
+      opacity: 0.42;
+    }
+    .node.active { opacity: 1; }
+    .node.publisher.active { filter: drop-shadow(0 0 12px var(--signed-glow)); }
+    .node.registry.active  { filter: drop-shadow(0 0 12px var(--attested-glow)); }
+    .node.consumer.active  { filter: drop-shadow(0 0 12px var(--verified-glow)); }
+    .node.rekor.active     { filter: drop-shadow(0 0 12px var(--rekor-glow)); }
+
+    .flow-line {
+      stroke-dasharray: 800;
+      stroke-dashoffset: 800;
+      opacity: 0;
+      transition: stroke-dashoffset 1.1s ease, opacity 0.4s ease;
+    }
+    .flow-line.active { stroke-dashoffset: 0; opacity: 1; }
+    /* dashed lines (verify) preserve dashed look once drawn */
+    .flow-line.dashed { stroke-dasharray: 6 5; stroke-dashoffset: 0; opacity: 0; transition: opacity 0.6s ease; }
+    .flow-line.dashed.active { opacity: 1; }
+
+    .badge-pulse {
+      opacity: 0;
+      transform-origin: center;
+      transform: scale(0.6);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+    .badge-pulse.active { opacity: 1; transform: scale(1); }
+
+    .manifest-token {
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+    .manifest-token.active { opacity: 1; }
+    .manifest-token.publisher.active { animation: tokenPub 1.4s ease 0.4s forwards; }
+    .manifest-token.registry.active  { animation: tokenReg 1.4s ease 0.2s forwards; }
+    /* Tokens travel along the connector line, then fade as they "arrive" so they
+       don't overlap the destination node's body text. Distance 110px = roughly
+       the gap between adjacent nodes (registry x=420 - publisher.right x=340). */
+    @keyframes tokenPub {
+      0%   { transform: translate(0, 0); opacity: 1; }
+      75%  { transform: translate(95px, 0); opacity: 0.85; }
+      100% { transform: translate(110px, 0); opacity: 0; }
+    }
+    @keyframes tokenReg {
+      0%   { transform: translate(0, 0); opacity: 1; }
+      75%  { transform: translate(95px, 0); opacity: 0.85; }
+      100% { transform: translate(110px, 0); opacity: 0; }
+    }
+
+    /* ─── Section base ─── */
+    section.standard { padding: 6rem 0; border-top: 1px solid var(--border); }
+    h2 {
+      font-size: clamp(1.75rem, 3vw, 2.4rem);
+      font-weight: 700; letter-spacing: -0.025em; line-height: 1.15;
+      margin-bottom: 1rem; color: var(--ink);
+      max-width: 28ch;
+    }
+    .section-lead {
+      font-size: 1.05rem; color: var(--ink-soft);
+      max-width: 38rem; line-height: 1.6;
+      margin-bottom: 3rem;
+    }
+
+    /* ─── Problem ─── */
+    .problem-grid {
+      display: grid; grid-template-columns: 1fr 1.5fr; gap: 4rem; align-items: start;
+    }
+    .problem-grid .section-eyebrow::before { content: '§01'; }
+    .problem-grid h2 { font-size: 1.4rem; max-width: none; }
+    .problem-grid p {
+      font-size: 1.05rem; color: var(--ink-soft); margin-bottom: 1.25rem; line-height: 1.65;
+    }
+    .problem-grid .resolution {
+      color: var(--ink); font-weight: 600;
+      padding: 1.25rem 1.5rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--verified);
+      border-radius: 4px;
+      margin-bottom: 0;
+    }
+
+    /* ─── Roles · staggered zigzag ─── */
+    .roles-section .section-eyebrow::before { content: '§02'; }
+    .role-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;
+      margin-top: 2rem;
+    }
+    @media (min-width: 800px) {
+      .role-grid {
+        --stagger-height: 2.75rem;
+        padding-bottom: var(--stagger-height);
+      }
+      .role-grid > :nth-child(2n) {
+        transform: translateY(var(--stagger-height));
+      }
+    }
+    .role-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.85rem;
+      display: flex; flex-direction: column; gap: 0.85rem;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.18s ease;
+    }
+    .role-card::before {
+      content: ''; position: absolute;
+      top: 0; left: 0; right: 0; height: 2px;
+    }
+    .role-card.publisher::before { background: var(--signed);   box-shadow: 0 0 8px var(--signed-glow); }
+    .role-card.registry::before  { background: var(--attested);  box-shadow: 0 0 8px var(--attested-glow); }
+    .role-card.consumer::before  { background: var(--verified);  box-shadow: 0 0 8px var(--verified-glow); }
+    .role-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-card); }
+
+    .role-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem; letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .role-card.publisher .role-tag { color: var(--signed); }
+    .role-card.registry  .role-tag { color: var(--attested); }
+    .role-card.consumer  .role-tag { color: var(--verified); }
+    .role-card h3 {
+      font-size: 1.2rem; font-weight: 700;
+      letter-spacing: -0.015em; color: var(--ink);
+    }
+    .role-card p {
+      font-size: 0.95rem; color: var(--ink-soft); line-height: 1.6;
+      flex: 1;
+    }
+    .role-link {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem; font-weight: 500;
+      transition: gap 0.18s; gap: 0.4rem;
+      display: inline-flex; align-items: center;
+    }
+    .role-card.publisher .role-link { color: var(--signed); }
+    .role-card.registry  .role-link { color: var(--attested); }
+    .role-card.consumer  .role-link { color: var(--verified); }
+    .role-link:hover { gap: 0.7rem; color: var(--ink); }
+
+    /* ─── Coverage ─── */
+    .coverage-section .section-eyebrow::before { content: '§03'; }
+    .coverage-grid {
+      display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.5rem;
+      margin-bottom: 2.5rem;
+    }
+    .coverage-tile {
+      padding: 1.25rem 1rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      text-align: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem; color: var(--ink);
+      transition: all 0.15s ease;
+    }
+    .coverage-tile:hover {
+      border-color: var(--verified);
+      color: var(--verified);
+    }
+    .coverage-disclaimer {
+      max-width: 38rem;
+      padding: 1.5rem 1.75rem;
+      border-left: 3px solid var(--verified);
+      background: var(--verified-soft);
+      color: var(--ink-soft);
+      font-size: 1rem; line-height: 1.65;
+      border-radius: 0 8px 8px 0;
+    }
+
+    /* ─── Status ─── */
+    .status-section .section-eyebrow::before { content: '§04'; }
+    .status-card {
+      background:
+        linear-gradient(135deg, var(--verified-soft), var(--signed-soft)),
+        var(--bg-card);
+      border: 1px solid var(--border-strong);
+      border-radius: 14px;
+      padding: 3rem;
+      display: grid; grid-template-columns: 1fr auto;
+      gap: 3rem; align-items: center;
+    }
+    .status-eyebrow {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem; color: var(--signed);
+      letter-spacing: 0.08em; text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+    .status-eyebrow::before {
+      content: ''; width: 8px; height: 8px; border-radius: 50%;
+      background: var(--signed);
+      box-shadow: 0 0 8px var(--signed-glow);
+    }
+    .status-card h2 { margin-bottom: 0.85rem; max-width: 18ch; }
+    .status-card p {
+      color: var(--ink-soft); font-size: 1rem; line-height: 1.6;
+      max-width: 32rem;
+    }
+    .status-ctas { display: flex; flex-direction: column; gap: 0.65rem; }
+
+    /* ─── Footer ─── */
+    .site-footer {
+      padding: 3rem 0;
+      border-top: 1px solid var(--border);
+      text-align: center;
+    }
+    .site-footer p { font-size: 0.88rem; color: var(--ink-muted); }
+
+    /* ─── Reduced motion fallback ─── */
+    /* Honors OS preference: still drive state changes from scroll position
+       (so the user can browse the diagram at their own pace), but suppress
+       the SVG transitions and caption cross-fade. */
+    @media (prefers-reduced-motion: reduce) {
+      .node, .flow-line, .badge-pulse, .manifest-token, .caption {
+        transition: none !important;
+        animation: none !important;
+      }
+    }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 960px) {
+      /* On narrow viewports, drop the sticky pin entirely. The diagram
+         and the active caption scroll inline because there isn't enough
+         vertical space for a comfortable pin + caption split. The caption
+         rail collapses to a stacked column showing all three captions. */
+      .scrolly-figure { position: static; top: auto; }
+      .caption-rail {
+        position: static;
+        min-height: 0;
+        margin-top: 1rem;
+        display: flex; flex-direction: column; gap: 0.85rem;
+      }
+      .caption {
+        position: static;
+        opacity: 1;
+        transform: none;
+        pointer-events: auto;
+      }
+      .step-sentinels { display: none; }
+      .diagram-svg:not(.diagram-svg-mobile) { display: none; }
+      .diagram-svg-mobile { display: block; max-height: none; }
+      .diagram-step-pill { display: none; }
+      .caption-rail { display: none; }
+      .role-grid > :nth-child(2n) { transform: none; }
+      .role-grid { grid-template-columns: 1fr; padding-bottom: 0; }
+      .coverage-grid { grid-template-columns: repeat(3, 1fr); }
+      .problem-grid { grid-template-columns: 1fr; gap: 2rem; }
+      .status-card { grid-template-columns: 1fr; padding: 2rem; }
+    }
+    @media (max-width: 600px) {
+      .site-header nav { display: none; }
+      .coverage-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <div class="mockup-banner">
+    Mockup 11 · Diagram-Narrative Hybrid (Flexoki) · <a href="../index.html">← back to gallery</a>
+  </div>
+
+  <header class="site-header">
+    <div class="container">
+      <a href="#" class="logo">
+        <span class="logo-mark" aria-hidden="true"></span>MOAT
+      </a>
+      <nav>
+        <a href="#flow">Trust flow</a>
+        <a href="#roles">Roles</a>
+        <a href="#coverage">Coverage</a>
+        <a href="#">Spec</a>
+      </nav>
+      <div class="header-tools">
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle color scheme">
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="4"/>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+          </svg>
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
+        <a href="#" class="header-cta">Read the spec</a>
+      </div>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="container">
+      <p class="spec-tag">Open Protocol · Working Draft v0.7.1</p>
+      <h1>AI agent content,<br /><span class="accent">verified at install.</span></h1>
+      <p class="tagline">Informing your trust decisions through verification.</p>
+      <p class="subhead">Keyless signing &nbsp;·&nbsp; Logged by default &nbsp;·&nbsp; Tamper-evident by design</p>
+      <div class="hero-ctas">
+        <a href="#" class="cta-primary">Read the spec →</a>
+        <a href="#flow" class="cta-secondary">Watch the flow ↓</a>
+      </div>
+    </div>
+  </section>
+
+  <section id="flow" class="trust-flow">
+    <div class="container">
+      <div class="scrolly-figure">
+        <div class="diagram-stage">
+            <div class="diagram-step-pill" aria-hidden="true">
+              <span class="step-dot signed"   id="dot-signed"></span>
+              <span class="step-dot attested" id="dot-attested"></span>
+              <span class="step-dot verified" id="dot-verified"></span>
+            </div>
+
+            <svg class="diagram-svg" viewBox="0 0 1100 470" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Animated trust flow diagram">
+              <defs>
+                <marker id="m11-signed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+                  <path d="M0,0 L10,5 L0,10 z" fill="var(--signed)"/>
+                </marker>
+                <marker id="m11-attested" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+                  <path d="M0,0 L10,5 L0,10 z" fill="var(--attested)"/>
+                </marker>
+                <marker id="m11-verified" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+                  <path d="M0,0 L10,5 L0,10 z" fill="var(--verified)"/>
+                </marker>
+              </defs>
+
+              <!-- Rekor (top, centered above Registry) -->
+              <g class="node rekor" id="node-rekor">
+                <rect class="node-rect rekor" x="370" y="25" width="360" height="70" rx="10"
+                      fill="var(--node-fill)" stroke="var(--rekor)" stroke-width="1.5"/>
+                <text x="550" y="50" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--rekor)" letter-spacing="0.08em" font-weight="600">TRANSPARENCY LOG</text>
+                <text x="550" y="71" text-anchor="middle" font-family="Inter, sans-serif" font-size="14" font-weight="700" fill="var(--ink)">Sigstore Rekor</text>
+                <text x="550" y="88" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="10" fill="var(--ink-muted)">append-only · public</text>
+                <circle cx="390" cy="43" r="3.5" fill="var(--rekor)">
+                  <animate attributeName="opacity" values="1;0.35;1" dur="2s" repeatCount="indefinite"/>
+                </circle>
+              </g>
+
+              <!-- Publisher (left) -->
+              <g class="node publisher" id="node-publisher">
+                <rect class="node-rect publisher" x="80" y="180" width="260" height="160" rx="10"
+                      fill="var(--node-fill)" stroke="var(--signed)" stroke-width="1.5"/>
+                <rect x="80" y="180" width="260" height="34" rx="10" fill="var(--signed-soft)"/>
+                <rect x="80" y="208" width="260" height="6"  fill="var(--signed-soft)"/>
+                <text x="98" y="202" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="600" fill="var(--signed)" letter-spacing="0.06em">PUBLISHER</text>
+                <text x="322" y="202" text-anchor="end" font-family="'JetBrains Mono', monospace" font-size="9" fill="var(--signed)" opacity="0.7">role / 01</text>
+                <text x="98" y="244" font-family="Inter, sans-serif" font-size="14" font-weight="500" fill="var(--ink)">workflow.yml</text>
+                <text x="98" y="270" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">$ moat-publisher</text>
+                <text x="98" y="293" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">→ generates manifest</text>
+                <text x="98" y="316" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">→ signs (keyless OIDC)</text>
+              </g>
+
+              <!-- Registry (center) -->
+              <g class="node registry" id="node-registry">
+                <rect class="node-rect registry" x="420" y="180" width="260" height="160" rx="10"
+                      fill="var(--node-fill)" stroke="var(--attested)" stroke-width="1.5"/>
+                <rect x="420" y="180" width="260" height="34" rx="10" fill="var(--attested-soft)"/>
+                <rect x="420" y="208" width="260" height="6"  fill="var(--attested-soft)"/>
+                <text x="438" y="202" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="600" fill="var(--attested)" letter-spacing="0.06em">REGISTRY</text>
+                <text x="662" y="202" text-anchor="end" font-family="'JetBrains Mono', monospace" font-size="9" fill="var(--attested)" opacity="0.7">role / 02</text>
+                <text x="438" y="244" font-family="Inter, sans-serif" font-size="14" font-weight="500" fill="var(--ink)">attests &amp; indexes</text>
+                <text x="438" y="270" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">→ what was attested</text>
+                <text x="438" y="293" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">→ when, by whom</text>
+                <text x="438" y="316" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">→ public, queryable</text>
+              </g>
+
+              <!-- Consumer (right) -->
+              <g class="node consumer" id="node-consumer">
+                <rect class="node-rect consumer" x="760" y="180" width="260" height="160" rx="10"
+                      fill="var(--node-fill)" stroke="var(--verified)" stroke-width="1.5"/>
+                <rect x="760" y="180" width="260" height="34" rx="10" fill="var(--verified-soft)"/>
+                <rect x="760" y="208" width="260" height="6"  fill="var(--verified-soft)"/>
+                <text x="778" y="202" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="600" fill="var(--verified)" letter-spacing="0.06em">CONSUMER</text>
+                <text x="1002" y="202" text-anchor="end" font-family="'JetBrains Mono', monospace" font-size="9" fill="var(--verified)" opacity="0.7">role / 03</text>
+                <text x="778" y="244" font-family="Inter, sans-serif" font-size="14" font-weight="500" fill="var(--ink)">verify before install</text>
+                <text x="778" y="270" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">$ moat-verify ./skill</text>
+                <text x="778" y="293" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">→ hash + sig OK</text>
+                <text x="778" y="316" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--verified)">✓ installed</text>
+              </g>
+
+              <!-- Flow lines -->
+              <!-- L1: Publisher → Rekor (anchor / signed) -->
+              <path id="line-anchor" class="flow-line" d="M 210 180 L 210 140 L 450 140 L 450 95"
+                    stroke="var(--signed)" stroke-width="2" fill="none" marker-end="url(#m11-signed)"/>
+              <text id="lbl-anchor" x="305" y="132" font-family="'JetBrains Mono', monospace" font-size="10" fill="var(--signed)" opacity="0">log entry</text>
+
+              <!-- L2: Publisher → Registry (push manifest / attested) -->
+              <line id="line-pub-reg" class="flow-line" x1="340" y1="260" x2="418" y2="260"
+                    stroke="var(--attested)" stroke-width="2" marker-end="url(#m11-attested)"/>
+              <text id="lbl-pub-reg" x="379" y="252" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="10" fill="var(--attested)" opacity="0">push</text>
+
+              <!-- L3: Registry → Consumer (fetch attestation / verified) -->
+              <line id="line-reg-con" class="flow-line" x1="680" y1="260" x2="758" y2="260"
+                    stroke="var(--verified)" stroke-width="2" marker-end="url(#m11-verified)"/>
+              <text id="lbl-reg-con" x="719" y="252" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="10" fill="var(--verified)" opacity="0">fetch</text>
+
+              <!-- L4: Consumer → Rekor (verify inclusion / dashed) -->
+              <path id="line-verify" class="flow-line dashed" d="M 890 180 L 890 120 L 650 120 L 650 95"
+                    stroke="var(--verified)" stroke-width="1.5" fill="none" marker-end="url(#m11-verified)"/>
+              <text id="lbl-verify" x="770" y="112" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="10" fill="var(--verified)" opacity="0">verify inclusion</text>
+
+              <!-- Manifest payload tokens (animate publisher → registry → consumer) -->
+              <g class="manifest-token publisher" id="token-pub">
+                <rect x="320" y="250" width="22" height="22" rx="3" fill="var(--signed-soft)"/>
+                <rect x="320" y="250" width="22" height="22" rx="3" fill="none" stroke="var(--signed)" stroke-width="1.5"/>
+                <text x="331" y="265" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="10" fill="var(--signed)" font-weight="700">M</text>
+              </g>
+              <g class="manifest-token registry" id="token-reg">
+                <rect x="660" y="250" width="22" height="22" rx="3" fill="var(--verified-soft)"/>
+                <rect x="660" y="250" width="22" height="22" rx="3" fill="none" stroke="var(--verified)" stroke-width="1.5"/>
+                <text x="671" y="265" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="10" fill="var(--verified)" font-weight="700">M</text>
+              </g>
+
+              <!-- Status badges below each role -->
+              <g class="badge-pulse" id="badge-signed">
+                <rect x="120" y="370" width="180" height="36" rx="18"
+                      fill="var(--signed-soft)" stroke="var(--signed)" stroke-width="1"/>
+                <circle cx="142" cy="388" r="4" fill="var(--signed)"/>
+                <text x="158" y="393" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--signed)" font-weight="600">signed</text>
+                <text x="220" y="393" font-family="'JetBrains Mono', monospace" font-size="10" fill="var(--signed)" opacity="0.78">+ logged</text>
+              </g>
+              <g class="badge-pulse" id="badge-attested">
+                <rect x="460" y="370" width="180" height="36" rx="18"
+                      fill="var(--attested-soft)" stroke="var(--attested)" stroke-width="1"/>
+                <circle cx="482" cy="388" r="4" fill="var(--attested)"/>
+                <text x="498" y="393" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--attested)" font-weight="600">attested</text>
+                <text x="565" y="393" font-family="'JetBrains Mono', monospace" font-size="10" fill="var(--attested)" opacity="0.78">+ indexed</text>
+              </g>
+              <g class="badge-pulse" id="badge-verified">
+                <rect x="800" y="370" width="180" height="36" rx="18"
+                      fill="var(--verified-soft)" stroke="var(--verified)" stroke-width="1"/>
+                <circle cx="822" cy="388" r="4" fill="var(--verified)"/>
+                <text x="838" y="393" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--verified)" font-weight="600">verified</text>
+                <text x="905" y="393" font-family="'JetBrains Mono', monospace" font-size="10" fill="var(--verified)" opacity="0.78">+ proven</text>
+              </g>
+
+              <!-- Bottom action lines and labels -->
+              <line x1="80"  y1="430" x2="340"  y2="430" stroke="var(--signed)"   stroke-width="2"/>
+              <line x1="420" y1="430" x2="680"  y2="430" stroke="var(--attested)" stroke-width="2"/>
+              <line x1="760" y1="430" x2="1020" y2="430" stroke="var(--verified)" stroke-width="2"/>
+              <text x="210" y="455" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="600" letter-spacing="0.12em" fill="var(--signed)">SIGNS</text>
+              <text x="550" y="455" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="600" letter-spacing="0.12em" fill="var(--attested)">ATTESTS</text>
+              <text x="890" y="455" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="600" letter-spacing="0.12em" fill="var(--verified)">VERIFIES</text>
+            </svg>
+
+            <!-- Mobile diagram: vertical flow. Original monospace node content is
+                 preserved; plain-text step description added below a thin separator.
+                 viewBox 280-unit = near-native font sizes at mobile width. -->
+            <svg class="diagram-svg diagram-svg-mobile" viewBox="0 0 280 854" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Trust flow diagram — vertical layout">
+              <defs>
+                <marker id="m11-mob-signed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M0,0 L10,5 L0,10 z" fill="var(--signed)"/>
+                </marker>
+                <marker id="m11-mob-attested" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M0,0 L10,5 L0,10 z" fill="var(--attested)"/>
+                </marker>
+                <marker id="m11-mob-verified" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M0,0 L10,5 L0,10 z" fill="var(--verified)"/>
+                </marker>
+              </defs>
+
+              <!-- Rekor (top, centered) -->
+              <g>
+                <rect x="55" y="8" width="170" height="54" rx="8"
+                      fill="var(--node-fill)" stroke="var(--rekor)" stroke-width="1.5"/>
+                <text x="140" y="27" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="10" fill="var(--rekor)" letter-spacing="0.08em" font-weight="600">TRANSPARENCY LOG</text>
+                <text x="140" y="47" text-anchor="middle" font-family="Inter, sans-serif" font-size="14" font-weight="700" fill="var(--ink)">Sigstore Rekor</text>
+                <circle cx="70" cy="22" r="3" fill="var(--rekor)">
+                  <animate attributeName="opacity" values="1;0.35;1" dur="2s" repeatCount="indefinite"/>
+                </circle>
+              </g>
+
+              <!-- Publisher → Rekor (upward / log entry) -->
+              <line x1="140" y1="81" x2="140" y2="63" stroke="var(--signed)" stroke-width="1.5" marker-end="url(#m11-mob-signed)"/>
+              <text x="147" y="75" font-family="'JetBrains Mono', monospace" font-size="9" fill="var(--signed)">log entry</text>
+
+              <!-- Publisher (y=82, h=246) -->
+              <g>
+                <rect x="5" y="82" width="270" height="246" rx="10"
+                      fill="var(--node-fill)" stroke="var(--signed)" stroke-width="1.5"/>
+                <rect x="5" y="82" width="270" height="30" rx="10" fill="var(--signed-soft)"/>
+                <rect x="5" y="106" width="270" height="6" fill="var(--signed-soft)"/>
+                <text x="20" y="102" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="600" fill="var(--signed)" letter-spacing="0.06em">PUBLISHER</text>
+                <text x="258" y="102" text-anchor="end" font-family="'JetBrains Mono', monospace" font-size="9" fill="var(--signed)" opacity="0.7">role / 01</text>
+                <!-- Original monospace content -->
+                <text x="20" y="132" font-family="Inter, sans-serif" font-size="14" font-weight="500" fill="var(--ink)">workflow.yml</text>
+                <text x="20" y="152" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">$ moat-publisher</text>
+                <text x="20" y="170" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">→ generates manifest</text>
+                <text x="20" y="188" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">→ signs (keyless OIDC)</text>
+                <!-- Separator -->
+                <line x1="20" y1="200" x2="258" y2="200" stroke="var(--border)" stroke-width="1"/>
+                <!-- Step description -->
+                <circle cx="27" cy="216" r="4" fill="var(--signed)"/>
+                <text x="36" y="220" font-family="'JetBrains Mono', monospace" font-size="10" fill="var(--signed)" letter-spacing="0.05em" font-weight="500">Step 01 · Signed</text>
+                <text x="20" y="240" font-family="Inter, sans-serif" font-size="15" font-weight="700" fill="var(--ink)">Publisher signs.</text>
+                <text x="20" y="261" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">Add one GitHub Actions workflow.</text>
+                <text x="20" y="277" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">Moat generates a signed manifest,</text>
+                <text x="20" y="293" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">anchors it to a transparency log,</text>
+                <text x="20" y="309" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">and pushes it to your registry</text>
+                <text x="20" y="325" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">branch.</text>
+              </g>
+
+              <!-- Publisher → Registry arrow (push manifest) -->
+              <line x1="140" y1="329" x2="140" y2="355" stroke="var(--attested)" stroke-width="2" marker-end="url(#m11-mob-attested)"/>
+              <text x="147" y="344" font-family="'JetBrains Mono', monospace" font-size="9" fill="var(--attested)">push</text>
+
+              <!-- Registry (y=356, h=214) -->
+              <g>
+                <rect x="5" y="356" width="270" height="214" rx="10"
+                      fill="var(--node-fill)" stroke="var(--attested)" stroke-width="1.5"/>
+                <rect x="5" y="356" width="270" height="30" rx="10" fill="var(--attested-soft)"/>
+                <rect x="5" y="380" width="270" height="6" fill="var(--attested-soft)"/>
+                <text x="20" y="376" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="600" fill="var(--attested)" letter-spacing="0.06em">REGISTRY</text>
+                <text x="258" y="376" text-anchor="end" font-family="'JetBrains Mono', monospace" font-size="9" fill="var(--attested)" opacity="0.7">role / 02</text>
+                <!-- Original monospace content -->
+                <text x="20" y="406" font-family="Inter, sans-serif" font-size="14" font-weight="500" fill="var(--ink)">attests &amp; indexes</text>
+                <text x="20" y="426" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">→ what was attested</text>
+                <text x="20" y="444" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">→ when, by whom</text>
+                <text x="20" y="462" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">→ public, queryable</text>
+                <!-- Separator -->
+                <line x1="20" y1="474" x2="258" y2="474" stroke="var(--border)" stroke-width="1"/>
+                <!-- Step description -->
+                <circle cx="27" cy="490" r="4" fill="var(--attested)"/>
+                <text x="36" y="494" font-family="'JetBrains Mono', monospace" font-size="10" fill="var(--attested)" letter-spacing="0.05em" font-weight="500">Step 02 · Attested</text>
+                <text x="20" y="514" font-family="Inter, sans-serif" font-size="15" font-weight="700" fill="var(--ink)">Registry attests.</text>
+                <text x="20" y="535" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">The registry indexes the signed</text>
+                <text x="20" y="551" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">manifest. Anyone can query what</text>
+                <text x="20" y="567" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">was attested, when, and by whom.</text>
+              </g>
+
+              <!-- Registry → Consumer arrow (fetch attestation) -->
+              <line x1="140" y1="571" x2="140" y2="597" stroke="var(--verified)" stroke-width="2" marker-end="url(#m11-mob-verified)"/>
+              <text x="147" y="586" font-family="'JetBrains Mono', monospace" font-size="9" fill="var(--verified)">fetch</text>
+
+              <!-- Consumer (y=598, h=246) -->
+              <g>
+                <rect x="5" y="598" width="270" height="246" rx="10"
+                      fill="var(--node-fill)" stroke="var(--verified)" stroke-width="1.5"/>
+                <rect x="5" y="598" width="270" height="30" rx="10" fill="var(--verified-soft)"/>
+                <rect x="5" y="622" width="270" height="6" fill="var(--verified-soft)"/>
+                <text x="20" y="618" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="600" fill="var(--verified)" letter-spacing="0.06em">CONSUMER</text>
+                <text x="258" y="618" text-anchor="end" font-family="'JetBrains Mono', monospace" font-size="9" fill="var(--verified)" opacity="0.7">role / 03</text>
+                <!-- Original monospace content -->
+                <text x="20" y="648" font-family="Inter, sans-serif" font-size="14" font-weight="500" fill="var(--ink)">verify before install</text>
+                <text x="20" y="668" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">$ moat-verify ./skill</text>
+                <text x="20" y="686" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--ink-soft)">→ hash + sig OK</text>
+                <text x="20" y="704" font-family="'JetBrains Mono', monospace" font-size="11" fill="var(--verified)">✓ installed</text>
+                <!-- Separator -->
+                <line x1="20" y1="716" x2="258" y2="716" stroke="var(--border)" stroke-width="1"/>
+                <!-- Step description -->
+                <circle cx="27" cy="732" r="4" fill="var(--verified)"/>
+                <text x="36" y="736" font-family="'JetBrains Mono', monospace" font-size="10" fill="var(--verified)" letter-spacing="0.05em" font-weight="500">Step 03 · Verified</text>
+                <text x="20" y="756" font-family="Inter, sans-serif" font-size="15" font-weight="700" fill="var(--ink)">Consumer verifies.</text>
+                <text x="20" y="777" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">Run moat-verify before installing.</text>
+                <text x="20" y="793" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">It checks the content hash against</text>
+                <text x="20" y="809" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">the registry attestation and</text>
+                <text x="20" y="825" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">confirms the signature is logged</text>
+                <text x="20" y="841" font-family="Inter, sans-serif" font-size="12" fill="var(--ink-soft)">in Rekor. Tampered content fails.</text>
+              </g>
+            </svg>
+          </div>
+
+          <!-- Caption rail. All three captions stack at the same position;
+               only the active one is visible. Cross-fades on scroll. -->
+          <div class="caption-rail" aria-live="polite">
+            <div class="caption signed-step" data-step="signed">
+              <p class="step-eyebrow">Step 01 · Signed</p>
+              <h3>Publisher signs.</h3>
+              <p>
+                Add one GitHub Actions workflow. Moat generates a signed manifest, anchors it to a
+                transparency log, and pushes it to your registry branch.
+              </p>
+            </div>
+            <div class="caption attested-step" data-step="attested">
+              <p class="step-eyebrow">Step 02 · Attested</p>
+              <h3>Registry attests.</h3>
+              <p>
+                The registry indexes the signed manifest. Anyone can query what was attested, when,
+                and by whom.
+              </p>
+            </div>
+            <div class="caption verified-step" data-step="verified">
+              <p class="step-eyebrow">Step 03 · Verified</p>
+              <h3>Consumer verifies.</h3>
+              <p>
+                Run <code>moat-verify</code> before installing. It checks the content hash against
+                the registry attestation and confirms the signature is logged in Rekor. Tampered
+                content fails.
+              </p>
+            </div>
+          </div>
+      </div>
+
+      <!-- Invisible sentinels drive the scroll budget. Each is 75vh tall;
+           as each crosses the middle band of the viewport (rootMargin
+           -40% / -40%) the matching caption + diagram state activates. -->
+      <div class="step-sentinels" aria-hidden="true">
+        <div class="step-sentinel" data-step="signed"></div>
+        <div class="step-sentinel" data-step="attested"></div>
+        <div class="step-sentinel" data-step="verified"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="standard">
+    <div class="container">
+      <div class="problem-grid">
+        <div>
+          <p class="section-eyebrow"></p>
+          <h2 style="margin-top: 0.5rem;">Skills run with your credentials.</h2>
+        </div>
+        <div>
+          <p>
+            AI agent content installs directly into your environment and runs with your credentials.
+            There is currently no standard way to know whether a skill you installed came from who
+            you think, or whether it was modified after the publisher signed off.
+          </p>
+          <p class="resolution">
+            Moat makes tampering detectable — using your existing CI identity, not keys you have to manage.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="roles" class="standard roles-section">
+    <div class="container">
+      <p class="section-eyebrow"></p>
+      <h2 style="margin-top: 0.5rem;">Three roles. One protocol.</h2>
+      <p class="section-lead">
+        Each role corresponds to one node in the diagram above. Each has a clear path; none needs
+        to learn cryptography to participate.
+      </p>
+      <div class="role-grid">
+        <div class="role-card publisher">
+          <span class="role-tag">role · 01 · publisher</span>
+          <h3>Publisher</h3>
+          <p>
+            Add one workflow file and you're done. Moat handles signing, manifest generation, and
+            transparency log submission automatically.
+          </p>
+          <a href="#" class="role-link">Publisher guide →</a>
+        </div>
+        <div class="role-card registry">
+          <span class="role-tag">role · 02 · registry</span>
+          <h3>Registry operator</h3>
+          <p>
+            Add trust signals to what you already index. The Registry Action generates and pushes
+            attested manifests to a dedicated branch — no pipeline rebuild required.
+          </p>
+          <a href="#" class="role-link">Operator guide →</a>
+        </div>
+        <div class="role-card consumer">
+          <span class="role-tag">role · 03 · consumer</span>
+          <h3>Consumer</h3>
+          <p>
+            Run <code>moat-verify</code> to check that what you're about to install matches what
+            the registry attested. Works offline with a lockfile.
+          </p>
+          <a href="#" class="role-link">Consumer guide →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="coverage" class="standard coverage-section">
+    <div class="container">
+      <p class="section-eyebrow"></p>
+      <h2 style="margin-top: 0.5rem;">Six content types. One verification surface.</h2>
+      <div class="coverage-grid">
+        <div class="coverage-tile">Skills</div>
+        <div class="coverage-tile">Rules</div>
+        <div class="coverage-tile">Hooks</div>
+        <div class="coverage-tile">MCP configs</div>
+        <div class="coverage-tile">Sub-agents</div>
+        <div class="coverage-tile">Commands</div>
+      </div>
+      <div class="coverage-disclaimer">
+        Moat covers content provenance and integrity. It does not score safety, evaluate behavior,
+        or enforce policy. What you choose to trust is your call. What you can verify, Moat makes
+        verifiable.
+      </div>
+    </div>
+  </section>
+
+  <section id="status" class="standard status-section">
+    <div class="container">
+      <p class="section-eyebrow"></p>
+      <div class="status-card" style="margin-top: 1rem;">
+        <div>
+          <p class="status-eyebrow">Working draft · v0.7.1</p>
+          <h2>Ready to read.</h2>
+          <p>
+            The core spec, <code>moat-verify</code>, Publisher Action, and Registry Action are
+            complete and versioned. Implementation and conforming tooling are in progress.
+          </p>
+        </div>
+        <div class="status-ctas">
+          <a href="#" class="cta-primary">Read the full spec →</a>
+          <a href="#" class="cta-secondary">View on GitHub</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>Moat is an open protocol. <a href="#">Contribute on GitHub</a>.</p>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      var btn = document.getElementById('theme-toggle');
+      if (btn) {
+        btn.addEventListener('click', function () {
+          var current = document.documentElement.getAttribute('data-theme') || 'light';
+          var next = current === 'light' ? 'dark' : 'light';
+          document.documentElement.setAttribute('data-theme', next);
+          try { localStorage.setItem('moat-mockup-11-theme', next); } catch (e) {}
+        });
+      }
+
+      var nodes = {
+        publisher: document.getElementById('node-publisher'),
+        registry:  document.getElementById('node-registry'),
+        consumer:  document.getElementById('node-consumer'),
+        rekor:     document.getElementById('node-rekor')
+      };
+      var lines = {
+        anchor: document.getElementById('line-anchor'),
+        pubReg: document.getElementById('line-pub-reg'),
+        regCon: document.getElementById('line-reg-con'),
+        verify: document.getElementById('line-verify')
+      };
+      var labels = {
+        anchor: document.getElementById('lbl-anchor'),
+        pubReg: document.getElementById('lbl-pub-reg'),
+        regCon: document.getElementById('lbl-reg-con'),
+        verify: document.getElementById('lbl-verify')
+      };
+      var badges = {
+        signed:   document.getElementById('badge-signed'),
+        attested: document.getElementById('badge-attested'),
+        verified: document.getElementById('badge-verified')
+      };
+      var tokens = {
+        pub: document.getElementById('token-pub'),
+        reg: document.getElementById('token-reg')
+      };
+      var dots = {
+        signed:   document.getElementById('dot-signed'),
+        attested: document.getElementById('dot-attested'),
+        verified: document.getElementById('dot-verified')
+      };
+
+      function showLabel(el) { if (el) el.style.opacity = '1'; }
+      function hideLabel(el) { if (el) el.style.opacity = '0'; }
+
+      function clearAll() {
+        Object.values(nodes).forEach(function (n) { n && n.classList.remove('active'); });
+        Object.values(lines).forEach(function (l) { l && l.classList.remove('active'); });
+        Object.values(badges).forEach(function (b) { b && b.classList.remove('active'); });
+        Object.values(tokens).forEach(function (t) { t && t.classList.remove('active'); });
+        Object.values(labels).forEach(function (l) { hideLabel(l); });
+        Object.values(dots).forEach(function (d) { d && d.classList.remove('active'); });
+      }
+
+      function updateCaption(step) {
+        document.querySelectorAll('.caption').forEach(function (c) {
+          c.classList.toggle('active', c.dataset.step === step);
+        });
+      }
+
+      function setStep(step) {
+        clearAll();
+        updateCaption(step);
+        if (step === 'signed') {
+          nodes.publisher.classList.add('active');
+          nodes.rekor.classList.add('active');
+          lines.anchor.classList.add('active');
+          showLabel(labels.anchor);
+          badges.signed.classList.add('active');
+          tokens.pub.classList.add('active');
+          dots.signed.classList.add('active');
+        } else if (step === 'attested') {
+          nodes.publisher.classList.add('active');
+          nodes.rekor.classList.add('active');
+          nodes.registry.classList.add('active');
+          lines.anchor.classList.add('active');
+          lines.pubReg.classList.add('active');
+          showLabel(labels.anchor);
+          showLabel(labels.pubReg);
+          badges.signed.classList.add('active');
+          badges.attested.classList.add('active');
+          tokens.pub.classList.add('active');
+          dots.signed.classList.add('active');
+          dots.attested.classList.add('active');
+        } else if (step === 'verified') {
+          Object.values(nodes).forEach(function (n) { n && n.classList.add('active'); });
+          Object.values(lines).forEach(function (l) { l && l.classList.add('active'); });
+          Object.values(badges).forEach(function (b) { b && b.classList.add('active'); });
+          Object.values(tokens).forEach(function (t) { t && t.classList.add('active'); });
+          Object.values(labels).forEach(function (l) { showLabel(l); });
+          Object.values(dots).forEach(function (d) { d && d.classList.add('active'); });
+        }
+      }
+
+      // Scroll-driven step progression. The diagram + caption rail are
+      // pinned within the trust-flow section. Three invisible sentinels
+      // below the figure each occupy ~75vh of scroll budget. An
+      // IntersectionObserver with rootMargin '-40% 0px -40% 0px' fires
+      // when a sentinel crosses the middle 20% band of the viewport — at
+      // that moment we set the diagram to that step's state and the
+      // caption rail cross-fades to the matching panel. Scrolling up
+      // reverses the sequence naturally as sentinels re-enter from
+      // above.
+      var sentinels = document.querySelectorAll('.step-sentinels .step-sentinel');
+
+      // Default landing state: signed. The first sentinel will re-trigger
+      // the same state as it crosses the trigger band, so this is just
+      // for the brief moment before that fires (or for browsers without
+      // IntersectionObserver, which fall through to this state).
+      setStep('signed');
+
+      if ('IntersectionObserver' in window && sentinels.length) {
+        var stepObserver = new IntersectionObserver(function (entries) {
+          entries.forEach(function (e) {
+            if (e.isIntersecting) {
+              setStep(e.target.dataset.step);
+            }
+          });
+        }, { rootMargin: '-40% 0px -40% 0px', threshold: 0 });
+        sentinels.forEach(function (s) { stepObserver.observe(s); });
+      }
+    })();
+  </script>
+</body>
+</html>
