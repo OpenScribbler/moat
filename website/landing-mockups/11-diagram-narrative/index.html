@@ -382,8 +382,8 @@
       border-radius: 12px;
       opacity: 0;
       transform: translateY(6px);
-      transition: opacity 0.55s ease, transform 0.55s ease,
-                  border-color 0.55s ease, box-shadow 0.55s ease;
+      transition: opacity 0.2s ease, transform 0.2s ease,
+                  border-color 0.2s ease, box-shadow 0.2s ease;
       pointer-events: none;
     }
     .caption.active {
@@ -442,7 +442,7 @@
 
     /* SVG state animations */
     .node {
-      transition: filter 0.6s ease, opacity 0.6s ease;
+      transition: filter 0.2s ease, opacity 0.2s ease;
       opacity: 0.42;
     }
     .node.active { opacity: 1; }
@@ -455,24 +455,24 @@
       stroke-dasharray: 800;
       stroke-dashoffset: 800;
       opacity: 0;
-      transition: stroke-dashoffset 1.1s ease, opacity 0.4s ease;
+      transition: stroke-dashoffset 0.2s ease, opacity 0.2s ease;
     }
     .flow-line.active { stroke-dashoffset: 0; opacity: 1; }
     /* dashed lines (verify) preserve dashed look once drawn */
-    .flow-line.dashed { stroke-dasharray: 6 5; stroke-dashoffset: 0; opacity: 0; transition: opacity 0.6s ease; }
+    .flow-line.dashed { stroke-dasharray: 6 5; stroke-dashoffset: 0; opacity: 0; transition: opacity 0.2s ease; }
     .flow-line.dashed.active { opacity: 1; }
 
     .badge-pulse {
       opacity: 0;
       transform-origin: center;
       transform: scale(0.6);
-      transition: opacity 0.5s ease, transform 0.5s ease;
+      transition: opacity 0.2s ease, transform 0.2s ease;
     }
     .badge-pulse.active { opacity: 1; transform: scale(1); }
 
     .manifest-token {
       opacity: 0;
-      transition: opacity 0.4s ease;
+      transition: opacity 0.2s ease;
     }
     .manifest-token.active { opacity: 1; }
     .manifest-token.publisher.active { animation: tokenPub 1.4s ease 0.4s forwards; }
@@ -1262,17 +1262,25 @@
       function getStickStart() {
         return stickyFig.getBoundingClientRect().top + window.scrollY - stickyTopPx;
       }
-      var stickStart = getStickStart();
+      // stickStart and stepH are cached so boundaries stay stable during a
+      // scroll session. Defer init via rAF so browser scroll-restoration has
+      // settled before we lock in stickStart — calling getBCR immediately on
+      // script execution can read layout before the browser has applied its
+      // saved scroll position, producing a wrong offset.
+      var stickStart = 0;
+      var stepH      = window.innerHeight * 0.8;
 
-      window.addEventListener('resize', function () {
+      function recalc() {
         stickStart = getStickStart();
-      }, { passive: true });
+        stepH      = window.innerHeight * 0.8;
+      }
+
+      window.addEventListener('resize', recalc, { passive: true });
 
       function getStep() {
         if (window.innerWidth <= 960) return 'none';
         var scrolled = window.scrollY - stickStart;
         if (scrolled < 0) return 'none';
-        var stepH = window.innerHeight * 0.8;
         var idx = Math.min(stepOrder.length - 1, Math.floor(scrolled / stepH));
         return stepOrder[idx];
       }
@@ -1293,7 +1301,12 @@
       }
 
       window.addEventListener('scroll', onScroll, { passive: true });
-      onScroll();
+
+      // Defer first recalc + state init so scroll-restoration has settled.
+      requestAnimationFrame(function () {
+        recalc();
+        onScroll();
+      });
     })();
   </script>
 </body>
