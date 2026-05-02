@@ -182,59 +182,93 @@
       font-size: 0.9rem; color: var(--ink-muted); font-weight: 500;
     }
     .site-header nav a:hover { color: var(--ink); }
-    .header-actions { display: flex; align-items: center; gap: 0.75rem; }
-
-    .btn-primary {
-      background: var(--ink); color: var(--bg);
-      padding: 0.55rem 1.25rem; border-radius: 6px;
-      font-weight: 600; font-size: 0.875rem;
-      transition: opacity 0.15s;
-    }
-    .btn-primary:hover { opacity: 0.82; color: var(--bg); }
-    .btn-ghost {
-      color: var(--ink-muted); font-size: 0.875rem; font-weight: 500;
-      padding: 0.55rem 0.75rem; border-radius: 6px;
-      border: 1px solid var(--border-strong);
-      transition: border-color 0.15s, color 0.15s;
-    }
-    .btn-ghost:hover { color: var(--ink); border-color: var(--ink-faint); }
-
+    .header-tools { display: flex; align-items: center; gap: 0.6rem; }
     .theme-toggle {
-      background: none; border: 1px solid var(--border-strong);
-      border-radius: 6px; padding: 0.45rem 0.65rem;
-      color: var(--ink-muted); cursor: pointer; font-size: 0.85rem;
-      transition: border-color 0.15s, color 0.15s;
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 2rem; height: 2rem;
+      background: transparent; border: 1px solid var(--border-strong);
+      border-radius: 6px; color: var(--ink-soft);
+      cursor: pointer; transition: all 0.18s ease;
     }
-    .theme-toggle:hover { color: var(--ink); border-color: var(--ink-faint); }
+    .theme-toggle:hover { color: var(--ink); border-color: var(--ink-muted); }
+    .theme-toggle svg { width: 16px; height: 16px; }
+    html[data-theme="dark"]  .theme-toggle .icon-moon { display: none; }
+    html[data-theme="light"] .theme-toggle .icon-sun  { display: none; }
+
+    .header-cta {
+      padding: 0.5rem 0.95rem;
+      background: var(--ink); color: var(--bg) !important;
+      border-radius: 6px; font-size: 0.85rem; font-weight: 600;
+    }
+    .header-cta:hover { background: var(--ink-soft); color: var(--bg) !important; }
 
     /* ─── Hero ─── */
     .hero {
-      padding: 6rem 0 5rem;
-      border-bottom: 1px solid var(--border);
+      padding: 4rem 0 4rem;
+      text-align: center;
+      position: relative; overflow: hidden;
     }
-    .hero-content { max-width: 44rem; }
-    .hero-eyebrow {
+    .hero::before {
+      content: ''; position: absolute;
+      inset: 0; pointer-events: none; z-index: 0;
+      background: radial-gradient(ellipse 60% 40% at 50% 30%, var(--verified-soft), transparent 60%);
+    }
+    .hero .container { position: relative; z-index: 1; }
+
+    .spec-tag {
+      display: inline-flex; align-items: center; gap: 0.55rem;
+      padding: 0.35rem 0.9rem;
+      background: var(--verified-soft);
+      border: 1px solid color-mix(in srgb, var(--verified) 35%, transparent);
+      border-radius: 999px;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem; font-weight: 500;
-      letter-spacing: 0.14em; color: var(--ink-muted);
-      margin-bottom: 1.25rem;
+      font-size: 0.75rem; color: var(--verified);
+      letter-spacing: 0.04em;
+      margin-bottom: 1.75rem;
     }
-    .hero h1 {
-      font-size: clamp(2.4rem, 5vw, 3.5rem);
-      font-weight: 700; line-height: 1.1;
-      letter-spacing: -0.02em;
-      margin-bottom: 1.25rem;
+    .spec-tag::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--verified); box-shadow: 0 0 8px var(--verified-glow);
     }
-    .hero h1 em {
-      font-style: normal;
-      color: var(--verified);
+
+    h1 {
+      font-size: clamp(2.4rem, 5vw, 4rem);
+      font-weight: 700; line-height: 1.05;
+      letter-spacing: -0.035em;
+      margin: 0 auto 1.4rem;
+      max-width: 22ch;
+      color: var(--ink);
     }
-    .hero-sub {
-      font-size: 1.1rem; color: var(--ink-soft);
-      line-height: 1.65; max-width: 36rem;
+    h1 .accent { color: var(--verified); }
+    .tagline {
+      font-size: 1.15rem; color: var(--ink-soft);
+      max-width: 36rem; line-height: 1.55;
+      margin: 0 auto 0.85rem;
+    }
+    .subhead {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem; color: var(--ink-muted);
       margin-bottom: 2rem;
     }
-    .hero-actions { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; }
+    .hero-ctas { display: flex; gap: 0.7rem; justify-content: center; flex-wrap: wrap; }
+    .cta-primary, .cta-secondary {
+      padding: 0.78rem 1.4rem; border-radius: 8px;
+      font-size: 0.92rem; font-weight: 600;
+      transition: all 0.18s ease;
+      display: inline-flex; align-items: center; gap: 0.4rem;
+    }
+    .cta-primary {
+      background: var(--ink); color: var(--bg) !important;
+    }
+    .cta-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px -6px var(--verified-glow);
+    }
+    .cta-secondary {
+      background: var(--bg-card); color: var(--ink) !important;
+      border: 1px solid var(--border-strong);
+    }
+    .cta-secondary:hover { border-color: var(--verified); }
 
     /* ─── Section chrome ─── */
     .section-eyebrow {
@@ -509,9 +543,8 @@
     }
 
     @media (max-width: 600px) {
-      .hero h1 { font-size: 2rem; }
-      .hero { padding: 3.5rem 0 3rem; }
-      .header-actions .btn-ghost { display: none; }
+      h1 { font-size: 2rem; }
+      .hero { padding: 2.5rem 0 2.5rem; }
     }
   </style>
 </head>
@@ -530,17 +563,24 @@
   <header class="site-header">
     <div class="container">
       <a href="#" class="logo">
-        <span class="logo-mark" aria-hidden="true"></span>
-        MOAT
+        <span class="logo-mark" aria-hidden="true"></span>MOAT
       </a>
       <nav>
-        <a href="#how">How it works</a>
-        <a href="https://github.com/OpenScribbler/moat/blob/main/moat-spec.md">Spec</a>
-        <a href="https://github.com/OpenScribbler/moat">GitHub</a>
+        <a href="#how">Trust flow</a>
+        <a href="#coverage">Coverage</a>
+        <a href="#">Spec</a>
       </nav>
-      <div class="header-actions">
-        <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">◐</button>
-        <a href="https://github.com/OpenScribbler/moat/blob/main/moat-spec.md" class="btn-primary">Read the spec</a>
+      <div class="header-tools">
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle color scheme">
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="4"/>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+          </svg>
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
+        <a href="#" class="header-cta">Read the spec</a>
       </div>
     </div>
   </header>
@@ -548,18 +588,12 @@
   <!-- Hero -->
   <section class="hero">
     <div class="container">
-      <div class="hero-content">
-        <p class="hero-eyebrow">OPEN PROTOCOL · v0.7.1</p>
-        <h1>AI agent content,<br><em>verified at install.</em></h1>
-        <p class="hero-sub">
-          MOAT gives publishers a signed manifest, registries an auditable attestation,
-          and consumers a single command to verify both. No keys to manage.
-          No infrastructure to run.
-        </p>
-        <div class="hero-actions">
-          <a href="https://github.com/OpenScribbler/moat/blob/main/moat-spec.md" class="btn-primary">Read the spec</a>
-          <a href="#how" class="btn-ghost">See how it works</a>
-        </div>
+      <p class="spec-tag">Open Protocol · Working Draft v0.7.1</p>
+      <h1>AI agent content,<br /><span class="accent">verified at install.</span></h1>
+      <p class="tagline">Informing your trust decisions through verification.</p>
+      <p class="subhead">Keyless signing &nbsp;·&nbsp; Logged by default &nbsp;·&nbsp; Tamper-evident by design</p>
+      <div class="hero-ctas">
+        <a href="#" class="cta-primary">Read the spec →</a>
       </div>
     </div>
   </section>
