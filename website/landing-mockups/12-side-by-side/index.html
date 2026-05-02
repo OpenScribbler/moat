@@ -501,6 +501,52 @@
     }
     .cta-actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
 
+    /* ─── First adopter section ─── */
+    .adopter-section {
+      padding: 5rem 0;
+      border-top: 1px solid var(--border);
+    }
+    .adopter-section .section-eyebrow { margin-bottom: 0.75rem; }
+    .adopter-section h2 {
+      font-size: clamp(1.5rem, 2.5vw, 2rem);
+      font-weight: 700; letter-spacing: -0.015em;
+      margin-bottom: 0.65rem;
+    }
+    .adopter-section > .container > p {
+      font-size: 1rem; color: var(--ink-soft);
+      max-width: 36rem; line-height: 1.65;
+      margin-bottom: 2.5rem;
+    }
+    .adopter-facts {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.25rem;
+    }
+    .adopter-fact {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--verified);
+      border-radius: 10px;
+      padding: 1.5rem 1.75rem;
+    }
+    .adopter-fact.registry { border-left-color: var(--attested); }
+    .adopter-fact .fact-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem; font-weight: 500;
+      letter-spacing: 0.12em;
+      color: var(--verified);
+      margin-bottom: 0.6rem;
+    }
+    .adopter-fact.registry .fact-label { color: var(--attested); }
+    .adopter-fact h4 {
+      font-size: 1.05rem; font-weight: 600;
+      margin-bottom: 0.45rem;
+    }
+    .adopter-fact p {
+      font-size: 0.9rem; color: var(--ink-muted);
+      line-height: 1.6;
+    }
+
     /* ─── Status card ("Ready to read.") ─── */
     .status-section { padding: 5rem 0; border-top: 1px solid var(--border); }
     .status-card {
@@ -892,6 +938,37 @@
           <p class="card-icon">COVERAGE</p>
           <h4>Skills, rules, agents, hooks</h4>
           <p>Anything a developer tool loads from a registry: SKILL.md files, CLAUDE.md rules, MCP configs, sub-agents, hooks.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- First adopter -->
+  <section class="adopter-section">
+    <div class="container">
+      <p class="section-eyebrow">FIRST IMPLEMENTATION</p>
+      <h2>MOAT in the wild.</h2>
+      <p>
+        Syllago is the first project to implement the MOAT protocol end-to-end,
+        proving the design against a real registry with real content.
+      </p>
+      <div class="adopter-facts">
+        <div class="adopter-fact">
+          <p class="fact-label">IMPLEMENTATION</p>
+          <h4>First real-world adopter</h4>
+          <p>
+            Syllago adopted MOAT from day one — signed manifests, Rekor log entries,
+            and a consumer-facing verification step baked into the install flow.
+          </p>
+        </div>
+        <div class="adopter-fact registry">
+          <p class="fact-label">META REGISTRY</p>
+          <h4>First publisher + registry in one</h4>
+          <p>
+            The Syllago Meta Registry is the first registry that acts simultaneously
+            as a publisher — signing and attesting its own index — and as a registry
+            operator serving that index to consumers.
+          </p>
         </div>
       </div>
     </div>
