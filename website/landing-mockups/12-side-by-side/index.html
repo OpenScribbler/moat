@@ -282,24 +282,23 @@
     .how-section { padding-top: 5rem; }
 
     .how-header {
-      padding-bottom: 4rem;
-      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.5rem;
     }
     .how-header h2 {
-      font-size: clamp(1.75rem, 3vw, 2.5rem);
+      font-size: clamp(1.6rem, 2.5vw, 2.1rem);
       font-weight: 700; line-height: 1.15;
       letter-spacing: -0.015em;
-      margin-bottom: 0.75rem;
+      margin-bottom: 0.6rem;
     }
     .how-header p {
-      font-size: 1.05rem; color: var(--ink-soft);
-      max-width: 38rem; line-height: 1.65;
+      font-size: 0.975rem; color: var(--ink-soft);
+      line-height: 1.6;
     }
 
     /* ─── Scrollytelling: 2-column ─── */
     .scrolly-wrap {
       display: grid;
-      grid-template-columns: 55fr 45fr;
+      grid-template-columns: 60fr 40fr;
       gap: 4rem;
       align-items: start;
     }
@@ -601,16 +600,15 @@
   <!-- How it works: scrollytelling -->
   <section class="how-section" id="how">
 
-    <div class="container how-header">
-      <p class="section-eyebrow">HOW IT WORKS</p>
-      <h2>Three steps. One auditable chain.</h2>
-      <p>Publisher signs. Registry attests. Consumer verifies. Each step leaves a permanent record in Sigstore Rekor — independently checkable by anyone.</p>
-    </div>
-
     <div class="scrolly-wrap container">
 
-      <!-- LEFT: sticky diagram -->
+      <!-- LEFT: sticky column — section header + diagram -->
       <div class="scrolly-fig" aria-hidden="true">
+        <div class="how-header">
+          <p class="section-eyebrow">HOW IT WORKS</p>
+          <h2>Three steps. One auditable chain.</h2>
+          <p>Publisher signs. Registry attests. Consumer verifies. Each step leaves a permanent record in Sigstore Rekor — independently checkable by anyone.</p>
+        </div>
         <div class="diagram-frame">
           <span class="fig-label">fig.01 / trust-flow</span>
 
@@ -701,8 +699,7 @@
             <!-- 1. Publisher → Rekor (log entry, solid green) -->
             <line id="line-anchor" class="flow-line"
                   x1="180" y1="180" x2="215" y2="76"
-                  stroke="var(--signed)" stroke-width="1.75"
-                  marker-end="url(#m12-signed)"/>
+                  stroke="var(--signed)" stroke-width="1.75"/>
             <!-- label -->
             <text id="lbl-anchor" x="185" y="127"
                   text-anchor="end"
@@ -713,8 +710,7 @@
             <!-- 2. Publisher → Registry (push manifest, solid blue) -->
             <line id="line-push" class="flow-line"
                   x1="180" y1="258" x2="215" y2="316"
-                  stroke="var(--attested)" stroke-width="1.75"
-                  marker-end="url(#m12-attested)"/>
+                  stroke="var(--attested)" stroke-width="1.75"/>
             <text id="lbl-push" x="185" y="289"
                   text-anchor="end"
                   font-family="'JetBrains Mono', monospace" font-size="9"
@@ -724,8 +720,7 @@
             <!-- 3. Registry → Consumer (fetch, solid cyan) -->
             <line id="line-fetch" class="flow-line"
                   x1="305" y1="316" x2="340" y2="258"
-                  stroke="var(--verified)" stroke-width="1.75"
-                  marker-end="url(#m12-verified)"/>
+                  stroke="var(--verified)" stroke-width="1.75"/>
             <text id="lbl-fetch" x="335" y="289"
                   text-anchor="start"
                   font-family="'JetBrains Mono', monospace" font-size="9"
@@ -736,8 +731,7 @@
             <line id="line-verify" class="flow-line"
                   x1="340" y1="180" x2="305" y2="76"
                   stroke="var(--verified)" stroke-width="1.75"
-                  stroke-dasharray="6 4"
-                  marker-end="url(#m12-verified)"/>
+                  stroke-dasharray="6 4"/>
             <text id="lbl-verify" x="335" y="127"
                   text-anchor="start"
                   font-family="'JetBrains Mono', monospace" font-size="9"
@@ -944,9 +938,30 @@
       function showLabel(lbl) { if (lbl) lbl.setAttribute('opacity', '1'); }
       function hideLabel(lbl) { if (lbl) lbl.setAttribute('opacity', '0'); }
 
+      /* Lines: set marker-end when activating so the arrowhead only
+         appears alongside the drawn line, not before it. */
+      var lineMarkers = {
+        anchor: 'url(#m12-signed)',
+        push:   'url(#m12-attested)',
+        fetch:  'url(#m12-verified)',
+        verify: 'url(#m12-verified)',
+      };
+      function activateLine(key) {
+        var el = lines[key];
+        if (!el) return;
+        el.classList.add('active');
+        el.setAttribute('marker-end', lineMarkers[key]);
+      }
+      function deactivateLine(key) {
+        var el = lines[key];
+        if (!el) return;
+        el.classList.remove('active');
+        el.removeAttribute('marker-end');
+      }
+
       function resetAll() {
         Object.values(nodes).forEach(deactivate);
-        Object.values(lines).forEach(deactivate);
+        Object.keys(lines).forEach(deactivateLine);
         Object.values(badges).forEach(deactivate);
         Object.values(labels).forEach(hideLabel);
       }
@@ -966,22 +981,22 @@
 
         if (step === 'signed' || step === 'attested' || step === 'verified') {
           activate(nodes.publisher);
-          activate(lines.anchor);
+          activateLine('anchor');
           showLabel(labels.anchor);
           activate(badges.signed);
         }
 
         if (step === 'attested' || step === 'verified') {
           activate(nodes.registry);
-          activate(lines.push);
+          activateLine('push');
           showLabel(labels.push);
           activate(badges.attested);
         }
 
         if (step === 'verified') {
           activate(nodes.consumer);
-          activate(lines.fetch);
-          activate(lines.verify);
+          activateLine('fetch');
+          activateLine('verify');
           showLabel(labels.fetch);
           showLabel(labels.verify);
           activate(badges.verified);
