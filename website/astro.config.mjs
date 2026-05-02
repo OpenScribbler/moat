@@ -58,6 +58,7 @@ function injectCsp() {
 
 export default defineConfig({
   site: 'https://moat-spec.org',
+  base: process.env.ASTRO_BASE_PATH || '/',
   integrations: [
     starlight({
       title: 'MOAT',

@@ -36,6 +36,8 @@ jobs:
 
       - name: Build
         working-directory: website
+        env:
+          ASTRO_BASE_PATH: /moat
         run: bun run build
 
       - name: Create Pages artifact
