@@ -546,6 +546,16 @@
       font-size: 0.9rem; color: var(--ink-muted);
       line-height: 1.6;
     }
+    .fact-link {
+      display: inline-block;
+      margin-top: 1rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--verified);
+      letter-spacing: 0.02em;
+    }
+    .fact-link:hover { color: var(--ink); }
+    .fact-link.registry { color: var(--attested); }
 
     /* ─── Status card ("Ready to read.") ─── */
     .status-section { padding: 5rem 0; border-top: 1px solid var(--border); }
@@ -960,6 +970,7 @@
             Syllago adopted MOAT from day one — signed manifests, Rekor log entries,
             and a consumer-facing verification step baked into the install flow.
           </p>
+          <a href="https://syllago.dev" class="fact-link">syllago.dev →</a>
         </div>
         <div class="adopter-fact registry">
           <p class="fact-label">META REGISTRY</p>
@@ -969,6 +980,7 @@
             as a publisher — signing and attesting its own index — and as a registry
             operator serving that index to consumers.
           </p>
+          <a href="https://github.com/OpenScribbler/syllago-meta-registry" class="fact-link registry">github.com/OpenScribbler/syllago-meta-registry →</a>
         </div>
       </div>
     </div>
