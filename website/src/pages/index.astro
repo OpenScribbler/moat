@@ -5,7 +5,7 @@
 // ?raw import inlines theme-init.js content at Vite compile time.
 import themeInitSrc from '../scripts/theme-init.js?raw'
 
-const base = import.meta.env.BASE_URL
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
 ---
 
 <!doctype html>
