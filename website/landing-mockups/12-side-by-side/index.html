@@ -1,0 +1,982 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Moat — AI agent content, verified at install. (Mockup 12 · Side-by-Side Diamond)</title>
+  <meta name="description" content="Model for Origin Attestation and Trust — an open protocol for provenance and integrity of AI agent content." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <script>
+    (function () {
+      try {
+        var stored = localStorage.getItem('moat-mockup-12-theme');
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = stored || (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    })();
+  </script>
+
+  <style>
+    /* ─── Flexoki palette · light ───────────────────────────────── */
+    html[data-theme="light"] {
+      --paper:     #fffcf0;
+      --base-50:   #f2f0e5;
+      --base-100:  #e6e4d9;
+      --base-200:  #cecdc3;
+      --base-300:  #b7b5ac;
+      --base-500:  #6f6e69;
+      --base-600:  #575653;
+      --base-700:  #403e3c;
+      --base-800:  #282726;
+      --base-900:  #100f0f;
+
+      --bg:            var(--paper);
+      --bg-soft:       var(--base-50);
+      --bg-card:       #ffffff;
+      --bg-elev:       #ffffff;
+
+      --ink:           var(--base-900);
+      --ink-soft:      var(--base-700);
+      --ink-muted:     var(--base-500);
+      --ink-faint:     var(--base-300);
+
+      --border:        var(--base-100);
+      --border-strong: var(--base-200);
+
+      --signed:        #66800b;
+      --signed-soft:   rgba(102, 128, 11, 0.10);
+      --signed-glow:   rgba(102, 128, 11, 0.32);
+      --attested:      #205ea6;
+      --attested-soft: rgba(32, 94, 166, 0.10);
+      --attested-glow: rgba(32, 94, 166, 0.32);
+      --verified:      #24837b;
+      --verified-soft: rgba(36, 131, 123, 0.10);
+      --verified-glow: rgba(36, 131, 123, 0.32);
+      --rekor:         #ad8301;
+      --rekor-soft:    rgba(173, 131, 1, 0.10);
+      --rekor-glow:    rgba(173, 131, 1, 0.32);
+
+      --diagram-bg:      #ffffff;
+      --node-fill:       #ffffff;
+      --node-stroke-dim: var(--base-200);
+      --node-text-dim:   var(--base-500);
+
+      --shadow-card: 0 1px 2px rgba(16,15,15,0.04), 0 8px 28px rgba(16,15,15,0.06);
+      --shadow-elev: 0 12px 40px -8px rgba(16,15,15,0.18);
+    }
+
+    /* ─── Flexoki palette · dark ────────────────────────────────── */
+    html[data-theme="dark"] {
+      --paper:     #fffcf0;
+      --base-300:  #b7b5ac;
+      --base-500:  #6f6e69;
+      --base-700:  #403e3c;
+      --base-800:  #282726;
+      --base-850:  #1c1b1a;
+      --base-900:  #100f0f;
+
+      --bg:            var(--base-900);
+      --bg-soft:       var(--base-850);
+      --bg-card:       var(--base-800);
+      --bg-elev:       #2e2c2a;
+
+      --ink:           var(--paper);
+      --ink-soft:      var(--base-300);
+      --ink-muted:     var(--base-500);
+      --ink-faint:     var(--base-700);
+
+      --border:        var(--base-800);
+      --border-strong: var(--base-700);
+
+      --signed:        #879a39;
+      --signed-soft:   rgba(135, 154, 57, 0.16);
+      --signed-glow:   rgba(135, 154, 57, 0.45);
+      --attested:      #4385be;
+      --attested-soft: rgba(67, 133, 190, 0.16);
+      --attested-glow: rgba(67, 133, 190, 0.45);
+      --verified:      #3aa99f;
+      --verified-soft: rgba(58, 169, 159, 0.16);
+      --verified-glow: rgba(58, 169, 159, 0.45);
+      --rekor:         #d0a215;
+      --rekor-soft:    rgba(208, 162, 21, 0.16);
+      --rekor-glow:    rgba(208, 162, 21, 0.45);
+
+      --diagram-bg:      var(--base-850);
+      --node-fill:       var(--base-800);
+      --node-stroke-dim: var(--base-700);
+      --node-text-dim:   var(--base-500);
+
+      --shadow-card: 0 1px 2px rgba(0,0,0,0.4), 0 8px 28px rgba(0,0,0,0.45);
+      --shadow-elev: 0 24px 60px -12px rgba(0,0,0,0.6);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+      scroll-behavior: smooth;
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+
+    a { color: var(--verified); text-decoration: none; }
+    a:hover { color: var(--ink); }
+
+    code {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.9em;
+      background: var(--bg-soft);
+      padding: 0.1em 0.4em;
+      border-radius: 3px;
+      color: var(--verified);
+      border: 1px solid var(--border);
+    }
+
+    .container { max-width: 1180px; margin: 0 auto; padding: 0 2rem; }
+
+    /* ─── Mockup banner ─── */
+    .mockup-banner {
+      background: var(--bg-soft);
+      border-bottom: 1px solid var(--border);
+      color: var(--ink-muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      padding: 0.5rem 0;
+      text-align: center;
+      letter-spacing: 0.04em;
+    }
+    .mockup-banner a { color: var(--verified); }
+
+    /* ─── Site header ─── */
+    .site-header {
+      position: sticky; top: 0; z-index: 100;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 0;
+    }
+    .site-header .container {
+      display: flex; align-items: center; gap: 2rem;
+    }
+    .logo {
+      display: inline-flex; align-items: center; gap: 0.55rem;
+      font-weight: 700; font-size: 1rem; letter-spacing: 0.04em;
+      color: var(--ink);
+    }
+    .logo-mark {
+      width: 1.5rem; height: 1.5rem;
+      background: linear-gradient(135deg, var(--verified), var(--attested));
+      border-radius: 50% 50% 4px 4px;
+      box-shadow: 0 0 14px var(--verified-glow);
+    }
+    .site-header nav { display: flex; gap: 1.5rem; flex: 1; }
+    .site-header nav a {
+      font-size: 0.9rem; color: var(--ink-muted); font-weight: 500;
+    }
+    .site-header nav a:hover { color: var(--ink); }
+    .header-actions { display: flex; align-items: center; gap: 0.75rem; }
+
+    .btn-primary {
+      background: var(--ink); color: var(--bg);
+      padding: 0.55rem 1.25rem; border-radius: 6px;
+      font-weight: 600; font-size: 0.875rem;
+      transition: opacity 0.15s;
+    }
+    .btn-primary:hover { opacity: 0.82; color: var(--bg); }
+    .btn-ghost {
+      color: var(--ink-muted); font-size: 0.875rem; font-weight: 500;
+      padding: 0.55rem 0.75rem; border-radius: 6px;
+      border: 1px solid var(--border-strong);
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .btn-ghost:hover { color: var(--ink); border-color: var(--ink-faint); }
+
+    .theme-toggle {
+      background: none; border: 1px solid var(--border-strong);
+      border-radius: 6px; padding: 0.45rem 0.65rem;
+      color: var(--ink-muted); cursor: pointer; font-size: 0.85rem;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .theme-toggle:hover { color: var(--ink); border-color: var(--ink-faint); }
+
+    /* ─── Hero ─── */
+    .hero {
+      padding: 6rem 0 5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .hero-content { max-width: 44rem; }
+    .hero-eyebrow {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem; font-weight: 500;
+      letter-spacing: 0.14em; color: var(--ink-muted);
+      margin-bottom: 1.25rem;
+    }
+    .hero h1 {
+      font-size: clamp(2.4rem, 5vw, 3.5rem);
+      font-weight: 700; line-height: 1.1;
+      letter-spacing: -0.02em;
+      margin-bottom: 1.25rem;
+    }
+    .hero h1 em {
+      font-style: normal;
+      color: var(--verified);
+    }
+    .hero-sub {
+      font-size: 1.1rem; color: var(--ink-soft);
+      line-height: 1.65; max-width: 36rem;
+      margin-bottom: 2rem;
+    }
+    .hero-actions { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; }
+
+    /* ─── Section chrome ─── */
+    .section-eyebrow {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem; font-weight: 500;
+      letter-spacing: 0.14em; color: var(--ink-muted);
+      margin-bottom: 1rem;
+    }
+
+    /* ─── How section ─── */
+    .how-section { padding-top: 5rem; }
+
+    .how-header {
+      padding-bottom: 4rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .how-header h2 {
+      font-size: clamp(1.75rem, 3vw, 2.5rem);
+      font-weight: 700; line-height: 1.15;
+      letter-spacing: -0.015em;
+      margin-bottom: 0.75rem;
+    }
+    .how-header p {
+      font-size: 1.05rem; color: var(--ink-soft);
+      max-width: 38rem; line-height: 1.65;
+    }
+
+    /* ─── Scrollytelling: 2-column ─── */
+    .scrolly-wrap {
+      display: grid;
+      grid-template-columns: 55fr 45fr;
+      gap: 4rem;
+      align-items: start;
+    }
+
+    /* Left: sticky diagram */
+    .scrolly-fig {
+      position: sticky;
+      top: 5.5rem;
+      align-self: start;
+      padding: 3rem 0;
+    }
+
+    .diagram-frame {
+      background: var(--diagram-bg);
+      border: 1px solid var(--border-strong);
+      border-radius: 14px;
+      padding: 1.75rem;
+      box-shadow: var(--shadow-elev);
+      position: relative;
+    }
+
+    .fig-label {
+      position: absolute;
+      top: -10px; left: 1.75rem;
+      background: var(--bg);
+      padding: 0 0.6rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem; color: var(--ink-muted);
+      letter-spacing: 0.07em;
+    }
+
+    .diagram-svg {
+      width: 100%; height: auto; display: block;
+    }
+
+    /* ─── SVG node states ─── */
+    .node {
+      transition: filter 0.2s ease, opacity 0.2s ease;
+      opacity: 0.22;
+    }
+    .node.active { opacity: 1; }
+    .node.publisher.active { filter: drop-shadow(0 0 14px var(--signed-glow)); }
+    .node.registry.active  { filter: drop-shadow(0 0 14px var(--attested-glow)); }
+    .node.consumer.active  { filter: drop-shadow(0 0 14px var(--verified-glow)); }
+    .node.rekor.active     { filter: drop-shadow(0 0 10px var(--rekor-glow)); }
+
+    /* Node rect inherits border color from JS class toggling */
+    .node-rect {
+      transition: stroke 0.2s ease;
+    }
+    .node.publisher .node-rect { stroke: var(--node-stroke-dim); }
+    .node.registry  .node-rect { stroke: var(--node-stroke-dim); }
+    .node.consumer  .node-rect { stroke: var(--node-stroke-dim); }
+    .node.rekor     .node-rect { stroke: var(--node-stroke-dim); }
+
+    .node.publisher.active .node-rect { stroke: var(--signed); }
+    .node.registry.active  .node-rect { stroke: var(--attested); }
+    .node.consumer.active  .node-rect { stroke: var(--verified); }
+    .node.rekor.active     .node-rect { stroke: var(--rekor); }
+
+    /* Flow lines: drawn via dashoffset */
+    .flow-line {
+      stroke-dasharray: 200;
+      stroke-dashoffset: 200;
+      transition: stroke-dashoffset 0.2s ease;
+    }
+    .flow-line.active { stroke-dashoffset: 0; }
+
+    /* Badges */
+    .badge-pulse {
+      opacity: 0;
+      transform-origin: center;
+      transform: scale(0.82);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+    .badge-pulse.active { opacity: 1; transform: scale(1); }
+
+    /* ─── Right: text steps ─── */
+    .scrolly-steps {
+      /* No extra padding; the steps themselves carry the vertical rhythm */
+    }
+
+    .top-sentinel {
+      height: 30vh;
+    }
+
+    .scroll-step {
+      padding: 22vh 0 22vh 2.25rem;
+      position: relative;
+      opacity: 0.3;
+      transition: opacity 0.45s ease;
+    }
+    .scroll-step:first-of-type { padding-top: 8vh; }
+    .scroll-step:last-of-type  { padding-bottom: 38vh; }
+
+    /* Vertical bar on left edge of active step */
+    .scroll-step::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 22vh; bottom: 22vh;
+      width: 2px;
+      background: var(--border-strong);
+      border-radius: 2px;
+      transition: background 0.4s ease;
+    }
+    .scroll-step:first-of-type::before { top: 8vh; }
+    .scroll-step:last-of-type::before  { bottom: 38vh; }
+
+    .scroll-step.active { opacity: 1; }
+    .signed-step.active::before   { background: var(--signed); }
+    .attested-step.active::before { background: var(--attested); }
+    .verified-step.active::before { background: var(--verified); }
+
+    .step-num {
+      display: block;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem; font-weight: 500;
+      letter-spacing: 0.14em;
+      color: var(--ink-faint);
+      margin-bottom: 0.65rem;
+      transition: color 0.4s ease;
+    }
+    .signed-step.active   .step-num { color: var(--signed); }
+    .attested-step.active .step-num { color: var(--attested); }
+    .verified-step.active .step-num { color: var(--verified); }
+
+    .scroll-step h3 {
+      font-size: 1.65rem; font-weight: 700;
+      line-height: 1.15; letter-spacing: -0.015em;
+      margin-bottom: 0.7rem;
+    }
+    .scroll-step p {
+      font-size: 1rem; color: var(--ink-soft);
+      line-height: 1.7; max-width: 28rem;
+    }
+    .scroll-step p + p { margin-top: 0.75rem; }
+
+    /* ─── "What MOAT verifies" section ─── */
+    .verify-section {
+      padding: 6rem 0;
+      border-top: 1px solid var(--border);
+      margin-top: 0;
+    }
+    .verify-section .section-eyebrow { margin-bottom: 0.75rem; }
+    .verify-section h2 {
+      font-size: clamp(1.5rem, 2.5vw, 2rem);
+      font-weight: 700; margin-bottom: 3rem;
+      letter-spacing: -0.015em;
+    }
+    .verify-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.5rem;
+    }
+    .verify-card {
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem 1.5rem;
+    }
+    .verify-card .card-icon {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem; font-weight: 500;
+      letter-spacing: 0.12em;
+      color: var(--ink-muted);
+      margin-bottom: 0.65rem;
+    }
+    .verify-card h4 {
+      font-size: 0.975rem; font-weight: 600;
+      margin-bottom: 0.4rem;
+    }
+    .verify-card p {
+      font-size: 0.875rem; color: var(--ink-muted);
+      line-height: 1.6;
+    }
+
+    /* ─── CTA ─── */
+    .cta-section {
+      padding: 5rem 0 6rem;
+      border-top: 1px solid var(--border);
+      text-align: center;
+    }
+    .cta-section h2 {
+      font-size: clamp(1.5rem, 3vw, 2.2rem);
+      font-weight: 700; margin-bottom: 0.75rem;
+      letter-spacing: -0.015em;
+    }
+    .cta-section p {
+      color: var(--ink-soft); max-width: 32rem; margin: 0 auto 2rem;
+      line-height: 1.65;
+    }
+    .cta-actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+
+    /* ─── Footer ─── */
+    .site-footer {
+      border-top: 1px solid var(--border);
+      padding: 2rem 0;
+    }
+    .site-footer .container {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 1rem; flex-wrap: wrap;
+    }
+    .footer-left {
+      font-size: 0.85rem; color: var(--ink-muted);
+    }
+    .footer-links { display: flex; gap: 1.5rem; }
+    .footer-links a {
+      font-size: 0.85rem; color: var(--ink-muted);
+    }
+    .footer-links a:hover { color: var(--ink); }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 960px) {
+      .scrolly-wrap {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+      }
+      .scrolly-fig {
+        position: static;
+        padding: 2rem 0 1rem;
+      }
+      /* All nodes and lines visible on mobile */
+      .node       { opacity: 1 !important; filter: none !important; }
+      .flow-line  { stroke-dashoffset: 0 !important; }
+      .badge-pulse { opacity: 1 !important; transform: scale(1) !important; }
+      /* Nodes get their active color on mobile */
+      .node.publisher .node-rect { stroke: var(--signed) !important; }
+      .node.registry  .node-rect { stroke: var(--attested) !important; }
+      .node.consumer  .node-rect { stroke: var(--verified) !important; }
+      .node.rekor     .node-rect { stroke: var(--rekor) !important; }
+
+      .scroll-step {
+        padding: 2rem 0 2rem 1.5rem;
+        opacity: 1 !important;
+      }
+      .scroll-step::before { display: none; }
+      .top-sentinel { display: none; }
+
+      .site-header nav { display: none; }
+    }
+
+    @media (max-width: 600px) {
+      .hero h1 { font-size: 2rem; }
+      .hero { padding: 3.5rem 0 3rem; }
+      .header-actions .btn-ghost { display: none; }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Mockup banner -->
+  <div class="mockup-banner">
+    Mockup 12 · Side-by-Side Diamond —
+    <a href="../11-diagram-narrative/">← Mockup 11</a>
+    &nbsp;·&nbsp;
+    <a href="../index.html">All mockups</a>
+  </div>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="container">
+      <a href="#" class="logo">
+        <span class="logo-mark" aria-hidden="true"></span>
+        MOAT
+      </a>
+      <nav>
+        <a href="#how">How it works</a>
+        <a href="https://github.com/OpenScribbler/moat/blob/main/moat-spec.md">Spec</a>
+        <a href="https://github.com/OpenScribbler/moat">GitHub</a>
+      </nav>
+      <div class="header-actions">
+        <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">◐</button>
+        <a href="https://github.com/OpenScribbler/moat/blob/main/moat-spec.md" class="btn-primary">Read the spec</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-content">
+        <p class="hero-eyebrow">OPEN PROTOCOL · v0.7.1</p>
+        <h1>AI agent content,<br><em>verified at install.</em></h1>
+        <p class="hero-sub">
+          MOAT gives publishers a signed manifest, registries an auditable attestation,
+          and consumers a single command to verify both. No keys to manage.
+          No infrastructure to run.
+        </p>
+        <div class="hero-actions">
+          <a href="https://github.com/OpenScribbler/moat/blob/main/moat-spec.md" class="btn-primary">Read the spec</a>
+          <a href="#how" class="btn-ghost">See how it works</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works: scrollytelling -->
+  <section class="how-section" id="how">
+
+    <div class="container how-header">
+      <p class="section-eyebrow">HOW IT WORKS</p>
+      <h2>Three steps. One auditable chain.</h2>
+      <p>Publisher signs. Registry attests. Consumer verifies. Each step leaves a permanent record in Sigstore Rekor — independently checkable by anyone.</p>
+    </div>
+
+    <div class="scrolly-wrap container">
+
+      <!-- LEFT: sticky diagram -->
+      <div class="scrolly-fig" aria-hidden="true">
+        <div class="diagram-frame">
+          <span class="fig-label">fig.01 / trust-flow</span>
+
+          <!-- Diamond SVG: Rekor top, Publisher mid-left, Consumer mid-right, Registry bottom.
+               Arrows: Publisher→Rekor (log entry), Publisher→Registry (push),
+               Registry→Consumer (fetch), Consumer→Rekor (verify, dashed). -->
+          <svg class="diagram-svg" viewBox="0 0 520 450"
+               xmlns="http://www.w3.org/2000/svg"
+               role="img" aria-label="Trust flow diamond: Publisher signs and logs to Rekor, pushes to Registry, Registry attests, Consumer fetches and verifies against Rekor.">
+            <defs>
+              <marker id="m12-signed" viewBox="0 0 10 10" refX="9" refY="5"
+                      markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="var(--signed)"/>
+              </marker>
+              <marker id="m12-attested" viewBox="0 0 10 10" refX="9" refY="5"
+                      markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="var(--attested)"/>
+              </marker>
+              <marker id="m12-verified" viewBox="0 0 10 10" refX="9" refY="5"
+                      markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="var(--verified)"/>
+              </marker>
+            </defs>
+
+            <!-- ─── Rekor (top center) ─── -->
+            <g class="node rekor" id="node-rekor">
+              <rect class="node-rect" x="165" y="20" width="190" height="56"
+                    rx="8" fill="var(--node-fill)" stroke-width="1.5"/>
+              <text x="260" y="41" text-anchor="middle"
+                    font-family="'JetBrains Mono', monospace" font-size="9"
+                    fill="var(--node-text-dim)" letter-spacing="0.1em" font-weight="500">TRANSPARENCY LOG</text>
+              <text x="260" y="60" text-anchor="middle"
+                    font-family="Inter, sans-serif" font-size="15" font-weight="700"
+                    fill="var(--ink)">Sigstore Rekor</text>
+              <!-- Live pulse dot -->
+              <circle cx="183" cy="34" r="3.5" fill="var(--rekor)">
+                <animate attributeName="opacity" values="1;0.25;1" dur="2.2s" repeatCount="indefinite"/>
+              </circle>
+            </g>
+
+            <!-- ─── Publisher (mid left) ─── -->
+            <g class="node publisher" id="node-publisher">
+              <rect class="node-rect" x="20" y="178" width="164" height="82"
+                    rx="10" fill="var(--node-fill)" stroke-width="1.5"/>
+              <text x="102" y="200" text-anchor="middle"
+                    font-family="'JetBrains Mono', monospace" font-size="9"
+                    fill="var(--node-text-dim)" letter-spacing="0.1em">ROLE / 01</text>
+              <text x="102" y="222" text-anchor="middle"
+                    font-family="Inter, sans-serif" font-size="15" font-weight="700"
+                    fill="var(--ink)">Publisher</text>
+              <text x="102" y="241" text-anchor="middle"
+                    font-family="'JetBrains Mono', monospace" font-size="10"
+                    fill="var(--node-text-dim)">workflow.yml</text>
+            </g>
+
+            <!-- ─── Consumer (mid right) ─── -->
+            <g class="node consumer" id="node-consumer">
+              <rect class="node-rect" x="336" y="178" width="164" height="82"
+                    rx="10" fill="var(--node-fill)" stroke-width="1.5"/>
+              <text x="418" y="200" text-anchor="middle"
+                    font-family="'JetBrains Mono', monospace" font-size="9"
+                    fill="var(--node-text-dim)" letter-spacing="0.1em">ROLE / 03</text>
+              <text x="418" y="222" text-anchor="middle"
+                    font-family="Inter, sans-serif" font-size="15" font-weight="700"
+                    fill="var(--ink)">Consumer</text>
+              <text x="418" y="241" text-anchor="middle"
+                    font-family="'JetBrains Mono', monospace" font-size="10"
+                    fill="var(--node-text-dim)">moat-verify</text>
+            </g>
+
+            <!-- ─── Registry (bottom center) ─── -->
+            <g class="node registry" id="node-registry">
+              <rect class="node-rect" x="165" y="316" width="190" height="70"
+                    rx="10" fill="var(--node-fill)" stroke-width="1.5"/>
+              <text x="260" y="338" text-anchor="middle"
+                    font-family="'JetBrains Mono', monospace" font-size="9"
+                    fill="var(--node-text-dim)" letter-spacing="0.1em">ROLE / 02</text>
+              <text x="260" y="358" text-anchor="middle"
+                    font-family="Inter, sans-serif" font-size="15" font-weight="700"
+                    fill="var(--ink)">Registry</text>
+              <text x="260" y="374" text-anchor="middle"
+                    font-family="'JetBrains Mono', monospace" font-size="10"
+                    fill="var(--node-text-dim)">attests + indexes</text>
+            </g>
+
+            <!-- ─── Flow lines ─── -->
+
+            <!-- 1. Publisher → Rekor (log entry, solid green) -->
+            <line id="line-anchor" class="flow-line"
+                  x1="180" y1="180" x2="215" y2="76"
+                  stroke="var(--signed)" stroke-width="1.75"
+                  marker-end="url(#m12-signed)"/>
+            <!-- label -->
+            <text id="lbl-anchor" x="185" y="127"
+                  text-anchor="end"
+                  font-family="'JetBrains Mono', monospace" font-size="9"
+                  fill="var(--signed)" opacity="0"
+                  style="transition: opacity 0.2s ease">log entry</text>
+
+            <!-- 2. Publisher → Registry (push manifest, solid blue) -->
+            <line id="line-push" class="flow-line"
+                  x1="180" y1="258" x2="215" y2="316"
+                  stroke="var(--attested)" stroke-width="1.75"
+                  marker-end="url(#m12-attested)"/>
+            <text id="lbl-push" x="185" y="289"
+                  text-anchor="end"
+                  font-family="'JetBrains Mono', monospace" font-size="9"
+                  fill="var(--attested)" opacity="0"
+                  style="transition: opacity 0.2s ease">push</text>
+
+            <!-- 3. Registry → Consumer (fetch, solid cyan) -->
+            <line id="line-fetch" class="flow-line"
+                  x1="305" y1="316" x2="340" y2="258"
+                  stroke="var(--verified)" stroke-width="1.75"
+                  marker-end="url(#m12-verified)"/>
+            <text id="lbl-fetch" x="335" y="289"
+                  text-anchor="start"
+                  font-family="'JetBrains Mono', monospace" font-size="9"
+                  fill="var(--verified)" opacity="0"
+                  style="transition: opacity 0.2s ease">fetch</text>
+
+            <!-- 4. Consumer → Rekor (verify, dashed cyan) -->
+            <line id="line-verify" class="flow-line"
+                  x1="340" y1="180" x2="305" y2="76"
+                  stroke="var(--verified)" stroke-width="1.75"
+                  stroke-dasharray="6 4"
+                  marker-end="url(#m12-verified)"/>
+            <text id="lbl-verify" x="335" y="127"
+                  text-anchor="start"
+                  font-family="'JetBrains Mono', monospace" font-size="9"
+                  fill="var(--verified)" opacity="0"
+                  style="transition: opacity 0.2s ease">verify</text>
+
+            <!-- ─── Status badges ─── -->
+
+            <!-- Signed (below Publisher) -->
+            <g class="badge-pulse" id="badge-signed">
+              <rect x="32" y="268" width="140" height="26" rx="13"
+                    fill="var(--signed-soft)" stroke="var(--signed)" stroke-width="1"/>
+              <circle cx="52" cy="281" r="3.5" fill="var(--signed)"/>
+              <text x="62" y="285"
+                    font-family="'JetBrains Mono', monospace" font-size="10"
+                    fill="var(--signed)" font-weight="500">signed + logged</text>
+            </g>
+
+            <!-- Attested (below Registry) -->
+            <g class="badge-pulse" id="badge-attested">
+              <rect x="177" y="394" width="166" height="26" rx="13"
+                    fill="var(--attested-soft)" stroke="var(--attested)" stroke-width="1"/>
+              <circle cx="197" cy="407" r="3.5" fill="var(--attested)"/>
+              <text x="207" y="411"
+                    font-family="'JetBrains Mono', monospace" font-size="10"
+                    fill="var(--attested)" font-weight="500">attested</text>
+            </g>
+
+            <!-- Verified (below Consumer) -->
+            <g class="badge-pulse" id="badge-verified">
+              <rect x="348" y="268" width="140" height="26" rx="13"
+                    fill="var(--verified-soft)" stroke="var(--verified)" stroke-width="1"/>
+              <circle cx="368" cy="281" r="3.5" fill="var(--verified)"/>
+              <text x="378" y="285"
+                    font-family="'JetBrains Mono', monospace" font-size="10"
+                    fill="var(--verified)" font-weight="500">verified</text>
+            </g>
+
+          </svg>
+        </div><!-- /.diagram-frame -->
+      </div><!-- /.scrolly-fig -->
+
+      <!-- RIGHT: text steps -->
+      <div class="scrolly-steps">
+
+        <!-- Sentinel: returns diagram to intro when user scrolls back to top -->
+        <div class="top-sentinel" aria-hidden="true"></div>
+
+        <!-- Step 01: Publisher signs -->
+        <div class="scroll-step signed-step" data-step="signed">
+          <span class="step-num">01 · SIGNED</span>
+          <h3>Publisher signs.</h3>
+          <p>
+            Add one GitHub Actions workflow. MOAT generates a signed manifest for your
+            content, anchors a log entry in Sigstore Rekor, and pushes the manifest to
+            your registry branch.
+          </p>
+          <p>
+            No key material leaves your pipeline. The signing identity is your OIDC token
+            from GitHub Actions — nothing to rotate, nothing to store.
+          </p>
+        </div>
+
+        <!-- Step 02: Registry attests -->
+        <div class="scroll-step attested-step" data-step="attested">
+          <span class="step-num">02 · ATTESTED</span>
+          <h3>Registry attests.</h3>
+          <p>
+            The registry picks up the signed manifest and adds its own attestation —
+            what was indexed, when, and by whom. The full chain is queryable
+            by anyone.
+          </p>
+          <p>
+            Registries don't need to run their own infrastructure. One workflow file
+            is enough.
+          </p>
+        </div>
+
+        <!-- Step 03: Consumer verifies -->
+        <div class="scroll-step verified-step" data-step="verified">
+          <span class="step-num">03 · VERIFIED</span>
+          <h3>Consumer verifies.</h3>
+          <p>
+            Run <code>moat-verify</code> before installing. It checks the content hash
+            against the registry attestation and confirms the signature is present
+            in Rekor.
+          </p>
+          <p>
+            Tampered content fails. Content from an unknown registry fails. The install
+            only proceeds on a clean chain of custody.
+          </p>
+        </div>
+
+      </div><!-- /.scrolly-steps -->
+
+    </div><!-- /.scrolly-wrap -->
+
+  </section><!-- /#how -->
+
+  <!-- What MOAT verifies -->
+  <section class="verify-section">
+    <div class="container">
+      <p class="section-eyebrow">WHAT IT COVERS</p>
+      <h2>What MOAT makes verifiable.</h2>
+      <div class="verify-grid">
+        <div class="verify-card">
+          <p class="card-icon">INTEGRITY</p>
+          <h4>Content hasn't changed</h4>
+          <p>The installed files match the hash in the signed manifest. Any modification — even a single byte — fails verification.</p>
+        </div>
+        <div class="verify-card">
+          <p class="card-icon">PROVENANCE</p>
+          <h4>It came from who you think</h4>
+          <p>The signing identity is tied to a GitHub Actions OIDC token. You can see exactly which repo and workflow signed it.</p>
+        </div>
+        <div class="verify-card">
+          <p class="card-icon">TRANSPARENCY</p>
+          <h4>Signatures are logged</h4>
+          <p>Every signature is recorded in Sigstore Rekor — a public, append-only ledger. You can verify the entry independently.</p>
+        </div>
+        <div class="verify-card">
+          <p class="card-icon">COVERAGE</p>
+          <h4>Skills, rules, agents, hooks</h4>
+          <p>Anything a developer tool loads from a registry: SKILL.md files, CLAUDE.md rules, MCP configs, sub-agents, hooks.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section">
+    <div class="container">
+      <h2>Ready to adopt MOAT?</h2>
+      <p>The spec is open. The reference workflows are ready to copy. Publisher onboarding is one file.</p>
+      <div class="cta-actions">
+        <a href="https://github.com/OpenScribbler/moat/blob/main/moat-spec.md" class="btn-primary">Read the spec</a>
+        <a href="https://github.com/OpenScribbler/moat" class="btn-ghost">GitHub →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-left">
+        MOAT · Model for Origin Attestation and Trust · Open protocol, v0.7.1
+      </div>
+      <nav class="footer-links">
+        <a href="https://github.com/OpenScribbler/moat/blob/main/moat-spec.md">Spec</a>
+        <a href="https://github.com/OpenScribbler/moat">GitHub</a>
+        <a href="../index.html">All mockups</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script>
+    /* ─── Theme toggle ─── */
+    (function () {
+      var btn = document.getElementById('theme-toggle');
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        var current = document.documentElement.getAttribute('data-theme');
+        var next = current === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        try { localStorage.setItem('moat-mockup-12-theme', next); } catch (e) {}
+      });
+    })();
+
+    /* ─── Scrollytelling: IntersectionObserver ─── */
+    (function () {
+      if (window.innerWidth <= 960) return; // skip on mobile
+
+      var steps   = document.querySelectorAll('.scroll-step[data-step]');
+      var topSent = document.querySelector('.top-sentinel');
+      var activeStep = null;
+
+      /* DOM refs — cached once */
+      var nodes = {
+        rekor:     document.getElementById('node-rekor'),
+        publisher: document.getElementById('node-publisher'),
+        registry:  document.getElementById('node-registry'),
+        consumer:  document.getElementById('node-consumer'),
+      };
+      var lines = {
+        anchor: document.getElementById('line-anchor'),
+        push:   document.getElementById('line-push'),
+        fetch:  document.getElementById('line-fetch'),
+        verify: document.getElementById('line-verify'),
+      };
+      var labels = {
+        anchor: document.getElementById('lbl-anchor'),
+        push:   document.getElementById('lbl-push'),
+        fetch:  document.getElementById('lbl-fetch'),
+        verify: document.getElementById('lbl-verify'),
+      };
+      var badges = {
+        signed:   document.getElementById('badge-signed'),
+        attested: document.getElementById('badge-attested'),
+        verified: document.getElementById('badge-verified'),
+      };
+
+      function activate(el) { if (el) el.classList.add('active'); }
+      function deactivate(el) { if (el) el.classList.remove('active'); }
+      function showLabel(lbl) { if (lbl) lbl.setAttribute('opacity', '1'); }
+      function hideLabel(lbl) { if (lbl) lbl.setAttribute('opacity', '0'); }
+
+      function resetAll() {
+        Object.values(nodes).forEach(deactivate);
+        Object.values(lines).forEach(deactivate);
+        Object.values(badges).forEach(deactivate);
+        Object.values(labels).forEach(hideLabel);
+      }
+
+      function setStep(step) {
+        if (step === activeStep) return;
+        activeStep = step;
+
+        /* Update step highlight in text column */
+        steps.forEach(function (el) {
+          el.classList.toggle('active', el.dataset.step === step);
+        });
+
+        /* Update diagram — cumulative: each step keeps all prior elements */
+        resetAll();
+        activate(nodes.rekor);  /* Rekor always visible once section entered */
+
+        if (step === 'signed' || step === 'attested' || step === 'verified') {
+          activate(nodes.publisher);
+          activate(lines.anchor);
+          showLabel(labels.anchor);
+          activate(badges.signed);
+        }
+
+        if (step === 'attested' || step === 'verified') {
+          activate(nodes.registry);
+          activate(lines.push);
+          showLabel(labels.push);
+          activate(badges.attested);
+        }
+
+        if (step === 'verified') {
+          activate(nodes.consumer);
+          activate(lines.fetch);
+          activate(lines.verify);
+          showLabel(labels.fetch);
+          showLabel(labels.verify);
+          activate(badges.verified);
+        }
+      }
+
+      /* Fire when a step enters the middle 24% of the viewport */
+      var stepObserver = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) setStep(e.target.dataset.step);
+        });
+      }, { rootMargin: '-38% 0% -38% 0%', threshold: 0 });
+
+      steps.forEach(function (s) { stepObserver.observe(s); });
+
+      /* Return to intro when user scrolls back above all steps */
+      if (topSent) {
+        var topObserver = new IntersectionObserver(function (entries) {
+          entries.forEach(function (e) {
+            if (e.isIntersecting) setStep('intro');
+          });
+        }, { rootMargin: '0% 0% -30% 0%', threshold: 0 });
+        topObserver.observe(topSent);
+      }
+
+      /* Start in intro state (Rekor only) */
+      setStep('intro');
+    })();
+  </script>
+
+</body>
+</html>
