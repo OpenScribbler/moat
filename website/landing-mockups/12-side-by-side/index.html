@@ -501,6 +501,34 @@
     }
     .cta-actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
 
+    /* ─── Status card ("Ready to read.") ─── */
+    .status-section { padding: 5rem 0; border-top: 1px solid var(--border); }
+    .status-card {
+      background:
+        linear-gradient(135deg, var(--verified-soft), var(--signed-soft)),
+        var(--bg-card);
+      border: 1px solid var(--border-strong);
+      border-radius: 14px;
+      padding: 3rem;
+      display: grid; grid-template-columns: 1fr auto;
+      gap: 3rem; align-items: center;
+      margin-top: 1rem;
+    }
+    .status-eyebrow {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem; color: var(--signed);
+      letter-spacing: 0.08em; text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+    .status-eyebrow::before {
+      content: ''; width: 8px; height: 8px; border-radius: 50%;
+      background: var(--signed); box-shadow: 0 0 8px var(--signed-glow);
+    }
+    .status-card h2 { font-size: clamp(1.5rem, 2.5vw, 2rem); margin-bottom: 0.85rem; max-width: 18ch; }
+    .status-card p  { color: var(--ink-soft); font-size: 1rem; line-height: 1.6; max-width: 32rem; }
+    .status-ctas    { display: flex; flex-direction: column; gap: 0.65rem; min-width: max-content; }
+
     /* ─── Footer ─── */
     .site-footer {
       border-top: 1px solid var(--border);
@@ -719,8 +747,8 @@
             <line id="line-push" class="flow-line"
                   x1="180" y1="258" x2="215" y2="316"
                   stroke="var(--attested)" stroke-width="1.75"/>
-            <text id="lbl-push" x="185" y="289"
-                  text-anchor="end"
+            <text id="lbl-push" x="222" y="295"
+                  text-anchor="start"
                   font-family="'JetBrains Mono', monospace" font-size="9"
                   fill="var(--attested)" opacity="0"
                   style="transition: opacity 0.2s ease">push</text>
@@ -729,8 +757,8 @@
             <line id="line-fetch" class="flow-line"
                   x1="305" y1="316" x2="340" y2="258"
                   stroke="var(--verified)" stroke-width="1.75"/>
-            <text id="lbl-fetch" x="335" y="289"
-                  text-anchor="start"
+            <text id="lbl-fetch" x="298" y="295"
+                  text-anchor="end"
                   font-family="'JetBrains Mono', monospace" font-size="9"
                   fill="var(--verified)" opacity="0"
                   style="transition: opacity 0.2s ease">fetch</text>
@@ -877,6 +905,26 @@
       <div class="cta-actions">
         <a href="https://github.com/OpenScribbler/moat/blob/main/moat-spec.md" class="btn-primary">Read the spec</a>
         <a href="https://github.com/OpenScribbler/moat" class="btn-ghost">GitHub →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Ready to read (from Mockup 11 — compare with CTA above) -->
+  <section class="status-section">
+    <div class="container">
+      <div class="status-card">
+        <div>
+          <p class="status-eyebrow">Working draft · v0.7.1</p>
+          <h2>Ready to read.</h2>
+          <p>
+            The core spec, <code>moat-verify</code>, Publisher Action, and Registry Action are
+            complete and versioned. Implementation and conforming tooling are in progress.
+          </p>
+        </div>
+        <div class="status-ctas">
+          <a href="#" class="cta-primary">Read the full spec →</a>
+          <a href="#" class="cta-secondary">View on GitHub</a>
+        </div>
       </div>
     </div>
   </section>
