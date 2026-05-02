@@ -281,7 +281,13 @@
     }
 
     /* ─── How section ─── */
-    .how-section { padding-top: 5rem; }
+    .how-section {
+      padding-top: 5rem;
+      background:
+        radial-gradient(circle at 1px 1px, var(--diagram-grid) 1px, transparent 0);
+      background-size: 24px 24px;
+      background-color: var(--bg);
+    }
 
     .how-header {
       padding-bottom: 1.5rem;
@@ -621,9 +627,6 @@
                xmlns="http://www.w3.org/2000/svg"
                role="img" aria-label="Trust flow diamond: Publisher signs and logs to Rekor, pushes to Registry, Registry attests, Consumer fetches and verifies against Rekor.">
             <defs>
-              <pattern id="m12-dots" x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
-                <circle cx="1" cy="1" r="0.9" fill="var(--diagram-grid)"/>
-              </pattern>
               <marker id="m12-signed" viewBox="0 0 10 10" refX="9" refY="5"
                       markerWidth="7" markerHeight="7" orient="auto-start-reverse">
                 <path d="M0,0 L10,5 L0,10 z" fill="var(--signed)"/>
@@ -637,9 +640,6 @@
                 <path d="M0,0 L10,5 L0,10 z" fill="var(--verified)"/>
               </marker>
             </defs>
-
-            <!-- Background dot grid -->
-            <rect x="0" y="0" width="520" height="450" fill="url(#m12-dots)" rx="0"/>
 
             <!-- ─── Rekor (top center) ─── -->
             <g class="node rekor" id="node-rekor">
