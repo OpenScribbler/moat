@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Moat Landing Page Mockups — Gallery</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --bg: #0c0e16;
+      --bg-soft: #14171f;
+      --bg-card: #181b24;
+      --ink: #f4f5f7;
+      --ink-soft: #b6b9c4;
+      --ink-muted: #767a86;
+      --ink-faint: #4d5060;
+      --border: #262a36;
+      --border-strong: #353948;
+      --accent: #3aa99f;
+      --accent-soft: #143f3c;
+      --warning: #d4a652;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg); color: var(--ink);
+      line-height: 1.55; -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 2rem; }
+
+    /* ─── Header ────────────────────────── */
+    header.page-header {
+      padding: 4rem 0 3rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .page-eyebrow {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem; letter-spacing: 0.05em;
+      color: var(--ink-muted); text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+    h1 {
+      font-size: clamp(2rem, 4vw, 2.85rem);
+      font-weight: 700; letter-spacing: -0.025em; line-height: 1.1;
+      margin-bottom: 1.25rem; max-width: 50rem;
+    }
+    .page-lead {
+      font-size: 1.05rem; color: var(--ink-soft);
+      max-width: 42rem; margin-bottom: 2rem;
+    }
+    .meta-row {
+      display: flex; gap: 2rem; flex-wrap: wrap;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;
+      color: var(--ink-muted);
+    }
+    .meta-row strong { color: var(--ink); font-weight: 500; }
+
+    /* ─── Filter / family bar ────────── */
+    .families {
+      padding: 2rem 0 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .family-row {
+      display: flex; gap: 0.5rem; flex-wrap: wrap;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.78rem;
+    }
+    .family-tag {
+      padding: 0.35rem 0.75rem; border-radius: 4px;
+      background: var(--bg-soft); border: 1px solid var(--border);
+      color: var(--ink-soft);
+    }
+    .family-tag strong { color: var(--ink); font-weight: 500; }
+
+    /* ─── Cards ──────────────────────── */
+    .gallery {
+      padding: 3rem 0 5rem;
+    }
+    .mockup-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr);
+      gap: 1.25rem;
+    }
+
+    .mockup-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 2rem;
+      display: flex; flex-direction: column; gap: 1rem;
+      transition: all 0.18s ease;
+      position: relative;
+      text-decoration: none;
+      color: var(--ink);
+    }
+    .mockup-card.built {
+      cursor: pointer;
+    }
+    .mockup-card.built:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      text-decoration: none;
+    }
+    .mockup-card.pending {
+      opacity: 0.55;
+      cursor: default;
+    }
+
+    .card-meta {
+      display: flex; align-items: center; justify-content: space-between;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.78rem;
+      color: var(--ink-muted);
+    }
+    .card-num {
+      font-weight: 500; color: var(--ink);
+    }
+    .card-status {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.2rem 0.55rem; border-radius: 4px;
+      font-size: 0.72rem; letter-spacing: 0.04em;
+    }
+    .card-status::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%;
+      background: currentColor;
+    }
+    .card-status.built {
+      background: var(--accent-soft); color: var(--accent);
+    }
+    .card-status.pending {
+      background: rgba(212, 166, 82, 0.12); color: var(--warning);
+    }
+
+    .card-title {
+      font-size: 1.2rem; font-weight: 600; letter-spacing: -0.015em;
+      color: var(--ink);
+    }
+    .card-desc {
+      font-size: 0.95rem; color: var(--ink-soft); line-height: 1.55;
+    }
+    .card-family {
+      font-family: 'JetBrains Mono', monospace; font-size: 0.74rem;
+      color: var(--ink-muted); padding-top: 0.85rem;
+      border-top: 1px solid var(--border);
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .card-family::before {
+      content: '⌘'; color: var(--ink-faint);
+    }
+
+    /* ─── Footer note ───────────────── */
+    .footer-note {
+      padding: 2rem 0 4rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.88rem; color: var(--ink-muted);
+    }
+    .footer-note a { color: var(--accent); }
+
+    /* ─── Responsive ─────────────────── */
+    @media (max-width: 720px) {
+      .mockup-grid { grid-template-columns: 1fr; }
+      header.page-header { padding: 2.5rem 0 2rem; }
+    }
+  </style>
+</head>
+<body>
+  <header class="page-header">
+    <div class="container">
+      <p class="page-eyebrow">Moat website · landing page exploration</p>
+      <h1>Twelve visual frames for the same protocol.</h1>
+      <p class="page-lead">
+        Each mockup carries identical copy and information, but expresses Moat differently —
+        from canonical-spec aesthetics to security-vendor polish to architecture-as-pitch.
+        Use this gallery to compare them side by side and pick the strongest direction.
+      </p>
+      <div class="meta-row">
+        <span>Brief: <strong><a href="BRIEF.md">BRIEF.md</a></strong></span>
+        <span>Source: <strong>same copy across all twelve</strong></span>
+        <span>Built: <strong id="built-count">12 / 12</strong></span>
+      </div>
+    </div>
+  </header>
+
+  <section class="families">
+    <div class="container">
+      <div class="family-row">
+        <span class="family-tag"><strong>Survivors</strong> · 01 02 03</span>
+        <span class="family-tag"><strong>SaaS-polished family</strong> · 04 05 06 07</span>
+        <span class="family-tag"><strong>Diagram-first family</strong> · 08 09 10 11 12</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="gallery">
+    <div class="container">
+      <div class="mockup-grid">
+
+        <a class="mockup-card built" href="01-academic-standard/index.html">
+          <div class="card-meta">
+            <span class="card-num">01</span>
+            <span class="card-status built">Built</span>
+          </div>
+          <div class="card-title">Academic Standard</div>
+          <p class="card-desc">
+            RFC/IETF aesthetic. Serif body, narrow column, numbered sections, footnote-style references.
+            Reads like page 1 of a published standard.
+          </p>
+          <div class="card-family">survivors / canonical</div>
+        </a>
+
+        <a class="mockup-card built" href="02-cncf-cousin/index.html">
+          <div class="card-meta">
+            <span class="card-num">02</span>
+            <span class="card-status built">Built</span>
+          </div>
+          <div class="card-title">CNCF Cousin</div>
+          <p class="card-desc">
+            Refined version of the current Moat site. Centered hero, single accent, classic open-source
+            protocol look — TUF/in-toto family. Lowest-risk baseline.
+          </p>
+          <div class="card-family">survivors / classic OSS</div>
+        </a>
+
+        <a class="mockup-card built" href="03-security-vendor/index.html">
+          <div class="card-meta">
+            <span class="card-num">03</span>
+            <span class="card-status built">Built</span>
+          </div>
+          <div class="card-title">Security-Vendor Aesthetic</div>
+          <p class="card-desc">
+            Sigstore / Snyk / 1Password-cousin. Abstract gradient hero, single bold brand color,
+            premium security-infrastructure feel.
+          </p>
+          <div class="card-family">survivors / vendor polish</div>
+        </a>
+
+        <a class="mockup-card built" href="04-saas-stripe/index.html">
+          <div class="card-meta">
+            <span class="card-num">04</span>
+            <span class="card-status built">Built</span>
+          </div>
+          <div class="card-title">SaaS · Stripe-cousin</div>
+          <p class="card-desc">
+            Soft pastel gradient mesh, friendly trust-flow illustration, color-forward.
+            Color palette of lavender, mint, peach, cyan with saturated indigo accent.
+          </p>
+          <div class="card-family">saas-polished / warmth axis</div>
+        </a>
+
+        <a class="mockup-card built" href="05-saas-linear/index.html">
+          <div class="card-meta">
+            <span class="card-num">05</span>
+            <span class="card-status built">Built</span>
+          </div>
+          <div class="card-title">SaaS · Linear-cousin</div>
+          <p class="card-desc">
+            Austere monochrome, dark default, big bold sans-serif type, single illustration.
+            Type-driven and considered.
+          </p>
+          <div class="card-family">saas-polished / severity axis</div>
+        </a>
+
+        <a class="mockup-card built" href="06-saas-vercel/index.html">
+          <div class="card-meta">
+            <span class="card-num">06</span>
+            <span class="card-status built">Built</span>
+          </div>
+          <div class="card-title">SaaS · Vercel-cousin</div>
+          <p class="card-desc">
+            Strict black/white with single neon cyan accent. Sharp 1px borders, no shadows.
+            Animated CLI demo in the hero.
+          </p>
+          <div class="card-family">saas-polished / edge axis</div>
+        </a>
+
+        <a class="mockup-card built" href="07-docs-product/index.html">
+          <div class="card-meta">
+            <span class="card-num">07</span>
+            <span class="card-status built">Built</span>
+          </div>
+          <div class="card-title">SaaS · Docs-Product</div>
+          <p class="card-desc">
+            Mintlify / GitBook-cousin. Light blueprint feel, friendly persona illustrations,
+            spec-page screenshot as hero centerpiece.
+          </p>
+          <div class="card-family">saas-polished / approachability axis</div>
+        </a>
+
+        <a class="mockup-card built" href="08-diagram-fullbleed/index.html">
+          <div class="card-meta">
+            <span class="card-num">08</span>
+            <span class="card-status built">Built</span>
+          </div>
+          <div class="card-title">Diagram-First · Full-Bleed</div>
+          <p class="card-desc">
+            Large trust-flow diagram dominates the hero. Three audience cards below
+            double as the diagram's legend. Visual-first; the diagram is the pitch.
+          </p>
+          <div class="card-family">diagram-first / centerpiece</div>
+        </a>
+
+        <a class="mockup-card built" href="09-diagram-blueprint/index.html">
+          <div class="card-meta">
+            <span class="card-num">09</span>
+            <span class="card-status built">Built</span>
+          </div>
+          <div class="card-title">Diagram-First · Architecture Blueprint</div>
+          <p class="card-desc">
+            Technical-line drawing. Grid background, monospace labels,
+            engineering-schematic feel. Whitespace-heavy.
+          </p>
+          <div class="card-family">diagram-first / schematic</div>
+        </a>
+
+        <a class="mockup-card built" href="10-diagram-animated/index.html">
+          <div class="card-meta">
+            <span class="card-num">10</span>
+            <span class="card-status built">Built</span>
+          </div>
+          <div class="card-title">Diagram-First · Animated Trust-Flow</div>
+          <p class="card-desc">
+            Diagram tells the story sequentially as the user scrolls. Lines draw, badges light up,
+            manifest icon flows from publisher to registry to consumer.
+          </p>
+          <div class="card-family">diagram-first / narrative</div>
+        </a>
+
+        <a class="mockup-card built" href="11-diagram-narrative/index.html">
+          <div class="card-meta">
+            <span class="card-num">11</span>
+            <span class="card-status built">Built</span>
+          </div>
+          <div class="card-title">Diagram-Narrative Hybrid (Flexoki)</div>
+          <p class="card-desc">
+            Combines #08's comprehensive trust-flow diagram with #10's scroll-driven animation.
+            Flexoki palette with light/dark toggle, staggered role cards, replay button on the diagram.
+          </p>
+          <div class="card-family">diagram-first / hybrid</div>
+        </a>
+
+        <a class="mockup-card built" href="12-side-by-side/index.html">
+          <div class="card-meta">
+            <span class="card-num">12</span>
+            <span class="card-status built">Built</span>
+          </div>
+          <div class="card-title">Side-by-Side Diamond (Flexoki)</div>
+          <p class="card-desc">
+            Sticky diagram left (55%), text steps right (45%). Diamond SVG: Rekor top, Publisher
+            mid-left, Consumer mid-right, Registry bottom. Cumulative step activation on scroll.
+          </p>
+          <div class="card-family">diagram-first / side-by-side</div>
+        </a>
+
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer-note">
+    <div class="container">
+      Mockups are review artifacts, not production. They live outside Astro's content collections
+      so they don't pollute the production site. See <a href="BRIEF.md">BRIEF.md</a> for shared copy
+      and direction notes.
+    </div>
+  </footer>
+</body>
+</html>
