@@ -13,7 +13,7 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MOAT — AI agent content, verified at install.</title>
+  <title>MOAT: AI agent content, verified at install.</title>
   <meta name="description" content="Model for Origin Attestation and Trust — an open protocol for provenance and integrity of AI agent content." />
   <link rel="icon" type="image/svg+xml" href={`${base}favicon.svg`} />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -234,6 +234,12 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
       max-width: 36rem; line-height: 1.55;
       margin: 0 auto 0.85rem;
     }
+    .moat-word { font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+    .expansion {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.15rem; color: var(--ink-soft);
+      margin-bottom: 1.4rem;
+    }
     .subhead {
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.85rem; color: var(--ink-muted);
@@ -262,8 +268,8 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
     /* ─── Section chrome ─── */
     .section-eyebrow {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem; font-weight: 500;
-      letter-spacing: 0.14em; color: var(--ink-muted);
+      font-size: 0.975rem; font-weight: 500;
+      letter-spacing: 0.14em; color: var(--ink-soft);
       margin-bottom: 1rem;
     }
 
@@ -285,7 +291,7 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
       letter-spacing: -0.015em;
       margin-bottom: 0.6rem;
     }
-    .how-header p {
+    .how-header p:not(.section-eyebrow) {
       font-size: 0.975rem; color: var(--ink-soft);
       line-height: 1.6;
     }
@@ -355,11 +361,18 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
 
     /* Flow lines: drawn via dashoffset */
     .flow-line {
-      stroke-dasharray: 200;
-      stroke-dashoffset: 200;
+      stroke-dasharray: 300;
+      stroke-dashoffset: 300;
       transition: stroke-dashoffset 0.2s ease;
     }
     .flow-line.active { stroke-dashoffset: 0; }
+    #line-verify {
+      stroke-dasharray: 6 4;
+      stroke-dashoffset: 0;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    #line-verify.active { opacity: 1; }
 
     /* Badges */
     .badge-pulse {
@@ -398,9 +411,10 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
     .scroll-step:last-of-type::before  { bottom: 38vh; }
 
     .scroll-step.active { opacity: 1; }
-    .signed-step.active::before   { background: var(--signed); }
-    .attested-step.active::before { background: var(--attested); }
-    .verified-step.active::before { background: var(--verified); }
+    .signed-step.active::before    { background: var(--signed); }
+    .published-step.active::before { background: var(--signed); }
+    .attested-step.active::before  { background: var(--attested); }
+    .verified-step.active::before  { background: var(--verified); }
 
     .step-num {
       display: block;
@@ -411,9 +425,10 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
       margin-bottom: 0.65rem;
       transition: color 0.4s ease;
     }
-    .signed-step.active   .step-num { color: var(--signed); }
-    .attested-step.active .step-num { color: var(--attested); }
-    .verified-step.active .step-num { color: var(--verified); }
+    .signed-step.active    .step-num { color: var(--signed); }
+    .published-step.active .step-num { color: var(--signed); }
+    .attested-step.active  .step-num { color: var(--attested); }
+    .verified-step.active  .step-num { color: var(--verified); }
 
     .scroll-step h3 {
       font-size: 1.65rem; font-weight: 700;
@@ -432,11 +447,15 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
       border-top: 1px solid var(--border);
       margin-top: 0;
     }
-    .verify-section .section-eyebrow { margin-bottom: 0.75rem; }
     .verify-section h2 {
       font-size: clamp(1.5rem, 2.5vw, 2rem);
-      font-weight: 700; margin-bottom: 3rem;
+      font-weight: 700; margin-bottom: 1.25rem;
       letter-spacing: -0.015em;
+    }
+    .verify-intro {
+      font-size: 1rem; color: var(--ink-soft);
+      line-height: 1.65; max-width: 38rem;
+      margin-bottom: 2.5rem;
     }
     .verify-grid {
       display: grid;
@@ -445,17 +464,26 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
     }
     .verify-card {
       background: var(--bg-soft);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 1.25rem 1.5rem;
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .verify-card .card-titlebar {
+      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0.55rem 1rem;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border-strong);
+    }
+    .verify-card .card-dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+      background: var(--verified);
     }
     .verify-card .card-icon {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem; font-weight: 500;
-      letter-spacing: 0.12em;
-      color: var(--ink-muted);
-      margin-bottom: 0.65rem;
+      font-size: 0.7rem; font-weight: 500;
+      letter-spacing: 0.1em; color: var(--ink-muted);
     }
+    .verify-card .card-body { padding: 1.25rem 1.5rem; }
     .verify-card h4 {
       font-size: 0.975rem; font-weight: 600;
       margin-bottom: 0.4rem;
@@ -470,7 +498,6 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
       padding: 5rem 0;
       border-top: 1px solid var(--border);
     }
-    .adopter-section .section-eyebrow { margin-bottom: 0.75rem; }
     .adopter-section h2 {
       font-size: clamp(1.5rem, 2.5vw, 2rem);
       font-weight: 700; letter-spacing: -0.015em;
@@ -487,39 +514,48 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
       gap: 1.25rem;
     }
     .adopter-fact {
+      background: var(--bg-soft);
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .fact-titlebar {
+      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0.55rem 1rem;
       background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-left: 3px solid var(--verified);
-      border-radius: 10px;
-      padding: 1.5rem 1.75rem;
+      border-bottom: 1px solid var(--border-strong);
     }
-    .adopter-fact.registry { border-left-color: var(--attested); }
-    .adopter-fact .fact-label {
+    .fact-dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+    .adopter-fact.impl .fact-dot { background: var(--verified); }
+    .adopter-fact.registry .fact-dot { background: var(--attested); }
+    .fact-label {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem; font-weight: 500;
-      letter-spacing: 0.12em;
-      color: var(--verified);
-      margin-bottom: 0.6rem;
+      font-size: 0.7rem; font-weight: 500;
+      letter-spacing: 0.1em; color: var(--ink-muted);
     }
-    .adopter-fact.registry .fact-label { color: var(--attested); }
+    .adopter-fact { display: flex; flex-direction: column; }
+    .fact-body { padding: 1.25rem 1.5rem; display: flex; flex-direction: column; flex: 1; }
+    .fact-body .fact-link { margin-top: auto; padding-top: 0.9rem; }
     .adopter-fact h4 {
       font-size: 1.05rem; font-weight: 600;
       margin-bottom: 0.45rem;
     }
     .adopter-fact p {
-      font-size: 0.9rem; color: var(--ink-muted);
+      font-size: 0.88rem; color: var(--ink-muted);
       line-height: 1.6;
     }
     .fact-link {
       display: inline-block;
-      margin-top: 1rem;
+      margin-top: 0.9rem;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.78rem;
-      color: var(--verified);
+      font-size: 0.75rem;
       letter-spacing: 0.02em;
     }
     .fact-link:hover { color: var(--ink); }
-    .fact-link.registry { color: var(--attested); }
+    .adopter-fact.impl .fact-link { color: var(--verified); }
+    .adopter-fact.registry .fact-link { color: var(--attested); }
 
     /* ─── Status card ─── */
     .status-section { padding: 5rem 0; border-top: 1px solid var(--border); }
@@ -560,6 +596,10 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
     }
     .footer-left {
       font-size: 0.85rem; color: var(--ink-muted);
+      display: flex; flex-direction: column; gap: 0.25rem;
+    }
+    .footer-copy {
+      font-size: 0.78rem; color: var(--ink-faint);
     }
     .footer-links { display: flex; gap: 1.5rem; }
     .footer-links a {
@@ -580,6 +620,7 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
       /* All nodes and lines visible on mobile */
       .node       { opacity: 1 !important; filter: none !important; }
       .flow-line  { stroke-dashoffset: 0 !important; }
+      #line-verify { opacity: 1 !important; }
       .badge-pulse { opacity: 1 !important; transform: scale(1) !important; }
       .node.publisher .node-rect { stroke: var(--signed) !important; }
       .node.registry  .node-rect { stroke: var(--attested) !important; }
@@ -642,11 +683,67 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
   <section class="hero">
     <div class="container">
       <p class="spec-tag">Open Protocol · Working Draft v0.7.1</p>
-      <h1>AI agent content,<br /><span class="accent">verified at install.</span></h1>
-      <p class="tagline">Informing your trust decisions through verification.</p>
+      <h1>Your AI agent content<br />deserves a <span class="accent moat-word">MOAT.</span></h1>
+      <p class="expansion">Model for Origin Attestation and Trust</p>
       <p class="subhead">Keyless signing &nbsp;·&nbsp; Logged by default &nbsp;·&nbsp; Tamper-evident by design</p>
       <div class="hero-ctas">
         <a href={`${base}spec/core`} class="cta-primary">Read the spec →</a>
+        <a href="https://github.com/OpenScribbler/moat" class="cta-secondary" target="_blank" rel="noopener">View on GitHub</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- What MOAT verifies -->
+  <section class="verify-section">
+    <div class="container">
+      <p class="section-eyebrow">WHAT IT COVERS</p>
+      <h2>What MOAT makes verifiable.</h2>
+      <p class="verify-intro">
+        AI agent content (skills, rules, hooks, etc.) runs inside your AI tools with direct access to your files,
+        credentials, and context. A tampered or substituted file is a supply-chain attack
+        with no obvious entry point. MOAT makes the chain of custody auditable before you install.
+      </p>
+      <div class="verify-grid">
+        <div class="verify-card">
+          <div class="card-titlebar">
+            <span class="card-dot"></span>
+            <span class="card-icon">INTEGRITY</span>
+          </div>
+          <div class="card-body">
+            <h4>Content hasn't changed</h4>
+            <p>The installed files match the hash in the signed manifest. Any modification, even a single byte, fails verification.</p>
+          </div>
+        </div>
+        <div class="verify-card">
+          <div class="card-titlebar">
+            <span class="card-dot"></span>
+            <span class="card-icon">PROVENANCE</span>
+          </div>
+          <div class="card-body">
+            <h4>It came from who you think</h4>
+            <p>The signing identity is tied to a GitHub Actions OIDC token. You can see exactly which repo and workflow signed it.</p>
+          </div>
+        </div>
+        <div class="verify-card">
+          <div class="card-titlebar">
+            <span class="card-dot"></span>
+            <span class="card-icon">TRANSPARENCY</span>
+          </div>
+          <div class="card-body">
+            <h4>Signatures are logged</h4>
+            <p>Every signature is recorded in Sigstore Rekor, a public append-only ledger. You can verify the entry independently.</p>
+          </div>
+        </div>
+        <div class="verify-card">
+          <div class="card-titlebar">
+            <span class="card-dot"></span>
+            <span class="card-icon">COVERAGE</span>
+          </div>
+          <div class="card-body">
+            <h4>Skills, rules, agents, hooks</h4>
+            <p>Anything a developer tool loads from a registry: SKILL.md files, CLAUDE.md rules, MCP configs, sub-agents, hooks.</p>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -660,8 +757,8 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
       <div class="scrolly-fig" aria-hidden="true">
         <div class="how-header">
           <p class="section-eyebrow">HOW IT WORKS</p>
-          <h2>Three steps. One auditable chain.</h2>
-          <p>Publisher signs. Registry attests. Consumer verifies. Each step leaves a permanent record in Sigstore Rekor — independently checkable by anyone.</p>
+          <h2>Four steps. One auditable chain.</h2>
+          <p>Four steps across three roles. Every step is logged to Sigstore Rekor, independently checkable by anyone.</p>
         </div>
         <div class="diagram-frame">
           <span class="fig-label">fig.01 / trust-flow</span>
@@ -687,59 +784,47 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
             <!-- ─── Rekor (top center) ─── -->
             <g class="node rekor" id="node-rekor">
               <rect class="node-rect" x="165" y="20" width="190" height="56"
-                    rx="8" fill="var(--node-fill)" stroke-width="1.5"/>
+                    rx="8" fill="var(--rekor-soft)" stroke-width="1.5"/>
               <text x="260" y="41" text-anchor="middle"
-                    font-family="'JetBrains Mono', monospace" font-size="9"
-                    fill="var(--node-text-dim)" letter-spacing="0.1em" font-weight="500">TRANSPARENCY LOG</text>
-              <text x="260" y="60" text-anchor="middle"
                     font-family="Inter, sans-serif" font-size="15" font-weight="700"
                     fill="var(--ink)">Sigstore Rekor</text>
-              <circle cx="183" cy="34" r="3.5" fill="var(--rekor)">
-                <animate attributeName="opacity" values="1;0.25;1" dur="2.2s" repeatCount="indefinite"/>
-              </circle>
+              <text x="260" y="58" text-anchor="middle"
+                    font-family="'JetBrains Mono', monospace" font-size="9"
+                    fill="var(--node-text-dim)" letter-spacing="0.1em" font-weight="500">PUBLIC TRANSPARENCY LOG</text>
             </g>
 
             <!-- ─── Publisher (mid left) ─── -->
             <g class="node publisher" id="node-publisher">
               <rect class="node-rect" x="20" y="178" width="164" height="82"
                     rx="10" fill="var(--node-fill)" stroke-width="1.5"/>
-              <text x="102" y="200" text-anchor="middle"
-                    font-family="'JetBrains Mono', monospace" font-size="9"
-                    fill="var(--node-text-dim)" letter-spacing="0.1em">ROLE / 01</text>
-              <text x="102" y="222" text-anchor="middle"
+              <text x="102" y="214" text-anchor="middle"
                     font-family="Inter, sans-serif" font-size="15" font-weight="700"
                     fill="var(--ink)">Publisher</text>
-              <text x="102" y="241" text-anchor="middle"
+              <text x="102" y="234" text-anchor="middle"
                     font-family="'JetBrains Mono', monospace" font-size="10"
-                    fill="var(--node-text-dim)">workflow.yml</text>
+                    fill="var(--node-text-dim)">signs · logs</text>
             </g>
 
             <!-- ─── Consumer (mid right) ─── -->
             <g class="node consumer" id="node-consumer">
               <rect class="node-rect" x="336" y="178" width="164" height="82"
                     rx="10" fill="var(--node-fill)" stroke-width="1.5"/>
-              <text x="418" y="200" text-anchor="middle"
-                    font-family="'JetBrains Mono', monospace" font-size="9"
-                    fill="var(--node-text-dim)" letter-spacing="0.1em">ROLE / 03</text>
-              <text x="418" y="222" text-anchor="middle"
+              <text x="418" y="214" text-anchor="middle"
                     font-family="Inter, sans-serif" font-size="15" font-weight="700"
                     fill="var(--ink)">Consumer</text>
-              <text x="418" y="241" text-anchor="middle"
+              <text x="418" y="234" text-anchor="middle"
                     font-family="'JetBrains Mono', monospace" font-size="10"
-                    fill="var(--node-text-dim)">moat-verify</text>
+                    fill="var(--node-text-dim)">verifies on install</text>
             </g>
 
             <!-- ─── Registry (bottom center) ─── -->
             <g class="node registry" id="node-registry">
               <rect class="node-rect" x="165" y="316" width="190" height="70"
                     rx="10" fill="var(--node-fill)" stroke-width="1.5"/>
-              <text x="260" y="338" text-anchor="middle"
-                    font-family="'JetBrains Mono', monospace" font-size="9"
-                    fill="var(--node-text-dim)" letter-spacing="0.1em">ROLE / 02</text>
-              <text x="260" y="358" text-anchor="middle"
+              <text x="260" y="348" text-anchor="middle"
                     font-family="Inter, sans-serif" font-size="15" font-weight="700"
                     fill="var(--ink)">Registry</text>
-              <text x="260" y="374" text-anchor="middle"
+              <text x="260" y="367" text-anchor="middle"
                     font-family="'JetBrains Mono', monospace" font-size="10"
                     fill="var(--node-text-dim)">attests + indexes</text>
             </g>
@@ -754,7 +839,7 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
                   text-anchor="end"
                   font-family="'JetBrains Mono', monospace" font-size="9"
                   fill="var(--signed)" opacity="0"
-                  style="transition: opacity 0.2s ease">log entry</text>
+                  style="transition: opacity 0.2s ease">signs + logs</text>
 
             <!-- 2. Publisher → Registry (push manifest, solid blue) -->
             <line id="line-push" class="flow-line"
@@ -764,9 +849,9 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
                   text-anchor="start"
                   font-family="'JetBrains Mono', monospace" font-size="9"
                   fill="var(--attested)" opacity="0"
-                  style="transition: opacity 0.2s ease">push</text>
+                  style="transition: opacity 0.2s ease">manifest</text>
 
-            <!-- 3. Registry → Consumer (fetch, solid cyan) -->
+            <!-- 3. Registry → Consumer (index, solid cyan) -->
             <line id="line-fetch" class="flow-line"
                   x1="305" y1="316" x2="340" y2="258"
                   stroke="var(--verified)" stroke-width="1.75"/>
@@ -774,18 +859,28 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
                   text-anchor="end"
                   font-family="'JetBrains Mono', monospace" font-size="9"
                   fill="var(--verified)" opacity="0"
-                  style="transition: opacity 0.2s ease">fetch</text>
+                  style="transition: opacity 0.2s ease">index</text>
 
-            <!-- 4. Consumer → Rekor (verify, dashed cyan) -->
+            <!-- 4. Consumer → Rekor (verify, dashed cyan — heavier to signal loop closure) -->
             <line id="line-verify" class="flow-line"
                   x1="340" y1="180" x2="305" y2="76"
-                  stroke="var(--verified)" stroke-width="1.75"
+                  stroke="var(--verified)" stroke-width="2.5"
                   stroke-dasharray="6 4"/>
             <text id="lbl-verify" x="335" y="127"
                   text-anchor="start"
                   font-family="'JetBrains Mono', monospace" font-size="9"
                   fill="var(--verified)" opacity="0"
                   style="transition: opacity 0.2s ease">verify</text>
+
+            <!-- 5. Registry → Rekor (attest, solid blue — center vertical) -->
+            <line id="line-rekor-attest" class="flow-line"
+                  x1="260" y1="316" x2="260" y2="76"
+                  stroke="var(--attested)" stroke-width="1.75"/>
+            <text id="lbl-rekor-attest" x="268" y="203"
+                  text-anchor="start"
+                  font-family="'JetBrains Mono', monospace" font-size="9"
+                  fill="var(--attested)" opacity="0"
+                  style="transition: opacity 0.2s ease">attests</text>
 
             <!-- ─── Status badges ─── -->
 
@@ -834,43 +929,54 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
           <span class="step-num">01 · SIGNED</span>
           <h3>Publisher signs.</h3>
           <p>
-            Add one GitHub Actions workflow. MOAT generates a signed manifest for your
-            content, anchors a log entry in Sigstore Rekor, and pushes the manifest to
-            your registry branch.
+            Add one GitHub Actions workflow. On push, MOAT generates a signed manifest
+            for your content and anchors a log entry in Sigstore Rekor, before anything
+            reaches a registry.
           </p>
           <p>
             No key material leaves your pipeline. The signing identity is your OIDC token
-            from GitHub Actions — nothing to rotate, nothing to store.
+            from GitHub Actions (nothing to rotate, nothing to store).
           </p>
         </div>
 
-        <!-- Step 02: Registry attests -->
+        <!-- Step 02: Publisher publishes -->
+        <div class="scroll-step published-step" data-step="published">
+          <span class="step-num">02 · PUBLISHED</span>
+          <h3>Publisher publishes.</h3>
+          <p>
+            The signed manifest is pushed to a registry branch, which is just a
+            regular GitHub repository. No publishing infrastructure to run. The
+            registry picks it up from there.
+          </p>
+        </div>
+
+        <!-- Step 03: Registry attests -->
         <div class="scroll-step attested-step" data-step="attested">
-          <span class="step-num">02 · ATTESTED</span>
+          <span class="step-num">03 · ATTESTED</span>
           <h3>Registry attests.</h3>
           <p>
-            The registry picks up the signed manifest and adds its own attestation —
-            what was indexed, when, and by whom. The full chain is queryable
-            by anyone.
+            The registry verifies the publisher's manifest and adds its own attestation:
+            what was indexed, when, and under which registry. That attestation is logged
+            to Rekor independently of the publisher's entry.
           </p>
           <p>
-            Registries don't need to run their own infrastructure. One workflow file
-            is enough.
+            Anyone can verify the full chain without asking either party.
           </p>
         </div>
 
-        <!-- Step 03: Consumer verifies -->
+        <!-- Step 04: Consumer verifies -->
         <div class="scroll-step verified-step" data-step="verified">
-          <span class="step-num">03 · VERIFIED</span>
+          <span class="step-num">04 · VERIFIED</span>
           <h3>Consumer verifies.</h3>
           <p>
-            Run <code>moat-verify</code> before installing. It checks the content hash
-            against the registry attestation and confirms the signature is present
-            in Rekor.
+            Run <code>moat-verify</code> before installing. It checks the installed files
+            against the manifest hash and confirms both the publisher signature and the
+            registry attestation are present in Rekor.
           </p>
           <p>
-            Tampered content fails. Content from an unknown registry fails. The install
-            only proceeds on a clean chain of custody.
+            The dashed line in the diagram is key: <code>moat-verify</code> checks Rekor
+            directly, independent of the registry. The install only proceeds on a clean
+            chain of custody.
           </p>
         </div>
 
@@ -880,64 +986,44 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
 
   </section><!-- /#how -->
 
-  <!-- What MOAT verifies -->
-  <section class="verify-section">
-    <div class="container">
-      <p class="section-eyebrow">WHAT IT COVERS</p>
-      <h2>What MOAT makes verifiable.</h2>
-      <div class="verify-grid">
-        <div class="verify-card">
-          <p class="card-icon">INTEGRITY</p>
-          <h4>Content hasn't changed</h4>
-          <p>The installed files match the hash in the signed manifest. Any modification — even a single byte — fails verification.</p>
-        </div>
-        <div class="verify-card">
-          <p class="card-icon">PROVENANCE</p>
-          <h4>It came from who you think</h4>
-          <p>The signing identity is tied to a GitHub Actions OIDC token. You can see exactly which repo and workflow signed it.</p>
-        </div>
-        <div class="verify-card">
-          <p class="card-icon">TRANSPARENCY</p>
-          <h4>Signatures are logged</h4>
-          <p>Every signature is recorded in Sigstore Rekor — a public, append-only ledger. You can verify the entry independently.</p>
-        </div>
-        <div class="verify-card">
-          <p class="card-icon">COVERAGE</p>
-          <h4>Skills, rules, agents, hooks</h4>
-          <p>Anything a developer tool loads from a registry: SKILL.md files, CLAUDE.md rules, MCP configs, sub-agents, hooks.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <!-- First adopter -->
   <section class="adopter-section">
     <div class="container">
-      <p class="section-eyebrow">FIRST IMPLEMENTATION</p>
+      <p class="section-eyebrow">REFERENCE IMPLEMENTATION</p>
       <h2>MOAT in the wild.</h2>
       <p>
-        Syllago is the first project to implement the MOAT protocol end-to-end,
-        proving the design against a real registry with real content.
+        Syllago is the reference implementation for MOAT: signed manifests, Rekor log entries,
+        and consumer verification working end-to-end against a real registry.
       </p>
       <div class="adopter-facts">
-        <div class="adopter-fact">
-          <p class="fact-label">IMPLEMENTATION</p>
-          <h4>First real-world adopter</h4>
-          <p>
-            Syllago adopted MOAT from day one — signed manifests, Rekor log entries,
-            and a consumer-facing verification step baked into the install flow.
-          </p>
-          <a href="https://syllago.dev" class="fact-link" target="_blank" rel="noopener">syllago.dev →</a>
+        <div class="adopter-fact impl">
+          <div class="fact-titlebar">
+            <span class="fact-dot"></span>
+            <span class="fact-label">IMPLEMENTATION</span>
+          </div>
+          <div class="fact-body">
+            <h4>Reference implementation</h4>
+            <p>
+              Syllago adopted MOAT from day one: signed manifests, Rekor log entries,
+              and a consumer-facing verification step baked into the install flow.
+            </p>
+            <a href="https://syllago.dev" class="fact-link" target="_blank" rel="noopener">syllago.dev →</a>
+          </div>
         </div>
         <div class="adopter-fact registry">
-          <p class="fact-label">META REGISTRY</p>
-          <h4>First publisher + registry in one</h4>
-          <p>
-            The Syllago Meta Registry is the first registry that acts simultaneously
-            as a publisher — signing and attesting its own index — and as a registry
-            operator serving that index to consumers.
-          </p>
-          <a href="https://github.com/OpenScribbler/syllago-meta-registry" class="fact-link registry" target="_blank" rel="noopener">github.com/OpenScribbler/syllago-meta-registry →</a>
+          <div class="fact-titlebar">
+            <span class="fact-dot"></span>
+            <span class="fact-label">META REGISTRY</span>
+          </div>
+          <div class="fact-body">
+            <h4>First publisher + registry in one</h4>
+            <p>
+              The Syllago Meta Registry is the first registry that acts simultaneously
+              as a publisher (signing and attesting its own index) and as a registry
+              operator serving that index to consumers.
+            </p>
+            <a href="https://github.com/OpenScribbler/syllago-meta-registry" class="fact-link" target="_blank" rel="noopener">github.com/OpenScribbler/syllago-meta-registry →</a>
+          </div>
         </div>
       </div>
     </div>
@@ -952,7 +1038,8 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
           <h2>Ready to adopt MOAT.</h2>
           <p>
             The core spec, install-time verification script, Publisher Action, and Registry Action are
-            complete and versioned. Implementation and conforming tooling are in progress.
+            complete and versioned. Broader ecosystem tooling is in progress; the spec and reference
+            implementations are stable.
           </p>
         </div>
         <div class="status-ctas">
@@ -968,6 +1055,7 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
     <div class="container">
       <div class="footer-left">
         MOAT · Model for Origin Attestation and Trust · Open protocol, v0.7.1
+        <span class="footer-copy">&copy; {new Date().getFullYear()} OpenScribbler</span>
       </div>
       <nav class="footer-links">
         <a href={`${base}overview/what-is-moat`}>Docs</a>

@@ -1,9 +1,9 @@
 ---
 title: How it works
-description: The three-step MOAT verification flow — sign, attest, verify.
+description: How MOAT works — three roles, one auditable chain of custody.
 ---
 
-MOAT makes the provenance of AI agent content verifiable. The protocol has three roles — Publisher, Registry, Consumer — each contributing one step to a chain that ends with a cryptographically confirmed answer to: "is this what I think it is, from who I think it's from?"
+MOAT makes the provenance of AI agent content verifiable. The protocol has three roles — Publisher, Registry, Consumer — each with a distinct responsibility in a chain that ends with a cryptographically confirmed answer to: "is this what I think it is, from who I think it's from?"
 
 ---
 

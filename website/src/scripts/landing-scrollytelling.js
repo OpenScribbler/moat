@@ -25,16 +25,18 @@
     consumer:  document.getElementById('node-consumer'),
   };
   var lines = {
-    anchor: document.getElementById('line-anchor'),
-    push:   document.getElementById('line-push'),
-    fetch:  document.getElementById('line-fetch'),
-    verify: document.getElementById('line-verify'),
+    anchor:       document.getElementById('line-anchor'),
+    push:         document.getElementById('line-push'),
+    fetch:        document.getElementById('line-fetch'),
+    verify:       document.getElementById('line-verify'),
+    'rekor-attest': document.getElementById('line-rekor-attest'),
   };
   var labels = {
-    anchor: document.getElementById('lbl-anchor'),
-    push:   document.getElementById('lbl-push'),
-    fetch:  document.getElementById('lbl-fetch'),
-    verify: document.getElementById('lbl-verify'),
+    anchor:       document.getElementById('lbl-anchor'),
+    push:         document.getElementById('lbl-push'),
+    fetch:        document.getElementById('lbl-fetch'),
+    verify:       document.getElementById('lbl-verify'),
+    'rekor-attest': document.getElementById('lbl-rekor-attest'),
   };
   var badges = {
     signed:   document.getElementById('badge-signed'),
@@ -47,13 +49,12 @@
   function showLabel(lbl) { if (lbl) lbl.setAttribute('opacity', '1'); }
   function hideLabel(lbl) { if (lbl) lbl.setAttribute('opacity', '0'); }
 
-  /* Lines: set marker-end when activating so the arrowhead only
-     appears alongside the drawn line, not before it. */
   var lineMarkers = {
-    anchor: 'url(#m12-signed)',
-    push:   'url(#m12-attested)',
-    fetch:  'url(#m12-verified)',
-    verify: 'url(#m12-verified)',
+    anchor:         'url(#m12-signed)',
+    push:           'url(#m12-attested)',
+    fetch:          'url(#m12-verified)',
+    verify:         'url(#m12-verified)',
+    'rekor-attest': 'url(#m12-attested)',
   };
   function activateLine(key) {
     var el = lines[key];
@@ -86,20 +87,29 @@
     resetAll();
     activate(nodes.rekor);
 
-    if (step === 'signed' || step === 'attested' || step === 'verified') {
+    /* Step 01: publisher signs and logs to Rekor */
+    if (step === 'signed' || step === 'published' || step === 'attested' || step === 'verified') {
       activate(nodes.publisher);
       activateLine('anchor');
       showLabel(labels.anchor);
       activate(badges.signed);
     }
 
-    if (step === 'attested' || step === 'verified') {
+    /* Step 02: publisher pushes manifest to registry */
+    if (step === 'published' || step === 'attested' || step === 'verified') {
       activate(nodes.registry);
       activateLine('push');
       showLabel(labels.push);
+    }
+
+    /* Step 03: registry attests and logs to Rekor */
+    if (step === 'attested' || step === 'verified') {
+      activateLine('rekor-attest');
+      showLabel(labels['rekor-attest']);
       activate(badges.attested);
     }
 
+    /* Step 04: consumer fetches index and verifies against Rekor */
     if (step === 'verified') {
       activate(nodes.consumer);
       activateLine('fetch');
