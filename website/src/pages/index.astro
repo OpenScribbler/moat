@@ -611,31 +611,34 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
     @media (max-width: 960px) {
       .scrolly-wrap {
         grid-template-columns: 1fr;
-        gap: 2rem;
+        gap: 0;
       }
+      /* Diagram stays pinned while steps scroll below it */
       .scrolly-fig {
-        position: static;
-        padding: 2rem 0 1rem;
+        position: sticky;
+        top: 3.5rem;
+        z-index: 10;
+        background: var(--bg);
+        padding: 0.5rem 0 0.5rem;
       }
-      /* All nodes and lines visible on mobile */
-      .node       { opacity: 1 !important; filter: none !important; }
-      .flow-line  { stroke-dashoffset: 0 !important; }
-      #line-verify { opacity: 1 !important; }
-      .badge-pulse { opacity: 1 !important; transform: scale(1) !important; }
-      .node.publisher .node-rect { stroke: var(--signed) !important; }
-      .node.registry  .node-rect { stroke: var(--attested) !important; }
-      .node.consumer  .node-rect { stroke: var(--verified) !important; }
-      .node.rekor     .node-rect { stroke: var(--rekor) !important; }
-
-      .scroll-step {
-        padding: 2rem 0 2rem 1.5rem;
-        opacity: 0.45;
-      }
-      .scroll-step.active { opacity: 1; }
-      .scroll-step:first-of-type { padding-top: 2rem; }
-      .scroll-step:last-of-type  { padding-bottom: 2rem; }
-      .scroll-step::before { display: none; }
+      /* Keep section eyebrow + h2 but drop the description paragraph */
+      .how-header { margin-bottom: 0.5rem; }
+      .how-header p:not(.section-eyebrow) { display: none; }
       .top-sentinel { display: none; }
+
+      /* Steps: invisible until active, sized so only one fits below the diagram */
+      .scroll-step {
+        min-height: 50vh;
+        padding: 1.5rem 0 1.5rem 1.5rem;
+        opacity: 0;
+        transition: opacity 0.35s ease;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .scroll-step:last-of-type { min-height: 65vh; padding-bottom: 4rem; }
+      .scroll-step.active { opacity: 1; }
+      .scroll-step::before { display: none; }
 
       .site-header nav { display: none; }
 

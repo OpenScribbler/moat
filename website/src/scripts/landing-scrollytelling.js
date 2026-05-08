@@ -123,7 +123,7 @@
     entries.forEach(function (e) {
       if (e.isIntersecting) setStep(e.target.dataset.step);
     });
-  }, { rootMargin: isMobile ? '-20% 0% -20% 0%' : '-38% 0% -38% 0%', threshold: 0 });
+  }, { rootMargin: isMobile ? '-50% 0% -20% 0%' : '-38% 0% -38% 0%', threshold: 0 });
 
   steps.forEach(function (s) { stepObserver.observe(s); });
 
