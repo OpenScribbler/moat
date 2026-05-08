@@ -629,8 +629,11 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
 
       .scroll-step {
         padding: 2rem 0 2rem 1.5rem;
-        opacity: 1 !important;
+        opacity: 0.45;
       }
+      .scroll-step.active { opacity: 1; }
+      .scroll-step:first-of-type { padding-top: 2rem; }
+      .scroll-step:last-of-type  { padding-bottom: 2rem; }
       .scroll-step::before { display: none; }
       .top-sentinel { display: none; }
 

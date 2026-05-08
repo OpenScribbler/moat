@@ -12,9 +12,8 @@
 
 /* ─── Scrollytelling: IntersectionObserver ─── */
 (function () {
-  if (window.innerWidth <= 960) return;
-
-  var steps   = document.querySelectorAll('.scroll-step[data-step]');
+  var isMobile = window.innerWidth <= 960;
+  var steps    = document.querySelectorAll('.scroll-step[data-step]');
   var topSent = document.querySelector('.top-sentinel');
   var activeStep = null;
 
@@ -124,7 +123,7 @@
     entries.forEach(function (e) {
       if (e.isIntersecting) setStep(e.target.dataset.step);
     });
-  }, { rootMargin: '-38% 0% -38% 0%', threshold: 0 });
+  }, { rootMargin: isMobile ? '-20% 0% -20% 0%' : '-38% 0% -38% 0%', threshold: 0 });
 
   steps.forEach(function (s) { stepObserver.observe(s); });
 
