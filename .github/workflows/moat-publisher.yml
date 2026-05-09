@@ -257,7 +257,7 @@ jobs:
                               "path": item_path,
                           })
 
-              # Tier-3: undiscovered content detection (specs/publisher-action.md).
+              # Tier-3: undiscovered content detection (specs/github/publisher-action.md).
               # Warn about content-like dirs at repo root not covered by tier-1 or tier-2.
               covered_roots = set(type_map.keys())
               for entry in moat_config.get("items", []):
@@ -479,7 +479,7 @@ jobs:
                   })
                   type_counts[item_type] = type_counts.get(item_type, 0) + 1
 
-              # Discovery summary (specs/publisher-action.md §Undiscovered Content Detection).
+              # Discovery summary (specs/github/publisher-action.md §Undiscovered Content Detection).
               # Canonical types ordered per the spec example; custom types appended in sort order.
               display_plurals = {"skill": "skills", "agent": "agents", "rules": "rules", "command": "commands"}
               breakdown_parts = [
