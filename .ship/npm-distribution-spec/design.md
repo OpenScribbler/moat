@@ -1,340 +1,219 @@
-# Design Discussion: npm-distribution-spec
+# Design Discussion: npm-distribution-spec — Round 2
+
+> **Round 2 scope.** Round 1 of this ship is implemented and committed at `64b9c6b` on `main`. The Round 1 design.md (preserved in git history at that commit) is the baseline; this Round 2 document covers only the 10 in-scope decisions surfaced by the final-validate gate review. Two cross-cutting findings (Layering rule + GitHub-ism extraction in `moat-spec.md` / `specs/moat-verify.md`; Trust Tier UI surfacing in the Aggregator) are deferred to a separate ship and are out of scope here.
 
 ## Summary
 
-**Current state:** MOAT's normative Distribution Channel is a Registry Manifest fetched over HTTPS with per-item Rekor verification — only the GitHub-Actions-based publisher/registry workflow is specified, and the GitHub-specific sub-specs sit at the same directory level as the transport-agnostic ones.
-**Desired state:** A new `specs/npm-distribution.md` defines how the transport-agnostic core protocol is realized over the npm Registry, and the GitHub-specific sub-specs live under `specs/github/` so the directory layout reflects the transport-agnostic core / transport-specific extension split.
-**End state (narrative):** A Publisher distributing a Content Item via npm declares MOAT attestation in a `package.json` block whose hash domain is the Content Directory inside the Distribution Tarball; a Conforming Client resolving or installing that package can recognize Verified, Unsigned, and Revoked Trust Tiers at the materialization boundary; a backfill-only Registry can attest pre-existing npm packages without Publisher cooperation; and a spec reader sees `specs/github/publisher-action.md`, `specs/github/registry-action.md`, and the transport-agnostic `specs/moat-verify.md` arranged so the protocol/platform separation is visible at a glance.
+**Current state:** `specs/npm-distribution.md` (v0.1.0 Draft) ships the Content Hash domain, materialization-boundary revocation MUSTs, the `package.json` `moat` block schema, backfill normative section, and the npm provenance informative section — but the Content Directory rule requires Publisher cooperation (no default), the `MOAT_ALLOW_REVOKED` escape hatch is half-finished (no reason-capture, no per-entry expiry, no logging contract), the materialization boundary is named but not anchored to a precise byte-level moment, the `moat-spec.md:9` Sub-specs line still omits the new sub-spec, `.claude/rules/changelog.md:40` still cites the pre-reorg path, the npm provenance section lacks a four-state disagreement table, no reference Publisher workflow exists, and the `package.json` field name `moat.contentDirectory` collides with the lexicon's "Content Directory" concept-name (one realization vs the source-of-truth concept).
+
+**Desired state:** `specs/npm-distribution.md` (v0.2.0 Draft) defines a default Content Directory (= tarball root with one excluded file: `package.json`) so backfill works without Publisher cooperation, renames the JSON field to `moat.tarballContentRoot` to disambiguate concept-vs-realization, anchors the materialization boundary normatively at "before any byte of the tarball is written outside the package manager's content cache," fully specifies `MOAT_ALLOW_REVOKED` (process-scope, REQUIRED reason co-variable, RFC 3339 per-entry expiry, structured override-applied logging), relocates Publisher signing identity into a `publisherSigning` block with optional `rekorLogIndex` discovery accelerator, adds a four-state (provenance × MOAT) disagreement table, and ships `reference/moat-npm-publisher.yml` end-to-end. `moat-spec.md:9` Sub-specs line cites `specs/npm-distribution.md`, `.claude/rules/changelog.md:40` cites the post-reorg path, and `lexicon.md` records that `tarballContentRoot` is the JSON field name realizing the Content Directory concept.
+
+**End state (narrative):** A Publisher with no source-repo cooperation can have their existing npm package backfilled by a Registry — the Registry fetches the Distribution Tarball, applies the default-Content-Directory rule (tarball root minus `package.json`), and the resulting Content Hash binds to bytes any consumer can independently reproduce. A Publisher who wants to attest in `package.json` copies `reference/moat-npm-publisher.yml` and gets a working flow from `npm pack` through `npm publish` with the canonical-hash-stable-across-republish guarantee. An operator running an incident response sets `MOAT_ALLOW_REVOKED=<sha>:<RFC3339>` plus `MOAT_ALLOW_REVOKED_REASON="..."`, and every override is logged with package identity, hash, reason, and expiry — the silent-skip footgun is closed. A spec reader sees `specs/npm-distribution.md` cited from `moat-spec.md:9` and a changelog rule that points at the right path.
 
 ## Research questions answered
 
-- Q1 — House style of existing sub-specs
-- Q2 — Cross-references to GitHub-specific sub-specs
-- Q3 — Manifest content-entry schema
-- Q4 — Revocation machinery
-- Q5 — Content hash algorithm input domain
-- Q6 — Four MOAT design tests
-- Q7 — CHANGELOG conventions
+Round 1 research (Q1–Q7) is unchanged and still grounds this work. Round 2 raises no new research questions — every input is either a Round 1 finding, a Round 2 design-concept decision, or a `file:line` anchor in the on-disk artifacts (`specs/npm-distribution.md`, `moat-spec.md`, `.claude/rules/changelog.md`, `reference/moat-publisher.yml`, `lexicon.md`). The four MOAT design tests (`CLAUDE.md:121-127`) are applied inline below where their judgment matters (default Content Directory, override env-var, materialization boundary).
 
 ## Patterns to Follow
 
-### Pattern: Sub-spec file-level metadata header
+The Round 1 design.md (commit `64b9c6b`) established the foundational patterns this sub-spec follows: Sub-spec file-level metadata header (`specs/publisher-action.md:1-9`), Heading-suffix normative status labels, Bold-label inline normative qualifiers, Field-definition tables, Fenced JSON examples with one-line lead-in, Closing `## Scope` section, Canonical Attestation Payload as the signed unit, Content Hash input domain, Lockfile `revoked_hashes` persistence, Reason-code enum, Tombstone permanence, Manifest content-entry schema with `(name, type)` uniqueness, and the CHANGELOG `[Unreleased]` form. Those patterns are not re-explained here. Round 2 adds the patterns below.
 
-**Source:** `specs/publisher-action.md:1-9`
+### Pattern: Default-with-explicit-override field semantics
 
-**Snippet:**
-```markdown
-# Publisher Action Specification
-
-**Version:** 0.2.0 (Draft)
-**Requires:** moat-spec.md ≥ 0.5.0
-**Part of:** [MOAT Specification](../moat-spec.md)
-
-> The Publisher Action is the primary adoption mechanism for MOAT, ...
-
----
-```
-
-**Why it applies here:** `specs/npm-distribution.md` is a peer sub-spec; it MUST open with the same header shape (H1 "<Name> Specification", `Version` / `Requires` / `Part of` lines, blockquote one-liner, trailing `---`) so it reads as a sibling artifact and so the website mirror under `website/src/content/docs/spec/` can ingest it without house-style drift.
-
-### Pattern: Heading-suffix normative status labels
-
-**Source:** `specs/publisher-action.md:25-194`
+**Source:** `moat-spec.md:786` (`content[].rekor_log_index` — "REQUIRED for Signed + Dual-Attested … Absent for Unsigned items — its absence is the Unsigned tier signal."); `reference/moat_hash.py:60` (`EXCLUDED_FILES` set — root-level `moat-attestation.json` is excluded by default with no field to opt out of)
 
 **Snippet:**
 ```markdown
-## Undiscovered Content Detection (normative)
-## Actionable Error Messages (normative — SHOULD)
-## Webhook (optional)
-### Informed Consent Limitation (informative)
+| `content[].rekor_log_index` | REQUIRED for Signed + Dual-Attested | Integer index ... Absent for Unsigned items — its absence is the Unsigned tier signal. |
 ```
 
-**Why it applies here:** Each section in `specs/npm-distribution.md` whose primary content is RFC 2119-bearing should carry the matching parenthetical (`(normative)`, `(normative — MUST)`, `(normative — SHOULD)`, `(informative)`, `(optional)`). Materialization-boundary MUSTs land in `(normative — MUST)` sections; the npm-provenance discussion lands in `(informative)` because D4 is observed-only, not normative.
+**Why it applies here:** C-1 makes `moat.tarballContentRoot` an OPTIONAL field whose absence carries meaning (default = tarball root, exclusion = `package.json`). The precedent at `moat-spec.md:786` is the same shape: a field whose absence is itself a load-bearing signal. The Round 2 sub-spec section MUST state the default explicitly and MUST state that absence is the trigger — not a Conforming-Client-discretion fallback. The exclusion list (C-6b) attaches to the default mode only; when `tarballContentRoot` is set to a subdirectory, no exclusions apply.
 
-### Pattern: Bold-label inline normative qualifiers
+### Pattern: Field-name realizes lexicon concept (concept ≠ field name)
 
-**Source:** `specs/publisher-action.md:29, 64, 72`; `specs/registry-action.md:104`
+**Source:** `lexicon.md:111-119` (Flagged ambiguity: "signature" vs "attestation" vs "provenance"); SLSA's `predicateType` convention (informative — the SLSA spec uses one canonical concept name and a different JSON field name, and both are normative at their respective layers)
 
 **Snippet:**
 ```markdown
-**Detection rule (normative — MUST):** If a top-level directory ...
-**Unknown-file warning (normative — MUST):** ...
-**Attestation exclusion (normative — MUST):** ...
-**Hash mismatch (normative):** ...
+- **Signature** = the cryptographic output of `cosign sign-blob` (a field inside the cosign bundle).
+- **Attestation** = the protocol-level claim that a `content_hash` existed at a logged time, manifested as a Rekor entry over the canonical Attestation Payload.
 ```
 
-**Why it applies here:** Materialization-boundary requirements (D2) and revocation hard-block rules (D6) read as bold-label inline qualifiers, not as section-level statements. This style colocates the requirement with the surrounding context — important for the materialization vs runtime distinction, where adjacent paragraphs say very different things about MUSTs.
+**Why it applies here:** C-2 keeps the lexicon term "Content Directory" as the source of truth for the concept and renames the JSON field to `moat.tarballContentRoot`. The lexicon already accepts this concept-vs-realization split (see the signature/attestation distinction). Round 2 MUST add a one-line note to `lexicon.md`'s Content Directory entry stating that `tarballContentRoot` is one realization of the concept inside `package.json`, and the npm-distribution.md field-table row MUST cross-reference the lexicon entry rather than redefining the concept. This prevents future readers from treating the JSON field name as the canonical concept term.
 
-### Pattern: Field-definition table — 3-column `Field | Required | Description`
+### Pattern: Process-scope environment variable read once at start
 
-**Source:** `specs/registry-action.md:52-63`; `moat-spec.md:766-797`
+**Source:** `reference/moat-publisher.yml:54` (`ALLOW_PRIVATE_REPO: 'false'   # set to 'true' to attest private repos`) — environment variables are set in workflow-step `env:` blocks and consumed once during the step's execution; there is no re-read mid-step
+
+**Snippet:**
+```yaml
+env:
+  ALLOW_PRIVATE_REPO: 'false'   # set to 'true' to attest private repos
+```
+
+**Why it applies here:** C-3 makes `MOAT_ALLOW_REVOKED` process-scope: read once at process start, re-reading mid-process is non-conformant. The reference templates already follow the read-once discipline implicitly (env vars consumed by a single Python `os.environ` lookup near the top of each step). Round 2 makes the read-once rule normative and explicit so a Conforming Client implementer cannot accidentally introduce a hot-reload mode that defeats incident-response auditability (the override is supposed to be a single, logged, time-bounded action).
+
+### Pattern: Co-variable required for risky operation
+
+**Source:** `moat-spec.md:633-636` (registry-source revocation MUST hard-block; publisher-source revocation MUST present, MUST warn once per session, MAY allow with explicit confirmation, MUST NOT silently continue) — the spec already requires explicit confirmation alongside the action when the operator overrides a publisher-source revocation
 
 **Snippet:**
 ```markdown
-| Field | Required | Description |
-|-------|----------|-------------|
-| `revocations[].reason` | REQUIRED | One of: `malicious`, `compromised`, `deprecated`, `policy_violation`. |
-| `revocations[].details_url` | REQUIRED for registry / OPTIONAL for publisher | URL to public revocation details. |
-| `revocations[].source` | OPTIONAL | Revocation source: `"registry"` or `"publisher"`. ... |
+publisher-source revocation = MUST present, warn once per session,
+MAY allow with explicit confirmation, MUST NOT silently continue.
 ```
 
-**Why it applies here:** The `package.json` `moat` block field schema (D3 — single block with MUST/SHOULD/MAY split) and the `attestations[]` entry schema (D7 — role-discriminated array) are field-definition tables. Use the same 3-column shape with RFC 2119 keywords as cell values in the `Required` column. The "REQUIRED for X / OPTIONAL for Y" cell form is precedent for backfill-friendly conditional requirements (publisher-only / registry-only / both / neither).
+**Why it applies here:** C-3 requires `MOAT_ALLOW_REVOKED_REASON` whenever `MOAT_ALLOW_REVOKED` is non-empty. The "explicit confirmation" precedent at `moat-spec.md:635-636` is the structural model: a risky operation requires a paired, operator-supplied artifact (there: confirmation; here: a non-empty reason string). Round 2 makes the reason a hard-fail prerequisite — a Conforming Client MUST refuse to honor `MOAT_ALLOW_REVOKED` if `MOAT_ALLOW_REVOKED_REASON` is unset or empty, and MUST emit a structured error in that case. The four MOAT design tests reinforce this: the works-fine-without-it test (`CLAUDE.md:125`) catches the silent-skip failure mode where an operator sets the override and forgets the reason — without the hard fail, the override is "trust that people will comply."
 
-### Pattern: Fenced JSON examples with one-line lead-in
+### Pattern: RFC 3339 timestamps for protocol-time fields
 
-**Source:** `specs/publisher-action.md:100-141`
+**Source:** `moat-spec.md:784` (`content[].attested_at` REQUIRED — "Registry attestation timestamp (RFC 3339 UTC)"); `moat-spec.md:855` field-row context for lockfile timestamp fields
 
 **Snippet:**
 ```markdown
-The canonical attestation payload is:
-
-```json
-{"_version":1,"content_hash":"sha256:..."}
+| `content[].attested_at` | REQUIRED | Registry attestation timestamp (RFC 3339 UTC) |
 ```
 
-The `moat-attestation.json` file produced on the `moat-attestation` branch ...
+**Why it applies here:** C-3 encodes per-entry expiry as `<sha256-hex>:<RFC3339-timestamp>`. The core spec already standardizes on RFC 3339 UTC for protocol timestamps, so the override-list timestamp MUST use the same form (no Unix-epoch seconds, no ISO-8601 variants without the `T` separator). A Conforming Client past the entry's RFC 3339 timestamp MUST treat the entry as if absent — the entry does not block, it does not warn; it is silently ignored. This matches the natural semantics of "the override has expired."
 
-```json
-{
-  "_version": 1,
-  "source_uri": "https://github.com/owner/repo",
-  "attested_at": "...",
-  "items": [ ... ],
-  "revocations": []
-}
-```
-```
+### Pattern: Sigstore Rekor authoritative + identity disclosure in metadata
 
-**Why it applies here:** The worked example required by the ticket (a `package.json` `moat` block with a populated `attestations: [...]` array) follows this introduce-then-fence rhythm. Each JSON example gets one prose sentence describing what it shows, then a fenced block — never bare JSON dumps.
-
-### Pattern: Closing `## Scope` section
-
-**Source:** `specs/publisher-action.md:248-251`; `specs/registry-action.md:214-217`
+**Source:** `moat-spec.md:1020-1071` (Canonical Attestation Payload — the bytes signed by both publisher and registry are byte-identical; the per-role distinction lives in the signing identity recorded in the bundle, not in the payload); `moat-spec.md:790` (`content[].signing_profile` — "REQUIRED for Dual-Attested" — manifest discloses publisher's expected CI signing identity); `specs/registry-action.md:69-115` (Trust Tier Determination — Rekor is consulted as authoritative)
 
 **Snippet:**
 ```markdown
-## Scope
-
-**Current version:** Adoption mechanism for the Publisher Action; reference template at `reference/moat-publisher.yml`.
-
-**Planned future version:** ...
+content[].signing_profile  REQUIRED for Dual-Attested  references signing_profile schema
 ```
 
-**Why it applies here:** The npm sub-spec closes the same way: a `## Scope` section with bold-prefixed `**Current version:**` and `**Planned future version:**` one-liners. "Current version" enumerates what the sub-spec DOES define (Content Directory hash domain, materialization-boundary MUSTs, role-discriminated attestations array); "Planned future version" reserves room for things the concept names as out-of-scope but plausibly-future (other registry transports, runtime gating) without committing to them.
+**Why it applies here:** C-6a treats Sigstore Rekor as authoritative for Publisher attestation and uses `package.json` only for identity disclosure — `publisherSigning.{issuer, subject}` REQUIRED, `publisherSigning.rekorLogIndex` OPTIONAL discovery accelerator. The pattern mirrors `moat-spec.md:790`'s `signing_profile` field exactly: the manifest discloses what identity the consumer should expect to see in Rekor, and Rekor is consulted as the trust anchor. When `rekorLogIndex` is absent, a Conforming Client falls back to a Rekor query keyed on the canonical content hash, filtered by the disclosed `{issuer, subject}` — the identity disclosure is the trust anchor, not the log index. This pattern preserves the GitHub-flow's architecture (Rekor authoritative, manifest disclosing identity) verbatim in the npm channel.
 
-### Pattern: Canonical Attestation Payload as the signed unit
+### Pattern: Reference workflow as adoption-mechanism template
 
-**Source:** `moat-spec.md:1020-1071`
+**Source:** `reference/moat-publisher.yml:1-80` (the existing reference Publisher Action workflow — a single-file YAML template that a Publisher copies into `.github/workflows/` and runs without modification); `moat-spec.md:681` (Reference-implementations bullet linking `reference/moat-publisher.yml` to `specs/github/publisher-action.md`)
 
 **Snippet:**
-```json
-{"_version":1,"content_hash":"sha256:<hex>"}
+```yaml
+name: MOAT Publisher Action
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  attest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source repository
+        uses: actions/checkout@... # v4
+      - name: Install cosign
+        uses: sigstore/cosign-installer@... # v3.8.1
+      ...
 ```
 
-**Why it applies here:** The canonical Attestation Payload is byte-identical for Publisher and Registry signers (lexicon: "Byte-identical for a given content hash regardless of who signs"). The npm sub-spec's role-discriminated `attestations[]` array MUST NOT redefine the signed payload — each entry, whether `role: "publisher"` or `role: "registry"`, signs this exact payload. Per-role differences belong in the envelope around the signature (identity, bundle metadata, role discriminator), not in the signed bytes.
+**Why it applies here:** C-6c ships `reference/moat-npm-publisher.yml` as the npm analog. The structure mirrors `reference/moat-publisher.yml:1-80` (same `permissions` block, same Sigstore install pattern, same step-by-step style). The seven steps (`npm pack` → compute canonical hash with C-6b's exclusion → Sigstore sign → push to Rekor → write log index back into `package.json` → `npm pack` again → `npm publish`) are the npm-channel realization of the canonical "compute hash, sign payload, log to Rekor" flow. The two-pack design (pack → sign → write index → re-pack → publish) is what makes the canonical hash stable across the log-index round-trip: because `package.json` is excluded from the canonical hash by C-6b, mutating `package.json` between the two `npm pack` calls does not change the canonical hash, so the Rekor entry signed against the first pack's hash is still valid for the published tarball.
 
-### Pattern: Content Hash input domain — directory walk with NFC paths
+### Disambiguation: Default Content Directory — Tarball root with exclusion vs Publisher-required field vs Heuristic search
 
-**Source:** `reference/moat_hash.py:166-198`
+**Chosen:** Tarball root as default, with a fixed single-file exclusion list (`package.json`) when `moat.tarballContentRoot` is absent (C-1 + C-6b)
+**Considered:** Publisher-required `moat.tarballContentRoot` field with no default (Round 1's effective behavior — a Publisher had to set the field to participate); Heuristic search (Conforming Client probes for common layouts: `src/`, `dist/`, `lib/`, `skill/`, falling back to root)
+**Why:** The day-one test (`CLAUDE.md:121`) is the deciding lens. On day one, thousands of npm packages exist with no `moat` block. A Publisher-required field means backfill is impossible without Publisher cooperation — every backfilled package needs a Publisher to land a `moat.tarballContentRoot` field, which kills the backfill goal stated in the original ticket ("Sub-spec defines a backfill path so registries can attest pre-existing npm packages without publisher cooperation"). A heuristic search introduces ecosystem-wide ambiguity: two Conforming Clients with different probe orders can compute different Content Hashes for the same tarball, breaking the copy-survival test (`CLAUDE.md:123`) and violating the protocol's hash-as-identity invariant. A fixed default — tarball root with a single named exclusion — is the only choice that lets a Registry compute a canonical hash from the published tarball alone, with no Publisher cooperation, and that no two Conforming Clients can disagree about. The exclusion of `package.json` is forced by C-6a's identity-disclosure-in-package.json design: if `package.json` were inside the canonical hash, mutating it (to write the Rekor log index after signing) would change the hash and invalidate the signature — the chicken-and-egg the C-6 family was designed to break.
+**Consequences:** Backfill becomes a real capability — a Registry Operator can run a backfill workflow over arbitrary npm packages and produce canonical hashes that any other Conforming Client can independently reproduce by fetching the same tarball. Publishers who want to scope the canonical hash to a subdirectory (e.g., `src/`) set `moat.tarballContentRoot: "src"` and the exclusion list does not apply (because the subdirectory case has no chicken-and-egg — `package.json` lives at tarball root, outside any subdirectory). The default mode's exclusion list is exactly one entry; the spec MUST forbid future expansion of this list without a sub-spec version bump (extending the exclusion list silently would change the canonical hash for every default-mode package). The npm Registry's tarball SHA-512 covers `package.json` independently, so excluding it from the MOAT canonical hash does not reduce the consumer's ability to detect tarball-level tampering — it only narrows MOAT's normative scope to the bytes a Publisher and Registry can both control identically.
 
-**Snippet:**
-```python
-def content_hash(directory: str | Path) -> str:
-    root = Path(directory)
-    entries: list[tuple[str, str]] = []
-    for path in root.rglob("*"):
-        if any(part in VCS_DIRS for part in path.parts): continue
-        if path.parent == root and path.name in EXCLUDED_FILES: continue
-        if path.is_symlink(): raise ValueError(...)
-        if not path.is_file(): continue
-        rel = unicodedata.normalize("NFC", path.relative_to(root).as_posix())
-        entries.append((rel, file_hash(path)))
-    entries.sort(key=lambda e: e[0].encode("utf-8"))
-    manifest = "".join(f"{h}  {p}\n" for p, h in entries).encode("utf-8")
-    return "sha256:" + hashlib.sha256(manifest).hexdigest()
-```
+### Disambiguation: Materialization-boundary anchor — "Before any byte written outside the package manager's content cache" vs "Before fetch" vs "Before unpack"
 
-**Why it applies here:** The hash domain (D5) binds to the Content Directory inside the published tarball. The npm sub-spec MUST refer normatively to `reference/moat_hash.py` and its test vectors — it MUST NOT redefine the algorithm. The sub-spec's job is to declare *which* directory inside the tarball is the input (per the Q1 field-name decision below) and to confirm that the algorithm operates over the unpacked tarball contents identically to how it operates over a source-repo content directory.
+**Chosen:** "Before any byte of the tarball is written outside the package manager's content cache" (B-1)
+**Considered:** "Before fetch" (block at HTTP request time — refuse to download); "Before unpack" (allow fetch into local cache, refuse unpack to install target)
+**Why:** Streaming installers — npm's `pacote` is the canonical example — interleave fetch and unpack: bytes flow in via HTTPS, are decompressed on the fly, and may be tee'd into both a content-addressable cache and an extraction directory. A "before fetch" rule is too strict (it forbids ever caching a revoked tarball, even for forensic analysis after the fact, and it fights pacote's streaming architecture). A "before unpack" rule is too loose (it doesn't say where the cache lives — bytes might already be on disk inside the install target if the cache is the install target itself). The chosen anchor names the moment that matters: bytes inside the package manager's content cache are still under the package manager's control and can be discarded (pacote can abort mid-stream and delete the partial cache entry); bytes outside the cache (in the install target, in node_modules, in a workspace) are materialized — they may be loaded by an AI Agent Runtime, copied by a downstream tool, or surface elsewhere. The cache boundary is the protocol-meaningful boundary because it is the last point at which a Conforming Client can refuse without already having published bytes. This anchor lets a streaming installer comply by aborting mid-stream and discarding the partial cache entry, and lets a non-streaming installer comply by checking before fetch — both implementation choices are conformant.
+**Consequences:** The pre-materialization MUST in `specs/npm-distribution.md:31` is rephrased to anchor at the cache boundary, naming the three sub-operations (resolve, fetch, unpack) and stating that whichever operation the Conforming Client chooses to refuse at, no extracted bytes may land outside the cache. A Conforming Client that fetches a revoked tarball into its content cache and then discards it on unpack-refusal is conformant; a Conforming Client that writes a revoked tarball to `node_modules/` and then deletes it is non-conformant (bytes briefly existed outside the cache, which means a parallel reader could have observed them). This phrasing also future-proofs against installers that don't have a cache-then-extract architecture (Yarn Plug'n'Play, pnpm content-addressable store) — each can map the cache-boundary concept onto its own architecture without rewording the MUST.
 
-### Pattern: Lockfile `revoked_hashes` persistence
+### Disambiguation: MOAT_ALLOW_REVOKED hardening — Process-scope + REQUIRED reason + per-entry RFC 3339 expiry vs Round 1 minimal form
 
-**Source:** `moat-spec.md:855, 663-665`
+**Chosen:** Process-scope, REQUIRED `MOAT_ALLOW_REVOKED_REASON` co-variable, per-entry encoded as `<sha256-hex>:<RFC3339-timestamp>`, structured override-applied logging (C-3)
+**Considered:** Round 1 minimal form (simple comma-separated hash list, optional reason in operational logs, no expiry); Lockfile-only override (no env-var, hand-edit a `revocation_overrides[]` field — Round 1 design.md option D)
+**Why:** The Round 1 form passes the "operator can override at all" bar but fails three of the four MOAT design tests. Works-fine-without-it (`CLAUDE.md:125`): an operator who sets the env var and forgets to record why has overridden a security boundary with no auditable record — the operation works fine without the reason, so the reason gets skipped. Enforcement (`CLAUDE.md:127`): "trust that people will write good operational logs" is exactly the answer the test forbids — the protocol provides no mechanism to detect or enforce a reason being recorded. Day-one (`CLAUDE.md:121`): the Round 1 form has no expiry, which means an override set during incident response persists across process restarts and across the eventual revocation-was-a-mistake retraction — the override outlives its purpose. The chosen form fixes all three: process-scope (no hot-reload, the override is a deliberate single action), REQUIRED reason co-variable with hard-fail enforcement (the protocol refuses to honor the override without the reason — "works fine without it" no longer applies), per-entry expiry (the override has a built-in retraction time). The lockfile-only alternative was rejected in Round 1 (high-friction for legitimate incident-response use); Round 2 doesn't revisit that decision. The structured-logging requirement is what makes the override auditable: a downstream operator reviewing logs after the incident can reconstruct exactly which hash was overridden, by whom (via the reason string), when, and until when (via the expiry).
+**Consequences:** A Conforming Client that reads `MOAT_ALLOW_REVOKED` MUST also read `MOAT_ALLOW_REVOKED_REASON`; if the reason is unset or empty, the Conforming Client MUST emit a structured error and refuse to honor the override. A Conforming Client that re-reads either variable mid-process is non-conformant — the read-once discipline is what makes the override a single auditable action. Each override entry MUST be of the form `<sha256-hex>:<RFC3339-timestamp>`; entries without the timestamp delimiter MUST be ignored as malformed (no permanent overrides — the spec forbids them by syntax). A Conforming Client past an entry's RFC 3339 timestamp MUST treat the entry as if absent (no warning, no log — silent expiry). When an override is applied (the Conforming Client proceeds to materialize a hash that appeared in `revoked_hashes`), the Conforming Client MUST log a structured event whose fields include: the package identity (npm package name + version), the matched canonical Content Hash, the operator-supplied reason string, and the entry's expiry timestamp. The override-applied event is a normative log shape — implementers MUST produce it on every override application; it is the audit anchor.
 
-**Snippet:**
-```markdown
-| `revoked_hashes` | REQUIRED | Array of hard-blocked content hash strings; empty array if none. |
+### Disambiguation: Publisher signing-identity location — Sigstore Rekor authoritative + package.json identity disclosure vs Bundle-in-package.json vs Rekor-only
 
-`revoked_hashes` entries MUST NOT be silently removed. Clearing a revoked hash
-requires deliberate End User action. ... When a client has previously recorded
-a revocation in its lockfile `revoked_hashes` array and that revocation entry
-subsequently disappears from the registry manifest (due to pruning), the
-lockfile entry persists. The hard-block continues.
-```
+**Chosen:** Sigstore Rekor authoritative; `package.json` carries `publisherSigning.{issuer, subject}` REQUIRED plus optional `publisherSigning.rekorLogIndex` discovery accelerator (C-6a)
+**Considered:** Round 1's `attestations[].bundle` form (full Cosign Bundle base64-encoded inline in `package.json`); Rekor-only with no `package.json` disclosure (Conforming Client queries Rekor by canonical hash and trusts whatever identity it finds)
+**Why:** Round 1 embedded the full Cosign Bundle in `package.json` to allow offline verification, but the Round 2 default-Content-Directory rule (C-1 + C-6b) requires excluding `package.json` from the canonical hash to prevent the chicken-and-egg with the log index. Once `package.json` is outside the canonical hash, embedding the bundle there has no security advantage over disclosing only the identity — the bundle itself is already in Rekor (that's what Rekor is for), and the `{issuer, subject}` pair plus the canonical hash plus a Rekor query is sufficient to recover the same bundle. Embedding the bundle inflates `package.json` size by tens of KB per role, every install fetches it whether or not it verifies, and it duplicates a trust anchor that already lives in a public log designed exactly for this purpose. Rekor-only with no disclosure (the second alternative) fails because a Conforming Client receiving a hash with no expected identity has no way to detect a Sigstore-valid signature from the wrong actor — any party that can produce a valid Sigstore signature over the canonical payload would be accepted. The `{issuer, subject}` disclosure is what binds the Rekor entry to the right Publisher identity, and it mirrors the GitHub flow's `signing_profile` model exactly (`moat-spec.md:790`).
+**Consequences:** The Round 1 `moat.attestations[].bundle` field is replaced by the new `publisherSigning` block at the top level of the `moat` object. `publisherSigning.issuer` and `publisherSigning.subject` are REQUIRED; `publisherSigning.rekorLogIndex` is OPTIONAL. When `rekorLogIndex` is present, a Conforming Client MUST fetch the Rekor entry by index and MUST validate that the entry's signing identity matches `publisherSigning.{issuer, subject}` exactly. When `rekorLogIndex` is absent, a Conforming Client falls back to a Rekor query keyed on the canonical Content Hash and MUST filter results by the disclosed `{issuer, subject}` — the disclosed identity is the trust anchor, the log index is only a discovery accelerator. The Round 1 `attestations[]` array carrying both `role: "publisher"` and `role: "registry"` entries is preserved for the registry side (a Conforming Client still walks `attestations[]` to find registry entries); only the publisher side moves into `publisherSigning`. This consolidates the per-role cardinality (exactly one Publisher per package) into the JSON schema rather than enforcing it via the Round 1 "duplicate role is malformed" rule. The Round 2 sub-spec MUST cross-reference `moat-spec.md:790`'s `signing_profile` field-shape so a reader sees the cross-channel symmetry. A new ADR (proposed 0006) is warranted because this is a load-bearing change to the `package.json` schema introduced in Round 1.
 
-**Why it applies here:** The npm sub-spec's revocation contract (D6) inherits this persistence model unchanged. The sub-spec MUST clarify that `revoked_hashes` in a Conforming Client's Lockfile is keyed by Content Hash, not by npm package name + version, so a republished package whose Content Directory matches a revoked hash remains blocked. The Q2 escape-hatch design is the only sanctioned override path.
+### Disambiguation: Hash exclusion list — Single fixed file in default mode vs No exclusions vs Configurable exclusion list
 
-### Pattern: Reason-code enum with forward-compat clause
-
-**Source:** `moat-spec.md:614-615, 794`
-
-**Snippet:**
-```markdown
-Reason values (informational only — they do NOT determine client behavior):
-`malicious`, `compromised`, `deprecated`, `policy_violation`.
-Unknown future reason values MUST be accepted without error.
-```
-
-**Why it applies here:** D6 settles that npm revocation reason codes inherit the core enum unchanged. The sub-spec MUST cite this enum by reference rather than redefining it, and MUST repeat the "Unknown future reason values MUST be accepted without error" clause so an npm-aware Conforming Client implementer reading the sub-spec in isolation does not accidentally enforce a closed enum.
-
-### Pattern: Tombstone permanence for pruned revocations
-
-**Source:** `moat-spec.md:665`
-
-**Snippet:**
-```markdown
-Tombstone rule (normative for Registry Action): Registries MUST NOT re-list a
-content item ... if a revocation entry for that item's content_hash has been
-pruned from the revocations array. ... a `revocation-tombstones.json` file in
-the `moat-registry` branch alongside the manifest. ... appended to (never
-shrunk) when revocations are pruned.
-```
-
-**Why it applies here:** Tombstones are a property of the Registry's published artifacts (the `moat-registry` branch / Registry Manifest), not of the npm Distribution Channel. The npm sub-spec MUST state that tombstoning is a Registry concern carried in the upstream Registry Manifest and that an npm-aware Conforming Client respects tombstones via the Registry Manifest, not via npm package metadata — npm tarballs are immutable but a republished tarball with a clean version number could otherwise re-introduce a tombstoned hash.
-
-### Pattern: Manifest content-entry schema and `(name, type)` uniqueness
-
-**Source:** `moat-spec.md:766-807`
-
-**Snippet:**
-```markdown
-content[].name              REQUIRED  Canonical identifier ...
-content[].type              REQUIRED  One of: skill, agent, rules, command
-content[].content_hash      REQUIRED  <algorithm>:<hex> — normative identity
-content[].source_uri        REQUIRED  Source repository URI
-content[].rekor_log_index   REQUIRED for Signed + Dual-Attested  Integer index ...
-content[].signing_profile   REQUIRED for Dual-Attested  ...
-
-content[].name + content[].type MUST be unique within a single manifest.
-```
-
-**Why it applies here:** When a Registry attests an npm-distributed Content Item, the resulting manifest entry uses this exact schema. The npm sub-spec MUST clarify how `source_uri` is populated for npm-only items (Q4 territory: a backfill-only Registry attestation where no Source Repository is known) and MUST preserve the `(name, type)` uniqueness invariant — a single npm package containing two content items of the same type is malformed, just as a source repo with two same-typed items is malformed.
-
-### Pattern: CHANGELOG `[Unreleased]` entry under Keep-a-Changelog sections
-
-**Source:** `.claude/rules/changelog.md:10-21, 27-30, 43-48`
-
-**Snippet:**
-```markdown
-## [Unreleased]
-
-Breaking change: ...
-
-### Added
-- **specs/npm-distribution.md** — new sub-spec describing the npm Distribution Channel ...
-
-### Changed
-- **specs/github/publisher-action.md** — moved from `specs/publisher-action.md`; no normative change.
-- **specs/github/registry-action.md** — moved from `specs/registry-action.md`; no normative change.
-```
-
-**Why it applies here:** Both the new sub-spec and the directory move are spec edits and MUST be logged under `[Unreleased]` in `CHANGELOG.md` in the same commit. The bold-label form is required; persona/finding-ID/panel/count language is forbidden. Editorial-only moves get the explicit "no normative change" phrase.
-
-### Disambiguation: Hash domain — Tarball Content Directory vs Source-Repo Content Directory vs Dual
-
-**Chosen:** Tarball Content Directory (`reference/moat_hash.py:166-198` applied to the unpacked `.tgz`)
-**Considered:** Source-Repo Content Directory (the directory at `source_uri`); Dual hashes (both source-repo and tarball recorded)
-**Why:** The npm Distribution Channel materializes content from a tarball, not from a source repo. A Conforming Client only ever has the tarball at install time — it does not (and the protocol does not require it to) clone the source repo. Hashing the source repo would force every install to perform an out-of-band fetch the npm ecosystem does not perform, fail copy-survival (a tarball copied to a different repo cannot reproduce the source-repo hash), and fail the day-one test (existing npm packages have no published source-repo hash). Dual hashes double the schema surface and the ways a Publisher can produce mismatching attestations without buying meaningful trust beyond what the lone tarball hash already provides — the source repo's contribution is captured by `source_uri` plus the Publisher Rekor entry's signing identity, which already binds the tarball back to its origin. The Tarball Content Directory hash is also the only domain a backfill-only Registry can compute: it has the tarball, it does not have privileged access to the Publisher's source layout.
-**Consequences:** A Publisher whose source-repo content directory is identical byte-for-byte to the tarball Content Directory (after npm's `files`/`.npmignore` filtering) will see the same Content Hash on both channels, which is the intended cross-channel identity. A Publisher whose npm build step transforms files (TypeScript compilation, bundling) will produce a different Content Hash on npm than in the source repo, and the npm sub-spec MUST acknowledge this — the tarball hash is the npm-channel identity, distinct from the source-channel identity. The hashing algorithm itself (the `reference/moat_hash.py` walk, NFC normalization, exclusion list) is unchanged; only the input directory differs. Tombstones and `revoked_hashes` keyed by Content Hash continue to work because the hash domain is a property of the input bytes, not of the channel — once a tarball hash is revoked, republishing identical bytes under a new version yields the same hash and remains blocked.
-
-### Disambiguation: Attestation array shape — Role-discriminated array vs Separate slots vs Provenance enum
-
-**Chosen:** Role-discriminated `attestations: [...]` array (each entry carries `role: "publisher" | "registry"`)
-**Considered:** Separate top-level slots (`moat.publisher_attestation`, `moat.registry_attestation`); a `provenance: { type: "publisher" | "registry" | "both" | "neither" }` enum with mode-specific payload
-**Why:** Backfill is a load-bearing concept of the npm sub-spec — a Registry can attest an existing npm package without Publisher cooperation, and a Publisher can attest without a Registry having indexed them yet. Four states must be representable: publisher-only, registry-only, both, neither. Separate slots represent both-and-neither cleanly but force an asymmetric schema (the consumer reads two different field names for two attestations of the same canonical payload); they also make it awkward to ever add a third role. A provenance enum compresses the four states into one tag but loses the ability to carry both attestations side-by-side and forces every reader to branch on the enum before they can find the data. A role-discriminated array is symmetric (both entries carry the same shape modulo the discriminator), grows naturally if a third role is ever needed, and represents all four states with the array's natural cardinality (length 0 / 1 / 2). It also matches the Registry Manifest's existing precedent of using arrays with role-bearing fields — `revocations[].source: "registry" | "publisher"` (`moat-spec.md:792-796`) and the per-item Rekor-entry-vs-signing_profile pairing (`moat-spec.md:786, 790`).
-**Consequences:** A Conforming Client reading the `package.json` `moat` block walks `attestations[]` and, for each entry, dispatches on `role`. A length-zero array represents the "neither" state explicitly — the Publisher has reserved the `moat` block (declaring intent to participate) but no attestation is yet present; this is a Day-One legitimate state, not an error. Tooling that wants to find "the publisher attestation" performs a single-pass filter rather than a field lookup. The schema MUST forbid duplicate roles within one array (two entries with `role: "publisher"` is malformed) — the analog of the manifest's `(name, type)` uniqueness constraint. Adding a future role (e.g., a third-party scanner) is a schema-additive change rather than a structural rewrite. A Publisher attestation in this array points at the same canonical Attestation Payload signed by the Publisher Action — the npm sub-spec MUST NOT introduce a second canonical payload format.
-
-### Disambiguation: Revocation framing — Pre/post-materialization vs Resolve/install/activation trichotomy
-
-**Chosen:** Pre-materialization vs post-materialization, with MUSTs anchored at the materialization boundary
-**Considered:** A three-phase trichotomy (resolve / install / activation) with separate normative obligations at each phase
-**Why:** MOAT's protocol boundary stops at the install step — once content is on disk, MOAT is done (CLAUDE.md "What 'Conforming Client' Means"). A trichotomy that names "activation" as a normative phase implicitly extends MOAT into AI Agent Runtime territory: it suggests there is a MUST to enforce at activation time, which the protocol cannot enforce because activation happens inside Claude Code / Cursor / Windsurf and friends, not inside a Conforming Client. A pre/post-materialization split places the boundary exactly where the protocol's authority ends. Pre-materialization (resolve, fetch, unpack) is where a Conforming Client MUST refuse a revoked hash; post-materialization (file exists on disk, AI Agent Runtime may or may not load it) is where the protocol MAY observe but MUST NOT mandate. The trichotomy also fails the enforcement test: there is no enforcement mechanism a Conforming Client can apply at "activation" because the Conforming Client has finished its job by then.
-**Consequences:** The sub-spec's normative MUSTs land cleanly: pre-materialization checks (resolve-time logging when a revoked hash is skipped per D6, install-time hard-block per the lockfile `revoked_hashes` model) carry MUST/MUST NOT; post-materialization is `(informative)` and explicitly says "out of MOAT's protocol boundary." This matches the existing core spec — `moat-spec.md:635` ("MUST be added to revoked_hashes") and `moat-spec.md:663` ("hard-block continues") both fire at install time, not at runtime. Implementers writing an npm-aware Conforming Client get a single clear question to answer ("am I about to materialize this hash on disk?") rather than three overlapping ones. The `MOAT_ALLOW_REVOKED` escape hatch (Q2 below) lives entirely in the pre-materialization side because that is where the block is enforced. AI Agent Runtimes that want to apply runtime gating MAY do so as a separate concern, and the sub-spec is silent about how — that is correct, because that is a different protocol than MOAT.
-
-### Disambiguation: npm provenance integration — Observed vs Required vs Tier-elevating
-
-**Chosen:** Observed-when-present, recommended-but-not-required, orthogonal to MOAT trust tiers (D4)
-**Considered:** Required (MUST be present and valid for the Verified label); Tier-elevating (presence promotes a Signed item toward Dual-Attested or a higher npm-only tier)
-**Why:** npm provenance and MOAT solve adjacent but distinct problems. npm provenance attests **build integrity** — that the artifact at `registry.npmjs.org` was produced by a particular CI workflow from a particular source commit. MOAT attests **content review** — that an attested party (Publisher and/or Registry) signed off on the canonical attestation payload `{"_version":1,"content_hash":"sha256:..."}`. Treating npm provenance as a MOAT requirement would couple MOAT to a particular registry's build-integrity feature, breaking the transport-agnostic core / transport-specific extension split this very directory move is meant to clarify. Treating npm provenance as tier-elevating would invent a fourth Trust Tier (or worse, a hidden modifier on existing tiers) that the lexicon and core spec do not authorize, fragmenting the cross-channel meaning of "Dual-Attested" and "Signed". Observing it as corroborating evidence (the sub-spec MAY recommend that Conforming Clients surface npm provenance presence to End Users alongside the Trust Tier label) gives users a richer picture without polluting the protocol semantics.
-**Consequences:** The Trust Tier values published in the Registry Manifest (`Dual-Attested`, `Signed`, `Unsigned`) carry the same meaning whether the Distribution Channel is GitHub or npm. An npm package with valid npm provenance and no MOAT attestation is `Unsigned` from MOAT's perspective — it has the npm-provenance corroborating signal but no content-review attestation. An npm package with a Registry MOAT attestation but no npm provenance is `Signed` and installable; the absence of npm provenance does not gate it. Conforming Clients MAY expose npm provenance presence in their UI as a separate row from the Trust Tier; they MUST NOT use it to compute or override the Trust Tier. Future registry transports (PyPI, Cargo) inherit this same orthogonality principle: build-integrity primitives in those ecosystems are observed-when-present, not required, not tier-elevating.
+**Chosen:** Default-mode-only exclusion of exactly one file (`package.json`); subdirectory mode applies no exclusions (C-6b)
+**Considered:** No exclusions (default mode hashes the entire tarball root including `package.json`); Configurable exclusion list (Publisher declares `moat.hashExclude: ["package.json", ...]`)
+**Why:** The chicken-and-egg between `publisherSigning.rekorLogIndex` and the canonical hash is the binding constraint. Without an exclusion, writing the log index back into `package.json` after Sigstore signing changes the canonical hash, invalidating the signature — the C-6c reference workflow's two-pack design becomes impossible without the exclusion. "No exclusions" is rejected on this ground alone. A configurable exclusion list (the second alternative) opens a far larger attack surface: a malicious Publisher could set `moat.hashExclude: ["malicious-payload.js"]` and have the canonical hash cover only the benign files, attesting bytes the Conforming Client never executes. The exclusion list itself would have to live inside `package.json` and would also need to be inside the canonical hash (otherwise it's the same chicken-and-egg again at one remove), which forces a circular schema. A fixed single-file exclusion ties exactly to the protocol's needs and admits no Publisher-driven expansion. The exclusion is forced to `package.json` specifically because that is the file the C-6c reference workflow mutates between the two `npm pack` calls — no other file in a normal npm package is npm-injected metadata that the Publisher both signs and then needs to mutate post-signing. The npm Registry's tarball SHA-512 covers `package.json` independently of MOAT (`specs/npm-distribution.md:21`), so a consumer who wants tarball-level integrity over `package.json` already has the npm primitive — MOAT does not lose meaningful security by excluding it. The subdirectory mode does not need the exclusion: when `moat.tarballContentRoot: "src"`, the canonical hash domain is `src/`'s contents, and `package.json` (at tarball root, outside `src/`) is outside the hash domain by construction.
+**Consequences:** The Round 2 sub-spec MUST state that the default-mode exclusion list contains exactly one entry (`package.json` at tarball root) and MUST forbid future Publisher-driven extension of this list without a sub-spec version bump. The subdirectory-mode rule "no exclusions apply" MUST be stated explicitly to prevent a Conforming Client from carrying the default-mode exclusion through into subdirectory mode. The exclusion targets `package.json` at tarball root only — a `package.json` file inside a subdirectory (e.g., `src/package.json` for a workspace member) is hashed normally in subdirectory mode and is not excluded in default mode either (the exclusion is path-anchored to the tarball root, mirroring `reference/moat_hash.py:60`'s root-level-only exclusion of `moat-attestation.json`). A new ADR (proposed 0007) is warranted because this exclusion rule is a normative, security-relevant constraint that will be referenced repeatedly by Conforming Client implementers and Registry Operators running backfill.
 
 ## Design Questions
 
-1. **What is the `package.json` field name for the Content Directory?**
-   - A) `moat.contentDirectory` — full lexicon name in camelCase; explicit and unambiguous against npm's `files` / `directories` fields.
-   - B) `moat.path` — short and idiomatic for `package.json`, but generic; "path" has many meanings inside `package.json` already (e.g., the Node `path` module's name; the `paths` field in `tsconfig.json`).
-   - C) `moat.dir` — short; aligns with `directories` plural already in `package.json`, but ambiguous (which directory?).
-   - **Recommended:** A — the lexicon defines **Content Directory** as the canonical term, and the term verbatim in the field name is the cheapest way to keep `package.json` readers in MOAT vocabulary. The four-character cost over `moat.path` is rounding error in a `package.json`, and the disambiguation against npm's existing `path`/`paths`/`directories` fields is real.
+The Round 2 design concept (signed off 2026-05-09T03:13:32Z) resolves the architectural decisions concretely. The questions remaining at the design layer are narrow editorial choices about how to express decisions already made — wording, log-event field names, table layouts. These are A/B/C-able because each option produces a working spec; the choice is about which form best fits the existing house style.
 
-2. **What is the form of the `MOAT_ALLOW_REVOKED` escape hatch (D6)?**
-   - A) Hash-list env var — `MOAT_ALLOW_REVOKED=sha256:abc...,sha256:def...` (comma-separated content hashes); the override is scoped per-hash.
-   - B) Boolean env var — `MOAT_ALLOW_REVOKED=1` (any truthy value disables all revocation hard-blocks for the invocation).
-   - C) File-path env var — `MOAT_ALLOW_REVOKED=/path/to/allowlist.txt` pointing at a newline-delimited list of allowed hashes.
-   - D) Lockfile-only — no env var; an End User must hand-edit a `revocation_overrides[]` field in the Lockfile.
-   - **Recommended:** A — per-hash scoping satisfies the enforcement question (a global "allow all revoked" flag is a known footgun in npm's `--force` and pip's `--break-system-packages` and gets used habitually); env-var ergonomics match how operators reach for one-off overrides during incident response without committing a Lockfile change. Hand-edit-only (D) is too high-friction for the legitimate use case (an operator deliberately accepting a deprecated hash they've reviewed); a boolean (B) is too low-friction for the dangerous case.
+1. **What field names does the override-applied structured log event carry?**
+   - A) `package_identity`, `content_hash`, `override_reason`, `override_expiry` — long-form, self-documenting, parseable without context.
+   - B) `pkg`, `hash`, `reason`, `expiry` — short, terse, matches the structured-event style in `reference/moat-publisher.yml`'s log-line patterns.
+   - C) `package`, `content_hash`, `reason`, `expires_at` — middle ground; uses `expires_at` (RFC 3339-friendly suffix) and `package` (npm-native singular term).
+   - **Recommended:** C — `expires_at` matches the `attested_at` convention at `moat-spec.md:784` (RFC 3339 timestamp field naming); `content_hash` matches the lexicon term verbatim; `package` is npm-native and unambiguous in this context; `reason` is short and self-explanatory. A long-form names duplicate context already present in the surrounding log envelope; B short-form sacrifices grep-ability for one-time-write brevity that doesn't matter to operators reading the event after the fact.
 
-3. **What does each `attestations[]` entry carry — full Cosign Bundle, just a Rekor reference, or both?**
-   - A) Full Cosign Bundle inline (Sigstore protobuf bundle v0.3, base64-encoded inside `attestations[].bundle`) — self-contained, verifiable offline, but each entry can be tens of KB and bloats `package.json`.
-   - B) Rekor reference only (`attestations[].rekor_log_index` plus enough identity to fetch the bundle) — keeps `package.json` small but every install must hit Rekor at materialization time, which fails offline-install scenarios.
-   - C) Both — `bundle` is REQUIRED, `rekor_log_index` is REQUIRED for cross-checking; bundle is the trust anchor, the index is the cheap lookup.
-   - **Recommended:** C — the lockfile schema already stores the full bundle verbatim (lexicon: "Stored verbatim in the lockfile as `attestation_bundle`"); `package.json` follows the same model so a Conforming Client can verify offline directly from the tarball it already has, while `rekor_log_index` lets tooling cross-check against the public log without parsing the bundle. The size cost is bounded (one bundle per role, max two roles); npm packages routinely carry larger metadata.
+2. **What form does the npm provenance disagreement table take in the npm Provenance section?**
+   - A) Four-row pipe table with columns `(npm provenance, MOAT attestation, Conforming Client display, Trust Tier impact)` — flat, all four states visible at a glance.
+   - B) Four bullet points, each starting with a bold-label state name (`**Both present:**`, `**MOAT only:**`, `**Provenance only:**`, `**Neither:**`) followed by the prose for each row — narrative, easier to read inline, harder to scan.
+   - C) A two-axis table (`npm provenance: present | absent` × `MOAT: present | absent`) with cells containing the per-cell display rule — structurally honest about the two-axis nature but harder to render compactly in Markdown.
+   - **Recommended:** A — the existing sub-specs use pipe tables for state matrices (`specs/publisher-action.md:202-205` visibility/behavior matrix; `specs/registry-action.md:127-131` reuse-criteria summary) and the four-row form is the closest match to that house style. The two-axis form (C) is structurally accurate but would render as a 2×2 grid of run-on cells that's harder to read than four discrete rows. Bullet form (B) loses the at-a-glance scanability the table provides — readers comparing the four cases need columns aligned, not paragraphs.
 
-4. **Does a backfill-only Registry attestation use the same `registry_signing_profile` as a normal Registry signature, or a distinct `registry_backfill_signing_profile`?**
-   - A) Same `registry_signing_profile` — a backfill attestation is just a Registry attestation against an npm-distributed Content Item with no Publisher attestation; the signing identity is the Registry's CI workflow either way.
-   - B) Distinct `registry_backfill_signing_profile` — the backfill case carries different operational risk (the Registry asserts content authenticity without a Publisher counter-signature) and deserves a separate identity slot a Conforming Client can pin or warn on.
-   - **Recommended:** A — the operational difference between "backfill" and "normal" Registry attestation is a property of the Content Item's state (publisher-attested or not), not of the Registry's signing identity. The Registry signs the same canonical Attestation Payload with the same OIDC identity in both cases. End Users who care about the difference read the Trust Tier (`Signed` vs `Dual-Attested`) — that is exactly what the tier signal already encodes. Inventing a second profile field doubles the schema surface for a distinction that is already represented elsewhere.
+3. **How is the `moat.tarballContentRoot` rename communicated in the npm-distribution.md field table — replace the row, or replace-with-historical-note?**
+   - A) Replace the field-table row with the new name, no historical note — Round 2 is a Draft-to-Draft edit and the v0.1.0 → v0.2.0 bump is a permitted breaking change in Draft status (`moat-spec.md:14-16` "This draft has not been validated by any implementations").
+   - B) Replace the row, but add a one-line "Renamed from `moat.contentDirectory` in v0.1.0" note in the field-table row's Description column — preserves a discoverable history pointer for any pre-v0.2.0 reader.
+   - C) Replace the row plus add a `## Migration from v0.1.0` informative section enumerating the field renames — heavy-handed for a Draft-status spec with no implementations, but unambiguous.
+   - **Recommended:** A — `moat-spec.md:22` ("Zero adopters. No implementations exist beyond draft tooling concepts. This is a greenfield spec. Design for correctness, not continuity.") explicitly authorizes Draft-status breaking changes without migration scaffolding. The CHANGELOG `[Unreleased]` entry for Round 2 already records the rename in the public-facing record; duplicating that pointer inside the spec body is process-metadata leak (the kind of thing `.claude/rules/changelog.md:32` flags as "if a reader can't act on the detail without context from an internal thread, cut it"). If a v0.1.0 reader exists, their action is "read v0.2.0 instead," not "follow a migration path."
 
 ## Decisions made (not questions)
 
-- **Terminology** — Use **Content Directory** verbatim throughout, and **npm Registry** (qualified) versus **Registry** (the MOAT registry); from D1 + lexicon §"Distribution Channels".
-- **Materialization-boundary MUSTs** — Normative MUSTs apply at resolve/fetch/unpack; runtime gating is out of scope; from D2 + CLAUDE.md "What 'Conforming Client' Means".
-- **Single `moat` block in `package.json`** — One top-level `moat` object with internal MUST/SHOULD/MAY field split, not multiple sibling fields; from D3.
-- **npm provenance is observed-only, orthogonal to Trust Tier** — Observed when present; absence does not change tier; from D4 + Disambiguation above.
-- **Hash domain binds to the published tarball's Content Directory** — `reference/moat_hash.py` algorithm applied to the unpacked tarball's content directory; from D5 + Disambiguation above.
-- **Revocation reason codes inherit core enum unchanged** — `malicious`, `compromised`, `deprecated`, `policy_violation`; "Unknown future reason values MUST be accepted without error"; from D6 + `moat-spec.md:614-615`.
-- **Resolve-time skip logging** — When a Conforming Client skips a revoked hash during resolution (before materialization), it MUST log the skip; from D6.
-- **Role-discriminated `attestations: [...]` array** — One array, each entry carries `role: "publisher" | "registry"`; from D7 + Disambiguation above.
-- **GitHub sub-specs move to `specs/github/`** — `publisher-action.md` and `registry-action.md` move; `moat-verify.md` stays at top level as transport-agnostic; filenames unchanged; from D7-rider.
-- **Cross-references updated repo-wide** — README, `moat-spec.md`, `lexicon.md`, guides under `docs/`, website mirrors under `website/src/content/docs/spec/`, `astro.config.mjs` sidebar slugs, reference workflow comments, panel artifacts left untouched (per `.claude/rules/changelog.md:21` tooling-only exclusion); from Q2 cross-reference inventory.
-- **CHANGELOG `[Unreleased]` entry** — Two bullets: an `### Added` for the new sub-spec, a `### Changed` for the directory move with the explicit "no normative change" phrase; from `.claude/rules/changelog.md:10-21`.
-- **No new attestation roles beyond publisher and registry** — Future roles are an additive schema change, not part of this sub-spec; from concept Out of Scope.
-- **`moat-verify` CLI is unchanged** — Spec-only deliverable; CLI implementation work lives in a follow-on; from concept Out of Scope.
+These are settled by the Round 2 design concept; listed here for the Structure phase to consume directly.
+
+- **A-1 — `moat-spec.md:9` Sub-specs line cites `specs/npm-distribution.md`** — one-line edit to append the new sub-spec to the existing comma-separated list at `moat-spec.md:9`.
+- **A-2 — `.claude/rules/changelog.md:40` cites `specs/github/publisher-action.md`** — one-line edit replacing the pre-reorg path with the post-reorg path; tooling-only file (`.claude/`) so per `.claude/rules/changelog.md:21` no CHANGELOG entry is required.
+- **B-1 — Materialization-boundary anchor is "before any byte of the tarball is written outside the package manager's content cache"** — replaces the Round 1 phrasing at `specs/npm-distribution.md:29`; conformant Conforming Clients MAY refuse at resolve, fetch, or unpack so long as no extracted bytes land outside the cache.
+- **B-2 — Four-state (provenance × MOAT) disagreement table** — added to the npm Provenance section (`specs/npm-distribution.md:107-115`); covers (both, MOAT-only, provenance-only, neither); spec MUST state that provenance and Trust Tier are orthogonal axes.
+- **C-1 — Default Content Directory = tarball root with C-6b exclusion** — when `moat.tarballContentRoot` is absent, the canonical Content Directory is the unpacked tarball root, with `package.json` excluded; subdirectory mode applies no exclusions.
+- **C-2 — Field rename `moat.contentDirectory` → `moat.tarballContentRoot`** — the lexicon term "Content Directory" is unchanged; `lexicon.md`'s Content Directory entry gains a one-line note that `tarballContentRoot` is the JSON field name realizing the concept.
+- **C-3 — `MOAT_ALLOW_REVOKED` hardening** — process-scope only (read once at process start); REQUIRED `MOAT_ALLOW_REVOKED_REASON` co-variable with hard-fail enforcement; per-entry encoded as `<sha256-hex>:<RFC3339-timestamp>`; entries past expiry MUST be ignored as if absent; structured override-applied log event MUST be emitted on every override application.
+- **C-6a — Publisher attestation: Sigstore Rekor authoritative + `package.json` identity disclosure** — `publisherSigning.{issuer, subject}` REQUIRED, `publisherSigning.rekorLogIndex` OPTIONAL; Conforming Clients MUST validate Rekor entry's signing identity matches `publisherSigning.{issuer, subject}`; Round 1's `attestations[].bundle` field for the Publisher role is removed (Registry role preserved in `attestations[]`).
+- **C-6b — Hash exclusion list: exactly one file in default mode (`package.json` at tarball root)** — subdirectory mode applies no exclusions; the spec MUST forbid Publisher-driven extension of the exclusion list.
+- **C-6c — Reference Publisher workflow `reference/moat-npm-publisher.yml`** — seven steps (`npm pack` → compute canonical hash → Sigstore sign → push to Rekor → write log index back to `package.json` → re-pack → `npm publish`); triggered on release tag push or manual dispatch; mirrors `reference/moat-publisher.yml`'s structure (`reference/moat-publisher.yml:1-80`); non-GHA Publisher support is deferred (out of scope for this ship per the Round 2 concept).
+- **`lexicon.md` — `tarballContentRoot` realization note** — one-line addition to the Content Directory entry stating that `tarballContentRoot` (in `package.json`) is one realization of the concept; the lexicon term remains the source of truth.
+- **`specs/npm-distribution.md` version bump** — v0.1.0 → v0.2.0; Draft status retained.
+- **CHANGELOG `[Unreleased]` entry** — bullets under `### Changed` for the Round 2 sub-spec amendments and `### Added` for the reference workflow; `.claude/` and `reference/` paths follow `.claude/rules/changelog.md:21`'s tooling-only exclusion (the workflow file is reference content per `moat-spec.md:681`'s precedent of citing `reference/moat-publisher.yml`, so the CHANGELOG `### Added` entry for the npm reference workflow IS required as a spec-surface artifact, not a tooling-only one).
+- **Website mirror sync** — `website/src/content/docs/spec/npm-distribution.md` MUST be byte-identical (after the Starlight front-matter) to canonical `specs/npm-distribution.md`; mirror is updated in the same commit per Round 1 precedent at `CHANGELOG.md:35`.
+- **Round 1 conformance scripts continue to pass** — none of the Round 2 changes modify the Round 1 normative surfaces those scripts cover; new conformance scripts MAY be added for the Round 2 sections (default-Content-Directory hashing, override-event log shape, exclusion-list semantics).
 
 ## Out of Scope
 
-- Runtime gating of execution (post-materialization import/require interception) — explicitly outside MOAT's protocol boundary.
-- Other registry transports (PyPI, Cargo, Maven, container registries) — npm only for this sub-spec.
-- Changes to the transport-agnostic core protocol semantics in `moat-spec.md` beyond what's strictly required to host the npm binding.
-- Renaming `publisher-action.md` / `registry-action.md` filenames — only their directory location changes.
-- Implementation of `moat-verify` CLI changes — spec-only deliverable.
-- New attestation roles beyond publisher and registry.
+- **Layering rule + GitHub-ism extraction in `moat-spec.md` / `specs/moat-verify.md`** — deferred to a separate ship.
+- **Aggregator UI Trust Tier strings + visual guidance** — deferred to a separate ship.
+- **Standalone CLI for non-GHA npm Publishers** — `reference/moat-npm-publisher.yml` is GitHub-Actions-shaped only; non-GHA reference Publisher tooling is a future concern.
+- **Multi-provider OIDC examples** — the reference workflow uses GitHub Actions OIDC only; OIDC providers other than GitHub are not enumerated in this ship.
+- **Enumerating npm-injected metadata files beyond `package.json`** — the exclusion list is fixed at exactly `package.json`; if future npm-injected files (e.g., `.npmrc`-injected fields, metadata blocks added by registry middleware) need exclusion, they require their own sub-spec amendment.
+- **npm Registry first-class metadata field** — proposing a top-level npm Registry metadata field (e.g., `dist.attestations[].moatAttestation`) outside `package.json` is out of scope; this ship uses `package.json` only.
+- **Other registry transports** — PyPI, Cargo, Maven, container registries; each needs its own sub-spec.
+- **Runtime gating of execution** — outside MOAT's protocol boundary; the materialization-boundary anchor is the protocol's last word on revocation.
 
 ## Interfaces affected (preview)
 
-- `specs/npm-distribution.md` — new sub-spec; full file added under the house-style header pattern.
-- `specs/github/publisher-action.md` — moved from `specs/publisher-action.md`; content unchanged.
-- `specs/github/registry-action.md` — moved from `specs/registry-action.md`; content unchanged.
-- `specs/moat-verify.md` — remains at top level; no change.
-- `moat-spec.md` — `**Sub-specs:**` header (line 9) and the eight-plus inline cross-reference links (lines 103, 143, 148, 218, 281, 286, 681, 682, 1068) updated to `specs/github/...` paths; new bullet under `**Sub-specs:**` linking `specs/npm-distribution.md`.
-- `lexicon.md` — entries for **Publisher Action** (line 43) and **Registry Action** (line 44) updated to point at `specs/github/...`; **Distribution Tarball** entry's "Reserved for npm sub-spec" gloss updated to cite `specs/npm-distribution.md`.
-- `README.md` — table rows at lines 35–36 updated to `specs/github/...`; new row added for `specs/npm-distribution.md`.
-- `RELEASING.md:99` — versioning policy entry updated to `specs/github/publisher-action.md`.
-- `CHANGELOG.md` — `[Unreleased]` section gains `### Added` entry for the new sub-spec and `### Changed` entry for the directory move (with "no normative change").
-- `docs/guides/publisher.md:248` — link updated to `../../specs/github/publisher-action.md`.
-- `website/astro.config.mjs:91-92` — sidebar slugs and a new entry for `spec/npm-distribution`.
-- `website/src/content/docs/overview/spec-status.md:22-23`, `website/src/content/docs/overview/use-cases.md`, `website/src/content/docs/guides/*.md` — slug links updated.
-- `website/src/content/docs/spec/core.md` — `**Sub-specs:**` header updated; cross-reference anchors updated.
-- `website/src/content/docs/spec/publisher-action.md`, `website/src/content/docs/spec/registry-action.md`, plus a new `website/src/content/docs/spec/npm-distribution.md` — website mirrors of the sub-specs (kept at the existing slug positions per `astro.config.mjs`).
-- `reference/moat-publisher.yml:260, 482` and `reference/moat-registry.yml:759` — code-comment spec-path strings updated to `specs/github/...` (these are tooling per `.claude/rules/changelog.md:21` but are user-visible inside the workflow files).
-- `.github/workflows/moat-publisher.yml:260, 482` and `.github/workflows/moat-registry.yml:759` — same comment updates as the reference templates.
+- `specs/npm-distribution.md` — version bump v0.1.0 → v0.2.0 Draft; field-table row rename (`moat.contentDirectory` → `moat.tarballContentRoot`); new default-Content-Directory rule with exclusion list; materialization-boundary anchor rephrased; `MOAT_ALLOW_REVOKED` section expanded with reason co-variable, expiry, and override-applied log event; Publisher attestation moves from `attestations[].bundle` (publisher role) to top-level `publisherSigning` block; `attestations[]` retained for Registry role only; npm Provenance section gains four-state disagreement table.
+- `moat-spec.md:9` — Sub-specs line gains `specs/npm-distribution.md` cross-reference.
+- `lexicon.md` — Content Directory entry gains a one-line note that `tarballContentRoot` (in `package.json`) is one realization of the concept; lexicon term unchanged.
+- `.claude/rules/changelog.md:40` — example-anchor reference updated from `specs/publisher-action.md` to `specs/github/publisher-action.md`.
+- `reference/moat-npm-publisher.yml` — new file; seven-step GitHub Actions workflow mirroring `reference/moat-publisher.yml`'s structure.
+- `CHANGELOG.md` — `[Unreleased]` gains `### Changed` entries for the sub-spec amendments and `### Added` entry for the new reference workflow; bold-label form per `.claude/rules/changelog.md:48`.
+- `website/src/content/docs/spec/npm-distribution.md` — website mirror updated to match canonical sub-spec byte-for-byte (after front-matter).
+- `.ship/npm-distribution-spec/adr/` — three new Proposed ADRs auto-drafted by the ship-adr-handler hook from this design's three Disambiguation blocks (proposed 0005 default Content Directory, 0006 publisher signing-identity location, 0007 hash exclusion list); the materialization-boundary, override-hardening, and field-rename Disambiguations also produce ADRs (proposed 0008, 0009, 0010 — the hook drafts one per `### Disambiguation:` header).
 
 DESIGN_COMPLETE

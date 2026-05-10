@@ -55,7 +55,7 @@ _This lexicon is biased toward terms the upcoming `npm-distribution-spec` work w
 | Term | Definition | Aliases to avoid |
 |---|---|---|
 | **Content Item** | One unit of attestable content — a single subdirectory under a category directory. The unit the content hash covers. | "package", "module", "artifact" (loose; all three are npm/packaging-domain terms that risk drift) |
-| **Content Directory** | The directory on disk that contains one content item — the input to the content hashing algorithm. | "package directory", "package root", "content_root", "skill folder", "item directory" |
+| **Content Directory** | The directory on disk that contains one content item — the input to the content hashing algorithm. In the npm Distribution Channel, the field `tarballContentRoot` (in `package.json`) is one realization of this concept inside the unpacked tarball; the lexicon term remains the source of truth. | "package directory", "package root", "content_root", "skill folder", "item directory" |
 | **Content Type** | One of the four normative types: `skill`, `agent`, `rules`, `command`. (`hook` and `mcp` are deferred — directories reserved, types not yet normative.) | "kind", "category" (collides with **Category Directory**), "content kind" |
 | **Category Directory** | A canonical top-level directory in the source repo holding content of one type: `skills/`, `agents/`, `rules/`, `commands/`. | "type directory", "content folder", "section directory" |
 | **Source Repository** | The git repository where a publisher keeps content, identified in the manifest by `source_uri`. The protocol's unit of "where it came from." | "upstream repo", "publisher repo" (informal OK; use **Source Repository** in normative text), "origin" |

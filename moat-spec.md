@@ -6,7 +6,7 @@
 **Editor:** Holden Hewett
 **License:** Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 **Repository:** https://github.com/OpenScribbler/moat
-**Sub-specs:** [`specs/github/publisher-action.md`](specs/github/publisher-action.md), [`specs/github/registry-action.md`](specs/github/registry-action.md), [`specs/moat-verify.md`](specs/moat-verify.md)
+**Sub-specs:** [`specs/github/publisher-action.md`](specs/github/publisher-action.md), [`specs/github/registry-action.md`](specs/github/registry-action.md), [`specs/moat-verify.md`](specs/moat-verify.md), [`specs/npm-distribution.md`](specs/npm-distribution.md)
 **OWASP alignment:** [`docs/owasp-alignment.md`](docs/owasp-alignment.md)
 
 ### Document Status

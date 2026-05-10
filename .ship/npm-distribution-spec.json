@@ -1,14 +1,20 @@
 {
   "feature": "npm-distribution-spec",
   "started": "2026-05-08T22:36:34.278Z",
-  "updated": "2026-05-09T03:13:32.349Z",
+  "updated": "2026-05-10T03:45:00.000Z",
   "ticketBeadId": "hhewett-mol-vao",
   "autonomy": "pragmatic",
-  "currentStage": "design",
+  "currentStage": "pr",
   "completed": [
     "lexicon-gate",
     "align",
-    "research"
+    "research",
+    "design",
+    "structure",
+    "plan",
+    "create-beads",
+    "execute",
+    "final-validate"
   ],
   "lexicon": {
     "path": "lexicon.md",
@@ -27,32 +33,51 @@
     "plan": ".ship/npm-distribution-spec/plan.md"
   },
   "phaseB": {
-    "complete": false,
-    "completedAt": null,
+    "complete": true,
+    "completedAt": "2026-05-09T22:34:00.000Z",
     "blockersFiled": 0
   },
   "beads": {
     "created": true,
     "prefix": "moat",
     "epicIds": [],
-    "taskCount": 11,
-    "finalValidateId": "moat-e7h",
+    "taskCount": 26,
+    "finalValidateId": "moat-u1h",
     "testBeadIds": [
+      "moat-30a",
+      "moat-yut",
+      "moat-nj4",
+      "moat-dqe",
+      "moat-79w",
+      "moat-099",
+      "moat-dg2"
+    ],
+    "implBeadIds": [
+      "moat-tlt",
+      "moat-we6",
+      "moat-q1l",
+      "moat-scw",
+      "moat-2h2",
+      "moat-1b1",
+      "moat-0aa"
+    ],
+    "round1Complete": true,
+    "round1ClosedAt": "2026-05-09T01:36:50.284Z",
+    "round1FinalValidateId": "moat-e7h",
+    "round1TestBeadIds": [
       "moat-27q",
       "moat-67z",
       "moat-ro0",
       "moat-8x7",
       "moat-53v"
     ],
-    "implBeadIds": [
+    "round1ImplBeadIds": [
       "moat-8uf",
       "moat-ayy",
       "moat-z38",
       "moat-jdw",
       "moat-41g"
-    ],
-    "round1Complete": true,
-    "round1ClosedAt": "2026-05-09T01:36:50.284Z"
+    ]
   },
   "researchQuestions": [
     "House style of existing sub-specs: how does specs/publisher-action.md structure its sections, what RFC 2119 conventions does it use, and what does its example structure look like? Provide section headings + line ranges.",
@@ -65,7 +90,8 @@
   ],
   "adrs": {
     "drafted": true,
-    "round1Drafted": ["ADR-0001", "ADR-0002", "ADR-0003", "ADR-0004"]
+    "round1Drafted": ["ADR-0001", "ADR-0002", "ADR-0003", "ADR-0004"],
+    "round2Drafted": ["ADR-0005", "ADR-0006", "ADR-0007", "ADR-0008", "ADR-0009"]
   },
   "prUrl": null,
   "execution": {
@@ -81,7 +107,22 @@
       "moat-8x7",
       "moat-jdw",
       "moat-53v",
-      "moat-41g"
+      "moat-41g",
+      "moat-30a",
+      "moat-tlt",
+      "moat-yut",
+      "moat-we6",
+      "moat-nj4",
+      "moat-q1l",
+      "moat-dqe",
+      "moat-scw",
+      "moat-79w",
+      "moat-2h2",
+      "moat-099",
+      "moat-1b1",
+      "moat-dg2",
+      "moat-0aa",
+      "moat-u1h"
     ],
     "currentTaskId": null,
     "awaitingUserAck": false,
