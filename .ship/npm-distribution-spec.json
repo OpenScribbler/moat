@@ -1,10 +1,10 @@
 {
   "feature": "npm-distribution-spec",
   "started": "2026-05-08T22:36:34.278Z",
-  "updated": "2026-05-10T03:45:00.000Z",
+  "updated": "2026-05-10T04:30:00.000Z",
   "ticketBeadId": "hhewett-mol-vao",
   "autonomy": "pragmatic",
-  "currentStage": "pr",
+  "currentStage": "complete",
   "completed": [
     "lexicon-gate",
     "align",
@@ -14,7 +14,8 @@
     "plan",
     "create-beads",
     "execute",
-    "final-validate"
+    "final-validate",
+    "pr"
   ],
   "lexicon": {
     "path": "lexicon.md",
@@ -93,7 +94,7 @@
     "round1Drafted": ["ADR-0001", "ADR-0002", "ADR-0003", "ADR-0004"],
     "round2Drafted": ["ADR-0005", "ADR-0006", "ADR-0007", "ADR-0008", "ADR-0009"]
   },
-  "prUrl": null,
+  "prUrl": "https://github.com/OpenScribbler/moat/pull/6",
   "execution": {
     "mode": null,
     "tasksDispatched": [],
