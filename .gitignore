@@ -4,6 +4,7 @@ panel/
 # Session artifacts
 .handoffs/
 .develop/
+.ship/
 .vscode/
 __pycache__/
 CLAUDE.md
