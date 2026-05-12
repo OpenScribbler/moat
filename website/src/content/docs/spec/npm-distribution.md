@@ -198,7 +198,7 @@ A canonical end-to-end Publisher workflow for npm Content Items is provided as a
 6. `npm pack` (v2) — repack with the updated `package.json`. Because the default Content Directory rule excludes the root `package.json` from the canonical hash domain, the v2 tarball's canonical Content Hash is byte-identical to v1's.
 7. `npm publish` the v2 tarball.
 
-The two-pack pattern is what makes Publisher signing identity disclosable inside `package.json` without invalidating the signature: editing `package.json` between the two `npm pack` invocations does not alter the canonical hash that the Sigstore signature covers. Conformance for this property is exercised by [`.ship/npm-distribution-spec/conformance/slice-8.sh`](../.ship/npm-distribution-spec/conformance/slice-8.sh) (A8). Publishers MAY adapt this workflow but MUST preserve the Content Directory exclusion rule and the canonical attestation payload shape; both are normative.
+The two-pack pattern is what makes Publisher signing identity disclosable inside `package.json` without invalidating the signature: editing `package.json` between the two `npm pack` invocations does not alter the canonical hash that the Sigstore signature covers. Conformance for this property is exercised by [`specs/conformance/npm-distribution/slice-8.sh`](conformance/npm-distribution/slice-8.sh) (A8). Publishers MAY adapt this workflow but MUST preserve the Content Directory exclusion rule and the canonical attestation payload shape; both are normative.
 
 ---
 

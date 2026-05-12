@@ -173,7 +173,7 @@ jobs:
       # rekorLogIndex hint). Because Slice 1's default Content Directory
       # rule excludes the root `package.json`, the canonical Content Hash
       # of v2 is byte-identical to v1's — the property the conformance test
-      # in `.ship/npm-distribution-spec/conformance/slice-8.sh` (A8) asserts.
+      # in `specs/conformance/npm-distribution/slice-8.sh` (A8) asserts.
       # ─────────────────────────────────────────────────────────────────────
       - name: npm pack (v2 — post-sign tarball, identical canonical hash by Slice 1's exclusion rule)
         id: pack_v2
