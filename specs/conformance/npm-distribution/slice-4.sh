@@ -76,6 +76,64 @@ if ! grep -qE '^\*\*Planned future version:\*\*' "$spec"; then
   fail=1
 fi
 
+# A6 (D4 Round 3): the project-scoped npm lockfile filename `.moat/npm-lockfile.json`
+# is pinned in the §Revocation MUST block (anchored to the Pre-materialization hard
+# block + neighbouring Persistence/Resolve-time MUSTs). The plan ties the anchor to
+# the `:47`–`:51` range.
+rev_block="$(awk '/^## Revocation at the Materialization Boundary/{flag=1; next} flag && /^## /{flag=0} flag' "$spec")"
+if [[ -z "$rev_block" ]]; then
+  echo "FAIL [A6]: §Revocation at the Materialization Boundary section not found"
+  fail=1
+elif echo "$rev_block" | grep -F '.moat/npm-lockfile.json' >/dev/null; then
+  echo "OK  [A6] .moat/npm-lockfile.json named in §Revocation block"
+else
+  echo "FAIL [A6]: .moat/npm-lockfile.json not named in §Revocation block"
+  fail=1
+fi
+
+# A7 (D4 Round 3): lexicon.md disambiguates `.moat/npm-lockfile.json` from npm's
+# `package-lock.json`. The two filenames MUST co-occur within the lexicon row for
+# the **Lockfile** term so a reader cannot confuse the MOAT artifact with npm's
+# resolver-cache artifact.
+if [[ -f lexicon.md ]]; then
+  lock_row="$(grep -nE '^\| \*\*Lockfile\*\* \|' lexicon.md || true)"
+  if [[ -z "$lock_row" ]]; then
+    echo "FAIL [A7]: **Lockfile** row not found in lexicon.md"
+    fail=1
+  elif echo "$lock_row" | grep -F '.moat/npm-lockfile.json' >/dev/null \
+     && echo "$lock_row" | grep -F 'package-lock.json' >/dev/null; then
+    echo "OK  [A7] lexicon **Lockfile** row disambiguates .moat/npm-lockfile.json from package-lock.json"
+  else
+    echo "FAIL [A7]: lexicon **Lockfile** row does not disambiguate .moat/npm-lockfile.json from package-lock.json"
+    fail=1
+  fi
+else
+  echo "FAIL [A7]: lexicon.md missing"
+  fail=1
+fi
+
+# A8 (D4 Round 3): the channel-agnostic moat-spec.md §Lockfile section is NOT
+# touched by this slice — the `.moat/npm-lockfile.json` filename pin lives in the
+# npm sub-spec only. The §Lockfile heading still exists in moat-spec.md and the
+# section MUST NOT name `.moat/npm-lockfile.json` (it is npm-specific).
+if [[ -f moat-spec.md ]]; then
+  if grep -nE '^### Lockfile$' moat-spec.md >/dev/null; then
+    lock_section="$(awk '/^### Lockfile$/{flag=1; next} flag && /^### /{flag=0} flag' moat-spec.md)"
+    if echo "$lock_section" | grep -F '.moat/npm-lockfile.json' >/dev/null; then
+      echo "FAIL [A8]: moat-spec.md §Lockfile names the npm-specific .moat/npm-lockfile.json (must stay channel-agnostic)"
+      fail=1
+    else
+      echo "OK  [A8] moat-spec.md §Lockfile remains channel-agnostic (no .moat/npm-lockfile.json mention)"
+    fi
+  else
+    echo "FAIL [A8]: moat-spec.md §Lockfile heading not found"
+    fail=1
+  fi
+else
+  echo "FAIL [A8]: moat-spec.md missing"
+  fail=1
+fi
+
 if [[ "$fail" -ne 0 ]]; then
   echo "slice-4 conformance: FAIL"
   exit 1

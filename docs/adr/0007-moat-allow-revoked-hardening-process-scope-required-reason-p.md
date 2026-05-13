@@ -1,7 +1,7 @@
 # 0007. MOAT_ALLOW_REVOKED hardening — Process-scope + REQUIRED reason + per-entry RFC 3339 expiry vs Round 1 minimal form
 
 Date: 2026-05-09
-Status: Accepted
+Status: Superseded by ADR-0010
 Feature: npm-distribution-spec
 
 ## Context

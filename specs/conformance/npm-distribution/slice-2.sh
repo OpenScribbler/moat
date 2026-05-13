@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
-# Slice 2 conformance: specs/npm-distribution.md house-style header,
-# RFC-2119 heading parentheticals, no algorithm re-implementation,
-# revoked_hashes only cited (not redefined).
+# Slice 2 conformance (Round 3): single-path Rekor-query Publisher Verification.
+# Path 1 / rekorLogIndex hint is dropped (D2). The §Publisher Verification block
+# specifies one query algorithm, one tiebreaker rule (logIndex descending), and
+# one anti-rollback clause. The reference workflow no longer writes rekorLogIndex
+# and no longer needs `contents: write`.
+#
+# Red before slice-2 impl; green after.
 
 set -uo pipefail
 
@@ -10,77 +14,111 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$REPO_ROOT"
 
 spec=specs/npm-distribution.md
+mirror=website/src/content/docs/spec/npm-distribution.md
+refwf=reference/moat-npm-publisher.yml
 fail=0
 
-# A1: file exists.
 if [[ ! -f "$spec" ]]; then
-  echo "FAIL [A1]: $spec does not exist"
+  echo "FAIL [pre]: $spec missing"
+  echo "slice-2 conformance: FAIL"
+  exit 1
+fi
+if [[ ! -f "$refwf" ]]; then
+  echo "FAIL [pre]: $refwf missing"
   echo "slice-2 conformance: FAIL"
   exit 1
 fi
 
-# A2: house-style metadata header.
-header=$(head -9 "$spec")
-if ! echo "$header" | grep -qE '^# .+ Specification$'; then
-  echo "FAIL [A2]: H1 missing or not ending in 'Specification'"
-  fail=1
-fi
-if ! echo "$header" | grep -qE '^\*\*Version:\*\*'; then
-  echo "FAIL [A2]: missing **Version:** line"
-  fail=1
-fi
-if ! echo "$header" | grep -qE '^\*\*Requires:\*\*'; then
-  echo "FAIL [A2]: missing **Requires:** line"
-  fail=1
-fi
-if ! echo "$header" | grep -qE '^\*\*Part of:\*\* \[MOAT Specification\]\(\.\./moat-spec\.md\)'; then
-  echo "FAIL [A2]: **Part of:** must read '[MOAT Specification](../moat-spec.md)'"
-  fail=1
-fi
-if ! echo "$header" | grep -qE '^>'; then
-  echo "FAIL [A2]: missing blockquote one-liner under the metadata"
-  fail=1
-fi
-if ! echo "$header" | grep -qE '^---$'; then
-  echo "FAIL [A2]: missing trailing --- separator within first 9 lines"
+# A1: rekorLogIndex absent from spec body (D2: Path 1 dropped wholesale).
+if [[ $(grep -c rekorLogIndex "$spec") -eq 0 ]]; then
+  echo "OK  A1 rekorLogIndex absent from $spec"
+else
+  echo "FAIL A1 rekorLogIndex still present in $spec ($(grep -c rekorLogIndex "$spec") matches)"
   fail=1
 fi
 
-# A3: every '## ' heading ends in one of the RFC-2119 parentheticals.
-# Allowed: (normative), (normative — MUST), (normative — SHOULD), (informative), (optional).
-# Exempt: '## Scope' is a closing document-level meta-section (which versions
-# of npm distribution this sub-spec covers); it is neither normative nor
-# informative to the protocol, so it is exempt from the parenthetical rule.
-bad_headings=$(grep -nE '^## ' "$spec" | grep -vE ':## Scope[[:space:]]*$' | grep -vE '\((normative|informative|optional)([^)]*)?\)\s*$' || true)
-if [[ -n "$bad_headings" ]]; then
-  echo "FAIL [A3]: section headings missing RFC-2119 status parenthetical:"
-  echo "$bad_headings"
+# A2: rekorLogIndex absent from reference workflow.
+if [[ $(grep -c rekorLogIndex "$refwf") -eq 0 ]]; then
+  echo "OK  A2 rekorLogIndex absent from $refwf"
+else
+  echo "FAIL A2 rekorLogIndex still present in $refwf ($(grep -c rekorLogIndex "$refwf") matches)"
   fail=1
 fi
 
-# A4: algorithm is cited, not redefined. The reference algorithm in
-# reference/moat_hash.py uses 'def content_hash', 'rglob', and 'NFC'. The spec
-# MUST NOT include any of those literal markers.
-algo=$(grep -nE 'def content_hash|rglob|NFC' "$spec" || true)
-if [[ -n "$algo" ]]; then
-  echo "FAIL [A4]: algorithm appears to be re-implemented in the spec:"
-  echo "$algo"
+# A3: reference workflow's permissions block no longer requests `contents: write`.
+perm_block="$(awk '/^permissions:/{flag=1; next} flag && /^[^[:space:]]/{flag=0} flag' "$refwf")"
+if [[ -z "$perm_block" ]]; then
+  echo "FAIL A3 permissions: block not found in $refwf"
+  fail=1
+elif echo "$perm_block" | grep -E '^[[:space:]]+contents:[[:space:]]+write' >/dev/null; then
+  echo "FAIL A3 'contents: write' still present in $refwf permissions block"
+  fail=1
+else
+  echo "OK  A3 'contents: write' permission removed"
+fi
+
+# A4: §Publisher Verification block exists and contains the single-path tiebreaker
+# (logIndex + most-recent semantics) and the anti-rollback clause.
+pv_block="$(awk '/^## Publisher Verification/{flag=1; next} flag && /^## /{flag=0} flag' "$spec")"
+if [[ -z "$pv_block" ]]; then
+  echo "FAIL A4 §Publisher Verification section not found"
+  fail=1
+else
+  if echo "$pv_block" | grep -iE '(logIndex[^.]*most[[:space:]]+recent|most[[:space:]]+recent[^.]*logIndex|logIndex[^.]*descending|descending[^.]*logIndex)' >/dev/null; then
+    echo "OK  A4a tiebreaker phrase (logIndex + most-recent/descending) present"
+  else
+    echo "FAIL A4a tiebreaker phrase missing from §Publisher Verification"
+    fail=1
+  fi
+  if echo "$pv_block" | grep -iE '(anti[- ]rollback|strictly[[:space:]]+greater|never[[:space:]]+smaller|monotonic)' >/dev/null; then
+    echo "OK  A4b anti-rollback clause present"
+  else
+    echo "FAIL A4b anti-rollback clause missing from §Publisher Verification"
+    fail=1
+  fi
+  if echo "$pv_block" | grep -E '\*\*Path [12]' >/dev/null; then
+    echo "FAIL A4c Path 1 / Path 2 dichotomy header still present in §Publisher Verification"
+    fail=1
+  else
+    echo "OK  A4c Path 1 / Path 2 dichotomy removed"
+  fi
+fi
+
+# A5: publisherSigning.rekorLogIndex schema row is removed.
+if grep -nE '^\| `publisherSigning\.rekorLogIndex` \|' "$spec" >/dev/null; then
+  echo "FAIL A5 publisherSigning.rekorLogIndex schema row still present"
+  fail=1
+else
+  echo "OK  A5 publisherSigning.rekorLogIndex schema row removed"
+fi
+
+# A6: worked-example JSON no longer carries the rekorLogIndex line.
+ex_block="$(awk '/Worked example/,/^---$/' "$spec")"
+if echo "$ex_block" | grep -F 'rekorLogIndex' >/dev/null; then
+  echo "FAIL A6 worked-example JSON still contains rekorLogIndex"
+  fail=1
+else
+  echo "OK  A6 worked-example JSON no longer carries rekorLogIndex"
+fi
+
+# A7: website mirror parity after stripping frontmatter.
+if [[ -f "$mirror" ]]; then
+  diff <(sed '1,/^---$/d' "$mirror") "$spec" >/tmp/slice-2-mirror-diff.txt
+  if [[ $? -eq 0 ]]; then
+    echo "OK  A7 website mirror byte-identical to spec body after stripping front-matter"
+  else
+    echo "FAIL A7 website mirror diverges from spec (see /tmp/slice-2-mirror-diff.txt)"
+    fail=1
+  fi
+else
+  echo "FAIL A7 website mirror missing: $mirror"
   fail=1
 fi
 
-# A5: revoked_hashes mentions are references — not field-definition table rows.
-# A field-definition row matches a 3-column table with REQUIRED/OPTIONAL in the
-# Required column. Anything else is a reference.
-defs=$(grep -nE '^\s*\|.*\b(revoked_hashes)\b.*\|\s*(REQUIRED|OPTIONAL)' "$spec" || true)
-if [[ -n "$defs" ]]; then
-  echo "FAIL [A5]: revoked_hashes appears to be defined (table row), not just referenced:"
-  echo "$defs"
-  fail=1
-fi
-
-if [[ "$fail" -ne 0 ]]; then
+if [[ "$fail" -eq 0 ]]; then
+  echo "slice-2 conformance: OK"
+  exit 0
+else
   echo "slice-2 conformance: FAIL"
   exit 1
 fi
-echo "slice-2 conformance: OK"
-exit 0

@@ -19,7 +19,6 @@ on:
 
 permissions:
   id-token: write   # Required for Sigstore OIDC keyless signing
-  contents: write   # Required to commit the rekorLogIndex back to package.json
 
 jobs:
   publish:
@@ -104,40 +103,21 @@ jobs:
           echo "bundle=$bundle" >> "$GITHUB_OUTPUT"
 
       # ─────────────────────────────────────────────────────────────────────
-      # Step 4 — Capture the Rekor log index from the signed bundle.
+      # Step 4 — Write publisherSigning {issuer, subject} and distribution_uri
+      # back to package.json.
       #
-      # `cosign sign-blob` already pushed the entry to Rekor as part of step
-      # 3; this step parses the bundle's verificationMaterial.tlogEntries[0]
-      # to capture the log index for embedding back into package.json.
-      # ─────────────────────────────────────────────────────────────────────
-      - name: Capture Rekor log index from signed bundle
-        id: rekor
-        env:
-          BUNDLE: ${{ steps.sign.outputs.bundle }}
-        run: |
-          log_index=$(python3 -c '
-          import json, os, sys
-          with open(os.environ["BUNDLE"]) as f:
-              b = json.load(f)
-          entries = b.get("verificationMaterial", {}).get("tlogEntries", [])
-          if not entries:
-              sys.exit("no tlogEntries in bundle")
-          print(entries[0]["logIndex"])
-          ')
-          echo "log_index=$log_index" >> "$GITHUB_OUTPUT"
-
-      # ─────────────────────────────────────────────────────────────────────
-      # Step 5 — Write rekorLogIndex back to package.json.
-      #
-      # Writes `moat.publisherSigning.rekorLogIndex` (and the {issuer,
-      # subject} disclosure) back into package.json. Slice 1's default
-      # Content Directory rule excludes the root `package.json` from the
-      # canonical hash, so this edit does NOT change the canonical hash —
+      # Writes `moat.publisherSigning.{issuer, subject}` into package.json so
+      # a Conforming Client can locate this Publisher's Rekor entry by
+      # querying for {content_hash, issuer, subject} per §Publisher
+      # Verification. Also writes `moat.distribution_uri` — the canonical npm
+      # tarball URL for the published version, distinct from `source_uri`
+      # (the upstream git repo) per D9 / §package.json moat Block. Slice 1's
+      # default Content Directory rule excludes the root `package.json` from
+      # the canonical hash, so these edits do NOT change the canonical hash —
       # the v2 tarball will pack the same canonical bytes as v1.
       # ─────────────────────────────────────────────────────────────────────
-      - name: Write rekorLogIndex back to package.json
+      - name: Write publisherSigning and distribution_uri to package.json
         env:
-          LOG_INDEX: ${{ steps.rekor.outputs.log_index }}
           GITHUB_SERVER_URL: ${{ github.server_url }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_WORKFLOW_REF: ${{ github.workflow_ref }}
@@ -156,24 +136,35 @@ jobs:
           else:
               subject_path = workflow_ref
           subject = f"{server}/{repo}/{subject_path}"
-          pkg.setdefault("moat", {}).setdefault("publisherSigning", {}).update({
+          # Canonical npm tarball URL — distinct from source_uri (a git URL).
+          # For scoped packages (@scope/name), the tarball basename drops the
+          # @scope/ prefix per npm's URL convention.
+          name = pkg["name"]
+          version = pkg["version"]
+          basename = name.split("/", 1)[1] if name.startswith("@") else name
+          distribution_uri = (
+              f"https://registry.npmjs.org/{name}/-/{basename}-{version}.tgz"
+          )
+          moat_block = pkg.setdefault("moat", {})
+          moat_block.setdefault("publisherSigning", {}).update({
               "issuer": "https://token.actions.githubusercontent.com",
               "subject": subject,
-              "rekorLogIndex": int(os.environ["LOG_INDEX"]),
           })
+          moat_block["distribution_uri"] = distribution_uri
           with open("package.json", "w") as f:
               json.dump(pkg, f, indent=2)
               f.write("\n")
           PYEOF
 
       # ─────────────────────────────────────────────────────────────────────
-      # Step 6 — npm pack (v2).
+      # Step 5 — npm pack (v2).
       #
       # The v2 tarball includes the updated package.json (now carrying the
-      # rekorLogIndex hint). Because Slice 1's default Content Directory
-      # rule excludes the root `package.json`, the canonical Content Hash
-      # of v2 is byte-identical to v1's — the property the conformance test
-      # in `specs/conformance/npm-distribution/slice-8.sh` (A8) asserts.
+      # publisherSigning {issuer, subject} disclosure). Because Slice 1's
+      # default Content Directory rule excludes the root `package.json`, the
+      # canonical Content Hash of v2 is byte-identical to v1's — the
+      # property the conformance test in
+      # `specs/conformance/npm-distribution/slice-8.sh` (A8) asserts.
       # ─────────────────────────────────────────────────────────────────────
       - name: npm pack (v2 — post-sign tarball, identical canonical hash by Slice 1's exclusion rule)
         id: pack_v2
@@ -181,7 +172,7 @@ jobs:
           npm pack --pack-destination .moat-build/v2
 
       # ─────────────────────────────────────────────────────────────────────
-      # Step 7 — npm publish.
+      # Step 6 — npm publish.
       #
       # Publishes the v2 tarball to the npm Registry. NODE_AUTH_TOKEN is
       # supplied by the npm-publish secret configured on the repository.

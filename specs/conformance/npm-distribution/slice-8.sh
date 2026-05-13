@@ -10,11 +10,17 @@
 #
 # Asserts:
 # A1 — `reference/moat-npm-publisher.yml` exists.
-# A2 — workflow declares the 7 canonical work-steps in order:
+# A2 — workflow declares the 6 canonical work-steps in order:
 #       npm pack v1 → compute canonical hash → Sigstore sign →
-#       push to Rekor → write log index back to package.json →
-#       npm pack v2 → npm publish
-# A3 — permissions: id-token: write AND contents: write.
+#       write publisherSigning + distribution_uri → npm pack v2 → npm publish
+#       (Round-3: rekorLogIndex was removed by ADR-0011, so the Round-2
+#       "push to Rekor / write log index back" pair collapses into the
+#       single Sigstore sign step — cosign already pushes to Rekor — and
+#       the post-sign write step now records distribution_uri instead.)
+# A3 — permissions: id-token: write (Sigstore OIDC). contents: write is
+#       not required: the workflow no longer commits anything back to the
+#       repository; package.json edits stay local between npm pack v1 and
+#       npm pack v2.
 # A4 — workflow uses sigstore/cosign-installer@<sha-or-tag>.
 # A5 — on: covers release-tag push AND workflow_dispatch.
 # A6 — moat-spec.md:9 contains literal `specs/npm-distribution.md`.
@@ -58,8 +64,7 @@ else
         'name:[[:space:]]+.*npm[[:space:]]+pack.*v1|name:[[:space:]]+.*npm[[:space:]]+pack[[:space:]]+\(v1'
         'name:[[:space:]]+.*[Cc]ompute.*[Cc]anonical.*hash|name:[[:space:]]+.*[Cc]ompute.*MOAT.*hash'
         'name:[[:space:]]+.*[Ss]ign.*[Cc]anonical.*[Pp]ayload|name:[[:space:]]+.*[Ss]igstore.*sign|name:[[:space:]]+.*cosign[[:space:]]+sign'
-        'name:[[:space:]]+.*[Pp]ush.*Rekor|name:[[:space:]]+.*Rekor.*log[[:space:]]+index|name:[[:space:]]+.*[Cc]apture.*Rekor'
-        'name:[[:space:]]+.*[Ww]rite.*rekorLogIndex|name:[[:space:]]+.*[Ww]rite.*log[[:space:]]+index.*package\.json|name:[[:space:]]+.*[Ww]rite.*log[[:space:]]+index[[:space:]]+back'
+        'name:[[:space:]]+.*[Ww]rite.*publisherSigning.*distribution_uri|name:[[:space:]]+.*[Ww]rite.*publisherSigning|name:[[:space:]]+.*[Ww]rite.*distribution_uri.*package\.json'
         'name:[[:space:]]+.*npm[[:space:]]+pack.*v2|name:[[:space:]]+.*npm[[:space:]]+pack[[:space:]]+\(v2'
         'name:[[:space:]]+.*npm[[:space:]]+publish'
     )
@@ -67,10 +72,9 @@ else
         "step 1 (npm pack v1)"
         "step 2 (compute canonical hash)"
         "step 3 (Sigstore sign)"
-        "step 4 (push to Rekor)"
-        "step 5 (write log index back)"
-        "step 6 (npm pack v2)"
-        "step 7 (npm publish)"
+        "step 4 (write publisherSigning + distribution_uri)"
+        "step 5 (npm pack v2)"
+        "step 6 (npm publish)"
     )
     declare -a line_nums=()
     last_line=0
@@ -87,8 +91,8 @@ else
             last_line="$line_no"
         fi
     done
-    if [ "$ordering_ok" -eq 1 ] && [ "${#line_nums[@]}" -eq 7 ]; then
-        ok "all 7 canonical work-steps appear in order (lines ${line_nums[*]})"
+    if [ "$ordering_ok" -eq 1 ] && [ "${#line_nums[@]}" -eq 6 ]; then
+        ok "all 6 canonical work-steps appear in order (lines ${line_nums[*]})"
     fi
 fi
 
@@ -98,11 +102,6 @@ if [ -f "$yaml" ]; then
         ok "permissions: id-token: write"
     else
         no "permissions: missing 'id-token: write'"
-    fi
-    if grep -qE '^\s*contents:\s*write' "$yaml"; then
-        ok "permissions: contents: write"
-    else
-        no "permissions: missing 'contents: write'"
     fi
 fi
 
@@ -196,7 +195,9 @@ EOF
         return
     fi
 
-    # Edit package.json to add the publisherSigning rekorLogIndex hint.
+    # Edit package.json to add the publisherSigning identity disclosure
+    # and the distribution_uri field (Round-3: rekorLogIndex was removed,
+    # so the post-sign edit now records identity + tarball URL only).
     cat > "$fixture/package.json" <<EOF
 {
   "name": "@example/slice7-fixture",
@@ -205,9 +206,9 @@ EOF
   "moat": {
     "publisherSigning": {
       "issuer": "https://token.actions.githubusercontent.com",
-      "subject": "https://github.com/example/slice7-fixture/.github/workflows/moat-npm-publisher.yml@refs/heads/main",
-      "rekorLogIndex": 12345678
-    }
+      "subject": "https://github.com/example/slice7-fixture/.github/workflows/moat-npm-publisher.yml@refs/heads/main"
+    },
+    "distribution_uri": "https://registry.npmjs.org/@example/slice7-fixture/-/slice7-fixture-0.1.0.tgz"
   }
 }
 EOF

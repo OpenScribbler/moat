@@ -1,7 +1,7 @@
 # 0008. Publisher signing-identity location — Sigstore Rekor authoritative + package.json identity disclosure vs Bundle-in-package.json vs Rekor-only
 
 Date: 2026-05-09
-Status: Accepted
+Status: Superseded by ADR-0011
 Feature: npm-distribution-spec
 
 ## Context

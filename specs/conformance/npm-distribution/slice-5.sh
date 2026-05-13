@@ -111,6 +111,84 @@ if [[ -n "$forbidden" ]]; then
   fail=1
 fi
 
+# A7 (D9 Round 3): `moat.distribution_uri` field appears ≥ 2 times in the spec
+# (schema-row + at least one prose/example mention).
+spec=specs/npm-distribution.md
+n_du=$(grep -c 'distribution_uri' "$spec")
+n_du=${n_du:-0}
+if [[ "$n_du" -lt 2 ]]; then
+  echo "FAIL [A7]: expected ≥2 'distribution_uri' mentions in $spec, found $n_du"
+  fail=1
+else
+  echo "OK  [A7] distribution_uri appears $n_du times in $spec"
+fi
+
+# A8 (D9 Round 3): the schema-table row for `moat.distribution_uri` reads
+# REQUIRED-for-cooperative-Publishers. Anchored on the pipe-table row.
+if grep -nE '^\| `moat\.distribution_uri` \|' "$spec" >/dev/null; then
+  du_row="$(grep -nE '^\| `moat\.distribution_uri` \|' "$spec")"
+  if echo "$du_row" | grep -iE '(REQUIRED.*cooperative|cooperative.*REQUIRED|REQUIRED[[:space:]]+(when|for))' >/dev/null; then
+    echo "OK  [A8] distribution_uri schema row pins REQUIRED-for-cooperative-Publishers"
+  else
+    echo "FAIL [A8]: distribution_uri schema row lacks REQUIRED-for-cooperative-Publishers framing"
+    fail=1
+  fi
+else
+  echo "FAIL [A8]: distribution_uri schema-table row not found"
+  fail=1
+fi
+
+# A9 (D9 Round 3): the backfill block's `source_uri for npm-only items` paragraph
+# no longer overloads `source_uri` with the npm-tarball URL. After D9 the backfill
+# prose names `distribution_uri` (or otherwise removes the npm-tarball URL example)
+# from the `source_uri` MUST.
+backfill_block="$(awk '/^## Backfill Attestation by Registry/{flag=1; next} flag && /^## /{flag=0} flag' "$spec")"
+if [[ -z "$backfill_block" ]]; then
+  echo "FAIL [A9]: §Backfill Attestation by Registry section not found"
+  fail=1
+elif echo "$backfill_block" | grep -F 'distribution_uri' >/dev/null; then
+  if echo "$backfill_block" | grep -E '\*\*source_uri for npm-only items[^*]*MUST' >/dev/null; then
+    echo "FAIL [A9]: backfill still carries the Round-2 'source_uri for npm-only items (normative — MUST)' bold-label header"
+    fail=1
+  else
+    echo "OK  [A9] backfill prose names distribution_uri and drops the Round-2 source_uri-overload MUST"
+  fi
+else
+  echo "FAIL [A9]: backfill prose does not name distribution_uri"
+  fail=1
+fi
+
+# A10 (D9 Round 3): lexicon.md has an entry for **Distribution URI** that
+# distinguishes it from **Source URI** (or otherwise names distribution_uri).
+if [[ -f lexicon.md ]]; then
+  if grep -nE '^\| \*\*Distribution URI\*\* \|' lexicon.md >/dev/null \
+     || grep -F 'distribution_uri' lexicon.md >/dev/null; then
+    echo "OK  [A10] lexicon.md carries a Distribution URI / distribution_uri entry"
+  else
+    echo "FAIL [A10]: lexicon.md does not name Distribution URI / distribution_uri"
+    fail=1
+  fi
+else
+  echo "FAIL [A10]: lexicon.md missing"
+  fail=1
+fi
+
+# A11 (D9 Round 3): moat-spec.md is NOT touched by this slice (per the
+# Out-of-Scope rule: D9 is a sub-spec-only field; the core protocol stays
+# field-neutral). `source_uri` semantics at moat-spec.md:783 stay; no
+# distribution_uri mention.
+if [[ -f moat-spec.md ]]; then
+  if grep -F 'distribution_uri' moat-spec.md >/dev/null; then
+    echo "FAIL [A11]: moat-spec.md mentions distribution_uri (D9 is sub-spec-only)"
+    fail=1
+  else
+    echo "OK  [A11] moat-spec.md does not mention distribution_uri (D9 sub-spec-only invariant preserved)"
+  fi
+else
+  echo "FAIL [A11]: moat-spec.md missing"
+  fail=1
+fi
+
 if [[ "$fail" -ne 0 ]]; then
   echo "slice-5 conformance: FAIL"
   exit 1
