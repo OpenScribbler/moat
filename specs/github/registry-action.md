@@ -2,7 +2,7 @@
 
 **Version:** 0.2.0 (Draft)
 **Requires:** moat-spec.md ≥ 0.5.0
-**Part of:** [MOAT Specification](../moat-spec.md)
+**Part of:** [MOAT Specification](../../moat-spec.md)
 
 > The Registry Action is the standard mechanism for producing a MOAT registry manifest. Any GitHub repository becomes a registry with a single workflow file and a `.moat/registry.yml` config — no key management, no MOAT-specific knowledge required.
 
@@ -16,9 +16,9 @@
    b. Checks source repository visibility. If private and `allow-private-source: true` is not set, skips the source with a warning. See Private Repository Guard.
    c. Attempts to fetch `moat-attestation.json` from the source's `moat-attestation` branch. If the branch or file does not exist, the source contributes Signed items only.
 3. Discovers content items from each source via the same two-tier model as the Publisher Action: canonical category directories (`skills/`, `agents/`, `rules/`, `commands/`) or `.moat/publisher.yml` if present.
-4. Computes content hashes for all discovered items using the MOAT algorithm ([`reference/moat_hash.py`](../reference/moat_hash.py)).
+4. Computes content hashes for all discovered items using the MOAT algorithm ([`reference/moat_hash.py`](../../reference/moat_hash.py)).
 5. Determines trust tier per item. See Trust Tier Determination.
-6. Signs each Signed or Dual-Attested item's canonical payload with `cosign sign-blob --new-bundle-format` using Sigstore keyless OIDC. GitHub Actions provides the OIDC token automatically — no keys or secrets required. The `--new-bundle-format` flag is REQUIRED — it produces a Sigstore protobuf bundle v0.3 as mandated by [Signature Envelope](../moat-spec.md#signature-envelope). Records the Rekor log index from `verificationMaterial.tlogEntries[0].logIndex` per item.
+6. Signs each Signed or Dual-Attested item's canonical payload with `cosign sign-blob --new-bundle-format` using Sigstore keyless OIDC. GitHub Actions provides the OIDC token automatically — no keys or secrets required. The `--new-bundle-format` flag is REQUIRED — it produces a Sigstore protobuf bundle v0.3 as mandated by [Signature Envelope](../../moat-spec.md#signature-envelope). Records the Rekor log index from `verificationMaterial.tlogEntries[0].logIndex` per item.
 7. Assembles the registry manifest (`registry.json`) with all indexed items, revocations (registry-initiated from `.moat/registry.yml` plus publisher-initiated from `moat-attestation.json` sources), and metadata fields including the runtime-derived `registry_signing_profile`. Before writing the manifest, the action MUST verify that no two content entries share the same `(name, type)` compound key. If duplicates are detected, the action MUST exit non-zero with a clear error message identifying the conflicting entries and the source repositories they originated from. This enforces the normative uniqueness constraint at manifest generation time.
 8. Signs the assembled manifest with `cosign sign-blob --new-bundle-format`. The resulting Sigstore protobuf bundle v0.3 is written to `registry.json.sigstore` alongside `registry.json`.
 9. Pushes `registry.json` and `registry.json.sigstore` to the `moat-registry` branch with commit message `chore(moat): update registry manifest`. If the branch does not exist, the action creates it as an orphan. The `moat-registry` branch is never merged into the source branch — it contains only manifest data.
@@ -148,7 +148,7 @@ Each Signed or Dual-Attested item is attested with one registry-signed payload. 
 {"_version":1,"content_hash":"sha256:<hex>"}
 ```
 
-Serialization rules: UTF-8, no BOM, no trailing newline, no insignificant whitespace, lexicographic key order. The payload MUST be identical to the one produced by `moat-verify` for the same item. See [main spec attestation payload](../moat-spec.md#per-item-attestation-payload) for the full canonical form and test vector.
+Serialization rules: UTF-8, no BOM, no trailing newline, no insignificant whitespace, lexicographic key order. The payload MUST be identical to the one produced by `moat-verify` for the same item. See [main spec attestation payload](../../moat-spec.md#per-item-attestation-payload) for the full canonical form and test vector.
 
 **Registry Rekor entry:** `cosign sign-blob` creates a `hashedrekord` entry. The certificate subject encodes the GitHub Actions OIDC identity for the Registry Action workflow:
 

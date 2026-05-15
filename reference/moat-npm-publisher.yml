@@ -1,0 +1,185 @@
+name: MOAT npm Publisher
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TRIGGER CONFIGURATION
+#
+# Fires on a release-tag push (any tag matching `v*`) and on manual dispatch.
+# A release-tag push is the natural cadence for a Publisher publishing a new
+# version to the npm Registry; workflow_dispatch lets a Publisher re-run the
+# attestation flow for an existing tag without pushing a new tag.
+#
+# This workflow does NOT fire on every commit to main — npm publish is a
+# release event, not a per-commit event.
+# ─────────────────────────────────────────────────────────────────────────────
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # Required for Sigstore OIDC keyless signing
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@d7d6bc7722e3daa8354c50bcb52f4837da5e9b6a # v3.8.1
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+
+      # ─────────────────────────────────────────────────────────────────────
+      # Step 1 — npm pack (v1).
+      #
+      # Produces the pre-sign tarball. Its unpacked Content Directory (the
+      # tarball root with `package.json` excluded per Slice 1's default rule)
+      # is what the canonical MOAT Content Hash is computed against in step 2.
+      # ─────────────────────────────────────────────────────────────────────
+      - name: npm pack (v1 — pre-sign tarball, used to compute the canonical Content Directory hash)
+        id: pack_v1
+        run: |
+          mkdir -p .moat-build
+          npm pack --pack-destination .moat-build/v1
+          tarball=$(ls .moat-build/v1/*.tgz | head -1)
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+
+      # ─────────────────────────────────────────────────────────────────────
+      # Step 2 — Compute the canonical MOAT Content Directory hash.
+      #
+      # Extract the v1 tarball, remove the root `package.json` (default
+      # Content Directory rule), and run reference/moat_hash.py over the
+      # remaining tree. The resulting `sha256:<hex>` is the canonical
+      # Content Hash that the Sigstore signature will cover.
+      # ─────────────────────────────────────────────────────────────────────
+      - name: Compute MOAT canonical Content Directory hash
+        id: compute_hash
+        env:
+          TARBALL: ${{ steps.pack_v1.outputs.tarball }}
+        run: |
+          extract=$(mktemp -d)
+          tar -xzf "$TARBALL" -C "$extract"
+          rm -f "$extract/package/package.json"   # Slice 1 default rule
+          hash=$(python3 reference/moat_hash.py "$extract/package")
+          echo "content_hash=$hash" >> "$GITHUB_OUTPUT"
+
+      # ─────────────────────────────────────────────────────────────────────
+      # Step 3 — Sign the canonical attestation payload (Sigstore keyless).
+      #
+      # Writes the canonical payload `{"_version":1,"content_hash":"sha256:..."}`
+      # and signs it with `cosign sign-blob --new-bundle-format`. The signing
+      # certificate is bound to the GitHub Actions OIDC identity (issuer +
+      # subject = this workflow's ref).
+      # ─────────────────────────────────────────────────────────────────────
+      - name: Sign canonical attestation payload (Sigstore keyless)
+        id: sign
+        env:
+          CONTENT_HASH: ${{ steps.compute_hash.outputs.content_hash }}
+        run: |
+          payload_dir=$(mktemp -d)
+          payload="$payload_dir/payload.json"
+          bundle="$payload_dir/bundle.json"
+          printf '{"_version":1,"content_hash":"%s"}' "$CONTENT_HASH" > "$payload"
+          cosign sign-blob \
+            --new-bundle-format \
+            --bundle "$bundle" \
+            --yes \
+            "$payload"
+          echo "bundle=$bundle" >> "$GITHUB_OUTPUT"
+
+      # ─────────────────────────────────────────────────────────────────────
+      # Step 4 — Write publisherSigning {issuer, subject} and distribution_uri
+      # back to package.json.
+      #
+      # Writes `moat.publisherSigning.{issuer, subject}` into package.json so
+      # a Conforming Client can locate this Publisher's Rekor entry by
+      # querying for {content_hash, issuer, subject} per §Publisher
+      # Verification. Also writes `moat.distribution_uri` — the canonical npm
+      # tarball URL for the published version, distinct from `source_uri`
+      # (the upstream git repo) per D9 / §package.json moat Block. Slice 1's
+      # default Content Directory rule excludes the root `package.json` from
+      # the canonical hash, so these edits do NOT change the canonical hash —
+      # the v2 tarball will pack the same canonical bytes as v1.
+      # ─────────────────────────────────────────────────────────────────────
+      - name: Write publisherSigning and distribution_uri to package.json
+        env:
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_WORKFLOW_REF: ${{ github.workflow_ref }}
+        run: |
+          python3 - <<'PYEOF'
+          import json, os
+          with open("package.json") as f:
+              pkg = json.load(f)
+          server = os.environ["GITHUB_SERVER_URL"]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          workflow_ref = os.environ["GITHUB_WORKFLOW_REF"]
+          # GITHUB_WORKFLOW_REF is "owner/repo/.github/workflows/file.yml@ref".
+          # The OIDC subject form is the full URL.
+          if workflow_ref.startswith(repo + "/"):
+              subject_path = workflow_ref[len(repo) + 1:]
+          else:
+              subject_path = workflow_ref
+          subject = f"{server}/{repo}/{subject_path}"
+          # Canonical npm tarball URL — distinct from source_uri (a git URL).
+          # For scoped packages (@scope/name), the tarball basename drops the
+          # @scope/ prefix per npm's URL convention.
+          name = pkg["name"]
+          version = pkg["version"]
+          basename = name.split("/", 1)[1] if name.startswith("@") else name
+          distribution_uri = (
+              f"https://registry.npmjs.org/{name}/-/{basename}-{version}.tgz"
+          )
+          moat_block = pkg.setdefault("moat", {})
+          moat_block.setdefault("publisherSigning", {}).update({
+              "issuer": "https://token.actions.githubusercontent.com",
+              "subject": subject,
+          })
+          moat_block["distribution_uri"] = distribution_uri
+          with open("package.json", "w") as f:
+              json.dump(pkg, f, indent=2)
+              f.write("\n")
+          PYEOF
+
+      # ─────────────────────────────────────────────────────────────────────
+      # Step 5 — npm pack (v2).
+      #
+      # The v2 tarball includes the updated package.json (now carrying the
+      # publisherSigning {issuer, subject} disclosure). Because Slice 1's
+      # default Content Directory rule excludes the root `package.json`, the
+      # canonical Content Hash of v2 is byte-identical to v1's — the
+      # property the conformance test in
+      # `specs/conformance/npm-distribution/slice-8.sh` (A8) asserts.
+      # ─────────────────────────────────────────────────────────────────────
+      - name: npm pack (v2 — post-sign tarball, identical canonical hash by Slice 1's exclusion rule)
+        id: pack_v2
+        run: |
+          npm pack --pack-destination .moat-build/v2
+
+      # ─────────────────────────────────────────────────────────────────────
+      # Step 6 — npm publish.
+      #
+      # Publishes the v2 tarball to the npm Registry. NODE_AUTH_TOKEN is
+      # supplied by the npm-publish secret configured on the repository.
+      # ─────────────────────────────────────────────────────────────────────
+      - name: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          tarball=$(ls .moat-build/v2/*.tgz | head -1)
+          npm publish --access public "$tarball"

@@ -74,6 +74,9 @@ OWASP gap (Issues 10 and 11). Covers CICD-SEC-8 (federation security), API2:2023
 **Private registry auth and access control**
 Deferred alongside federation (Issues 10 and 11). Likely bundled with the federation milestone since both touch the same trust boundary.
 
+**Private-registry backfill (npm channel)**
+The npm Distribution sub-spec (`specs/npm-distribution.md`) covers only the public npm Registry (`registry.npmjs.org`). Registry backfill against a *private* npm-protocol-compatible registry — auth-required, access-controlled — is explicitly out of scope for the current sub-spec and is planned as a separate sub-spec (`specs/npm-distribution-private.md` or equivalent). Three design questions need answers before the spec text can be written: how a Registry authenticates to fetch a private tarball, how the `distribution_uri` field disambiguates between private-registry hosts when URLs are not globally unique, and how a Conforming Client distinguishes public-registry revocations from private-registry revocations. Likely bundled with the federation milestone since both touch the same trust boundary.
+
 ---
 
 ## Infrastructure

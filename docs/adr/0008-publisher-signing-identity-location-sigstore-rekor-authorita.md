@@ -1,0 +1,17 @@
+# 0008. Publisher signing-identity location — Sigstore Rekor authoritative + package.json identity disclosure vs Bundle-in-package.json vs Rekor-only
+
+Date: 2026-05-09
+Status: Superseded by ADR-0011
+Feature: npm-distribution-spec
+
+## Context
+
+Round 1 embedded the full Cosign Bundle in `package.json` to allow offline verification, but the Round 2 default-Content-Directory rule (C-1 + C-6b) requires excluding `package.json` from the canonical hash to prevent the chicken-and-egg with the log index. Once `package.json` is outside the canonical hash, embedding the bundle there has no security advantage over disclosing only the identity — the bundle itself is already in Rekor (that's what Rekor is for), and the `{issuer, subject}` pair plus the canonical hash plus a Rekor query is sufficient to recover the same bundle. Embedding the bundle inflates `package.json` size by tens of KB per role, every install fetches it whether or not it verifies, and it duplicates a trust anchor that already lives in a public log designed exactly for this purpose. Rekor-only with no disclosure (the second alternative) fails because a Conforming Client receiving a hash with no expected identity has no way to detect a Sigstore-valid signature from the wrong actor — any party that can produce a valid Sigstore signature over the canonical payload would be accepted. The `{issuer, subject}` disclosure is what binds the Rekor entry to the right Publisher identity, and it mirrors the GitHub flow's `signing_profile` model exactly (`moat-spec.md:790`).
+
+## Decision
+
+Chose **Sigstore Rekor authoritative; `package.json` carries `publisherSigning.{issuer, subject}` REQUIRED plus optional `publisherSigning.rekorLogIndex` discovery accelerator (C-6a)** over **Round 1's `attestations[].bundle` form (full Cosign Bundle base64-encoded inline in `package.json`); Rekor-only with no `package.json` disclosure (Conforming Client queries Rekor by canonical hash and trusts whatever identity it finds)**.
+
+## Consequences
+
+The Round 1 `moat.attestations[].bundle` field is replaced by the new `publisherSigning` block at the top level of the `moat` object. `publisherSigning.issuer` and `publisherSigning.subject` are REQUIRED; `publisherSigning.rekorLogIndex` is OPTIONAL. When `rekorLogIndex` is present, a Conforming Client MUST fetch the Rekor entry by index and MUST validate that the entry's signing identity matches `publisherSigning.{issuer, subject}` exactly. When `rekorLogIndex` is absent, a Conforming Client falls back to a Rekor query keyed on the canonical Content Hash and MUST filter results by the disclosed `{issuer, subject}` — the disclosed identity is the trust anchor, the log index is only a discovery accelerator. The Round 1 `attestations[]` array carrying both `role: "publisher"` and `role: "registry"` entries is preserved for the registry side (a Conforming Client still walks `attestations[]` to find registry entries); only the publisher side moves into `publisherSigning`. This consolidates the per-role cardinality (exactly one Publisher per package) into the JSON schema rather than enforcing it via the Round 1 "duplicate role is malformed" rule. The Round 2 sub-spec MUST cross-reference `moat-spec.md:790`'s `signing_profile` field-shape so a reader sees the cross-channel symmetry. A new ADR (proposed 0006) is warranted because this is a load-bearing change to the `package.json` schema introduced in Round 1.

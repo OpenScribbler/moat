@@ -88,6 +88,7 @@ export default defineConfig({
           items: [
             { label: 'Core spec', slug: 'spec/core' },
             { label: 'moat-verify', slug: 'spec/moat-verify' },
+            { label: 'npm Distribution', slug: 'spec/npm-distribution' },
             { label: 'Publisher Action', slug: 'spec/publisher-action' },
             { label: 'Registry Action', slug: 'spec/registry-action' },
           ],

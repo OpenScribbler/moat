@@ -756,7 +756,7 @@ jobs:
 
               # (name, type) uniqueness enforcement (moat-spec.md:
               # "content[].name + content[].type MUST be unique within a single manifest";
-              # registry-action.md step 7 — fail non-zero on duplicates.)
+              # specs/github/registry-action.md step 7 — fail non-zero on duplicates.)
               groups = {}
               for item in manifest_items:
                   groups.setdefault((item["name"], item["type"]), []).append(item)
