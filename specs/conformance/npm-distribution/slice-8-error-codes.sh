@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Slice 7 conformance (Round 3): Conformance error-code surface.
+# Slice 8 conformance (Round 3): Conformance error-code surface.
 #
 # Asserts that specs/npm-distribution.md carries a `## Conformance (normative)`
 # section whose body is a pipe table of error codes mapping the spec's
@@ -16,6 +16,9 @@
 # A6: every spec-internal file:line citation in the table points at a line
 #     that actually carries a MUST or MUST NOT — the codes can't decorate
 #     non-normative prose.
+# A7: no two codes in the table cite the same file:line — citation uniqueness
+#     keeps the one-MUST-per-code stability guarantee from ADR-0015 honest.
+# A8: website mirror parity (regression guard).
 
 set -uo pipefail
 
@@ -28,7 +31,7 @@ fail=0
 
 if [[ ! -f "$spec" ]]; then
   echo "FAIL [pre]: $spec missing"
-  echo "slice-7 (error codes) conformance: FAIL"
+  echo "slice-8 (error codes) conformance: FAIL"
   exit 1
 fi
 
@@ -156,25 +159,51 @@ if [[ -n "$conf_block" ]]; then
   fi
 fi
 
-# A7: website mirror parity (regression guard).
+# A7: citation uniqueness. Round 4 strengthens the one-MUST-per-code
+# stability guarantee from ADR-0015: every NPM-<SECTION>-<NN> row in the
+# §Conformance table MUST cite a distinct `specs/npm-distribution.md:<line>`
+# anchor. Two codes citing the same source line implies the line packs
+# more than one normative obligation, which makes any future edit to that
+# line ambiguous as to which code's MUST changed. A6 catches anchors that
+# drift off MUST lines; A7 catches anchors that share a MUST line.
+if [[ -n "$conf_block" ]]; then
+  all_citations="$(echo "$conf_block" \
+    | grep -oE 'specs/npm-distribution\.md:[0-9]+' || true)"
+  if [[ -z "$all_citations" ]]; then
+    echo "FAIL [A7]: no spec-internal file:line citations found in §Conformance table"
+    fail=1
+  else
+    dup_citations="$(echo "$all_citations" | sort | uniq -d || true)"
+    if [[ -n "$dup_citations" ]]; then
+      echo "FAIL [A7]: duplicate citations in §Conformance table (one MUST per code):"
+      echo "$dup_citations" | sed 's/^/  /'
+      fail=1
+    else
+      n_unique="$(echo "$all_citations" | sort -u | wc -l)"
+      echo "OK  [A7] all $n_unique citations are unique (one MUST per code)"
+    fi
+  fi
+fi
+
+# A8: website mirror parity (regression guard).
 mirror=website/src/content/docs/spec/npm-distribution.md
 if [[ ! -f "$mirror" ]]; then
-  echo "FAIL [A7]: $mirror does not exist"
+  echo "FAIL [A8]: $mirror does not exist"
   fail=1
 else
   mirror_h1="$(grep -m1 '^# ' "$mirror" || true)"
   canon_h1="$(grep -m1 '^# ' "$spec" || true)"
   if [[ "$mirror_h1" == "$canon_h1" && -n "$mirror_h1" ]]; then
-    echo "OK  [A7] mirror first H1 matches canonical"
+    echo "OK  [A8] mirror first H1 matches canonical"
   else
-    echo "FAIL [A7]: mirror H1 mismatch (mirror='$mirror_h1' canon='$canon_h1')"
+    echo "FAIL [A8]: mirror H1 mismatch (mirror='$mirror_h1' canon='$canon_h1')"
     fail=1
   fi
 fi
 
 if [[ "$fail" -ne 0 ]]; then
-  echo "slice-7 (error codes) conformance: FAIL"
+  echo "slice-8 (error codes) conformance: FAIL"
   exit 1
 fi
-echo "slice-7 (error codes) conformance: OK"
+echo "slice-8 (error codes) conformance: OK"
 exit 0
