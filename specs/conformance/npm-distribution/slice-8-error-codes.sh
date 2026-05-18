@@ -13,12 +13,17 @@
 # A3: every code matches NPM-<SECTION>-<NN> pattern.
 # A4: no duplicate codes within the table.
 # A5: at least one sibling slice-*.sh script cites at least one code.
-# A6: every spec-internal file:line citation in the table points at a line
-#     that actually carries a MUST or MUST NOT — the codes can't decorate
-#     non-normative prose.
-# A7: no two codes in the table cite the same file:line — citation uniqueness
-#     keeps the one-MUST-per-code stability guarantee from ADR-0015 honest.
+# A6: every <path>:<line> citation in the table points at a line that
+#     actually carries a MUST or MUST NOT — the codes can't decorate
+#     non-normative prose. Citations may target specs/npm-distribution.md,
+#     moat-spec.md, or any specs/**/*.md file.
+# A7: no two codes in the table cite the same <path>:<line> — citation
+#     uniqueness keeps the one-MUST-per-code stability guarantee from
+#     ADR-0015 honest.
 # A8: website mirror parity (regression guard).
+# A9: every <path>:<line> citation in the spec body OUTSIDE §Conformance
+#     also points at a line carrying MUST, MUST NOT, or SHOULD. Closes the
+#     gap left by A6/A7, which only cover the §Conformance table.
 
 set -uo pipefail
 
@@ -125,25 +130,32 @@ else
   echo "OK  [A5] $n_files sibling slice script(s) cite at least one NPM-... code"
 fi
 
-# A6: every spec-internal file:line citation in the table points at a line
-# that carries MUST or MUST NOT. The plan's `specs/npm-distribution.md:NNN`
-# pattern is the canonical citation form. We extract each citation, read
-# the cited line, and assert it matches `MUST` or `MUST NOT`. A miss means
-# a code was hooked to a non-normative line (a heading, an example, or
-# editorial prose), which would defeat the surface.
+# A6: every <path>:<line> citation in the table points at a line that
+# carries MUST or MUST NOT. The `<path>:<line>` form is the canonical
+# citation form (see .claude/rules/spec-citations.md). Citations may
+# target specs/npm-distribution.md, moat-spec.md, or any specs/**/*.md
+# file. For each citation we read the cited path at the cited line and
+# assert it matches `MUST` or `MUST NOT`. A miss means a code was hooked
+# to a non-normative line (a heading, an example, or editorial prose),
+# which would defeat the surface.
 if [[ -n "$conf_block" ]]; then
   citations="$(echo "$conf_block" \
-    | grep -oE 'specs/npm-distribution\.md:[0-9]+' \
+    | grep -oE '(specs/[a-zA-Z0-9_./-]+\.md|moat-spec\.md):[0-9]+' \
     | sort -u || true)"
   if [[ -z "$citations" ]]; then
-    echo "FAIL [A6]: no spec-internal file:line citations found in §Conformance table"
+    echo "FAIL [A6]: no file:line citations found in §Conformance table"
     fail=1
   else
     bad_citations=""
     while IFS= read -r cite; do
       [[ -z "$cite" ]] && continue
-      lineno="${cite##*:}"
-      cited_line="$(sed -n "${lineno}p" "$spec" || true)"
+      cite_path="${cite%:*}"
+      cite_line="${cite##*:}"
+      if [[ ! -f "$cite_path" ]]; then
+        bad_citations="${bad_citations}${cite} → (cited path does not exist)\n"
+        continue
+      fi
+      cited_line="$(sed -n "${cite_line}p" "$cite_path" || true)"
       if ! echo "$cited_line" | grep -qE '\b(MUST|MUST NOT)\b'; then
         bad_citations="${bad_citations}${cite} → '${cited_line}'\n"
       fi
@@ -154,7 +166,7 @@ if [[ -n "$conf_block" ]]; then
       fail=1
     else
       n_cites="$(echo "$citations" | wc -l)"
-      echo "OK  [A6] all $n_cites spec citations point at lines carrying MUST / MUST NOT"
+      echo "OK  [A6] all $n_cites citations point at lines carrying MUST / MUST NOT"
     fi
   fi
 fi
@@ -168,9 +180,9 @@ fi
 # drift off MUST lines; A7 catches anchors that share a MUST line.
 if [[ -n "$conf_block" ]]; then
   all_citations="$(echo "$conf_block" \
-    | grep -oE 'specs/npm-distribution\.md:[0-9]+' || true)"
+    | grep -oE '(specs/[a-zA-Z0-9_./-]+\.md|moat-spec\.md):[0-9]+' || true)"
   if [[ -z "$all_citations" ]]; then
-    echo "FAIL [A7]: no spec-internal file:line citations found in §Conformance table"
+    echo "FAIL [A7]: no file:line citations found in §Conformance table"
     fail=1
   else
     dup_citations="$(echo "$all_citations" | sort | uniq -d || true)"
@@ -198,6 +210,49 @@ else
   else
     echo "FAIL [A8]: mirror H1 mismatch (mirror='$mirror_h1' canon='$canon_h1')"
     fail=1
+  fi
+fi
+
+# A9: body-prose citations to <path>:<line> anchors. A6/A7 only see
+# citations inside the §Conformance table. Cross-spec references in the
+# spec body (e.g., `moat-spec.md:636` in §Revocation, `moat-spec.md:807`
+# in §Backfill) are unmonitored by those lints. A9 closes the gap: every
+# <path>:<line> citation in the spec body OUTSIDE §Conformance must
+# point at a line carrying MUST, MUST NOT, or SHOULD. Body prose may
+# legitimately cite SHOULDs (unlike the §Conformance table, which is
+# scoped to refusal codes — MUST/MUST NOT only).
+body_block="$(awk '
+  /^## Conformance \(normative\)/{flag=1; next}
+  flag && /^## /{flag=0}
+  !flag {print}
+' "$spec")"
+body_citations="$(echo "$body_block" \
+  | grep -oE '(specs/[a-zA-Z0-9_./-]+\.md|moat-spec\.md):[0-9]+' \
+  | sort -u || true)"
+if [[ -z "$body_citations" ]]; then
+  echo "OK  [A9] no body-prose citations to verify"
+else
+  bad_body=""
+  while IFS= read -r cite; do
+    [[ -z "$cite" ]] && continue
+    cite_path="${cite%:*}"
+    cite_line="${cite##*:}"
+    if [[ ! -f "$cite_path" ]]; then
+      bad_body="${bad_body}${cite} → (cited path does not exist)\n"
+      continue
+    fi
+    cited_line="$(sed -n "${cite_line}p" "$cite_path" || true)"
+    if ! echo "$cited_line" | grep -qE '\b(MUST|MUST NOT|SHOULD)\b'; then
+      bad_body="${bad_body}${cite} → '${cited_line}'\n"
+    fi
+  done <<< "$body_citations"
+  if [[ -n "$bad_body" ]]; then
+    echo "FAIL [A9]: body-prose citations point at lines without MUST / MUST NOT / SHOULD:"
+    printf '%b' "$bad_body"
+    fail=1
+  else
+    n_body="$(echo "$body_citations" | wc -l)"
+    echo "OK  [A9] all $n_body body-prose citations point at lines carrying MUST / MUST NOT / SHOULD"
   fi
 fi
 
