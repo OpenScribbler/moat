@@ -10,7 +10,9 @@
 #
 # A1: §Conformance (normative) section exists.
 # A2: error-code table has ≥ 30 rows.
-# A3: every code matches NPM-<SECTION>-<NN> pattern.
+# A3: every code matches NPM-<SECTION>-<NN> pattern, optionally with a
+#     single-letter split-suffix (e.g. NPM-SCOPE-01-A) for codes that split
+#     a single failure mode into co-adjacent failure-mode variants.
 # A4: no duplicate codes within the table.
 # A5: at least one sibling slice-*.sh script cites at least one code.
 # A6: every <path>:<line> citation in the table points at a line that
@@ -24,6 +26,9 @@
 # A9: every <path>:<line> citation in the spec body OUTSIDE §Conformance
 #     also points at a line carrying MUST, MUST NOT, or SHOULD. Closes the
 #     gap left by A6/A7, which only cover the §Conformance table.
+# A10: every code listed in specs/conformance/npm-distribution/error-codes.lock
+#     still appears in the §Conformance table (live row or `Reserved (was: …)`
+#     row). Makes the ADR-0015 code-stability contract programmatic.
 
 set -uo pipefail
 
@@ -74,8 +79,10 @@ fi
 
 # A3: every code in the table matches NPM-<SECTION>-<NN> pattern, where
 # SECTION is one or more uppercase letters and NN is at least two digits.
-# Codes appear in the first cell of each data row. We extract them and
-# reject any that don't match the pattern.
+# A single-letter split-suffix (e.g. -A, -B) is permitted to allow a
+# single failure mode to be split into co-adjacent variants without
+# colliding with the linear -NN sequence. Codes appear in the first cell
+# of each data row. We extract them and reject any that don't match.
 if [[ -n "$conf_block" ]]; then
   codes="$(echo "$conf_block" \
     | grep -E '^\| *`?NPM-' \
@@ -85,14 +92,14 @@ if [[ -n "$conf_block" ]]; then
     echo "FAIL [A3]: no NPM-... codes found in §Conformance table"
     fail=1
   else
-    bad="$(echo "$codes" | grep -vE '^NPM-[A-Z]+-[0-9]{2,}$' || true)"
+    bad="$(echo "$codes" | grep -vE '^NPM-[A-Z]+-[0-9]{2,}(-[A-Z])?$' || true)"
     if [[ -n "$bad" ]]; then
-      echo "FAIL [A3]: codes do not match NPM-<SECTION>-<NN> pattern:"
+      echo "FAIL [A3]: codes do not match NPM-<SECTION>-<NN>(-<X>)? pattern:"
       echo "$bad"
       fail=1
     else
       n_codes="$(echo "$codes" | wc -l)"
-      echo "OK  [A3] all $n_codes codes match NPM-<SECTION>-<NN> pattern"
+      echo "OK  [A3] all $n_codes codes match NPM-<SECTION>-<NN>(-<X>)? pattern"
     fi
   fi
 fi
@@ -253,6 +260,38 @@ else
   else
     n_body="$(echo "$body_citations" | wc -l)"
     echo "OK  [A9] all $n_body body-prose citations point at lines carrying MUST / MUST NOT / SHOULD"
+  fi
+fi
+
+# A10: code-stability lock. ADR-0015 commits the spec to a one-way
+# ratchet on `NPM-<SECTION>-<NN>(-<X>)?` codes: once a code is shipped, it
+# MUST keep appearing in the §Conformance table (live or as `Reserved
+# (was: ...)`). A6/A7 protect the citation form of each row; A10 protects
+# the code-identifier surface itself. Every code listed in the lock file
+# must be present in the §Conformance table; the table is free to grow
+# beyond the lock (additions are allowed, removals and renames are not).
+lock_file=specs/conformance/npm-distribution/error-codes.lock
+if [[ ! -f "$lock_file" ]]; then
+  echo "FAIL [A10]: $lock_file missing — ADR-0015 stability contract has no anchor"
+  fail=1
+elif [[ -z "${codes:-}" ]]; then
+  echo "FAIL [A10]: §Conformance table produced no codes — cannot evaluate lock"
+  fail=1
+else
+  locked="$(grep -vE '^#|^[[:space:]]*$' "$lock_file" | sort -u)"
+  if [[ -z "$locked" ]]; then
+    echo "OK  [A10] lock file present but empty — no codes locked yet"
+  else
+    table_codes="$(echo "$codes" | sort -u)"
+    missing="$(comm -23 <(echo "$locked") <(echo "$table_codes"))"
+    if [[ -n "$missing" ]]; then
+      echo "FAIL [A10]: locked codes missing from §Conformance table (rename/remove blocked by ADR-0015):"
+      echo "$missing" | sed 's/^/  /'
+      fail=1
+    else
+      n_locked="$(echo "$locked" | wc -l)"
+      echo "OK  [A10] all $n_locked locked codes present in §Conformance table"
+    fi
   fi
 fi
 

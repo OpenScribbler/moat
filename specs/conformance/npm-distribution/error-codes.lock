@@ -1,0 +1,64 @@
+# npm-distribution error-code stability lock.
+#
+# ADR-0015 establishes the stability contract for `NPM-<SECTION>-<NN>(-<X>)?`
+# error codes: once a code is in the §Conformance (normative) table of
+# specs/npm-distribution.md, its spelling MUST NOT change and its meaning
+# MUST NOT be repurposed. Obsoleted codes MUST be retained as
+# `Reserved (was: <description>)` rows rather than reused or removed.
+#
+# This file makes that contract programmatic. Every line below names a
+# code that the spec has committed to. The slice-8 conformance script
+# (A10) verifies that every code listed here still appears in the table
+# (either as a live row or as `Reserved (was: ...)`). New codes added to
+# the table are allowed without a lock entry; removals and renames are
+# blocked.
+#
+# Maintenance:
+# - When a new code is introduced and the spec is cut to a release tag,
+#   append the code to this file in the same PR that bumps the version.
+# - Never remove a line. To obsolete a code, change its row in the table
+#   to `Reserved (was: <prior description>)` and leave the lock entry.
+# - Comment lines (starting with `#`) and blank lines are ignored by the
+#   lint.
+
+NPM-BACKFILL-01
+NPM-BACKFILL-02
+NPM-BACKFILL-03
+NPM-BACKFILL-04
+NPM-BACKFILL-05
+NPM-CDIR-01
+NPM-CDIR-02
+NPM-CDIR-03
+NPM-CDIR-04
+NPM-CDIR-05
+NPM-DUAL-01
+NPM-DUAL-02
+NPM-HASH-01
+NPM-HASH-02
+NPM-HASH-03
+NPM-HASH-04
+NPM-PAYLOAD-01
+NPM-PROV-01
+NPM-PROV-02
+NPM-PROV-03
+NPM-PROV-04
+NPM-PUB-01
+NPM-PUB-02
+NPM-PUB-03
+NPM-PUB-04
+NPM-PUB-05
+NPM-PUB-06
+NPM-REV-01
+NPM-REV-02
+NPM-REV-03
+NPM-REV-04
+NPM-REV-05
+NPM-REV-06
+NPM-REV-07
+NPM-SCHEMA-01
+NPM-SCHEMA-02
+NPM-SCHEMA-03
+NPM-SCHEMA-04
+NPM-SCHEMA-05
+NPM-SCOPE-01-A
+NPM-SCOPE-01-B
