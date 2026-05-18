@@ -37,7 +37,7 @@ These anchors are meaningful to readers and should be cited where relevant:
 
 - CVE identifiers (e.g., `CVE-2024-23651`)
 - External standards and their section numbers (e.g., TUF, in-toto, SLSA, OWASP, RFC 3339)
-- Spec file locations and section headings (e.g., `moat-spec.md §Trust Model`, `specs/publisher-action.md`)
+- Spec file locations and section headings (e.g., `moat-spec.md §Trust Model`, `specs/github/publisher-action.md`)
 - Published test vector IDs (e.g., `TV-09`, `TV-MH4`) — these are part of the spec surface, not internal tracking
 
 ## Structure

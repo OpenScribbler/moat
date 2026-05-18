@@ -32,8 +32,8 @@ MOAT does **not** define the internal format of content items. Skills, hooks, ru
 |---|---|
 | [`moat-spec.md`](moat-spec.md) | Core specification — registry manifest format, content hashing, signing, lockfile, revocation |
 | [`specs/moat-verify.md`](specs/moat-verify.md) | `moat-verify` — reference verification tool specification |
-| [`specs/publisher-action.md`](specs/publisher-action.md) | Publisher Action — GitHub Actions workflow specification for source-repo attestation |
-| [`specs/registry-action.md`](specs/registry-action.md) | Registry Action — GitHub Actions workflow specification for registry manifest publishing |
+| [`specs/github/publisher-action.md`](specs/github/publisher-action.md) | Publisher Action — GitHub Actions workflow specification for source-repo attestation |
+| [`specs/github/registry-action.md`](specs/github/registry-action.md) | Registry Action — GitHub Actions workflow specification for registry manifest publishing |
 
 ---
 

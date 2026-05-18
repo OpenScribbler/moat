@@ -96,7 +96,7 @@ One-sentence summary of the release theme.
 
 ## Sub-specification versioning
 
-`specs/moat-verify.md` and `specs/publisher-action.md` are versioned independently from the core specification using the same SemVer rules and stage labels.
+`specs/moat-verify.md` and `specs/github/publisher-action.md` are versioned independently from the core specification using the same SemVer rules and stage labels.
 
 Each sub-spec header carries:
 - Its own version number

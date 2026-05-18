@@ -245,7 +245,7 @@ Once your `moat-attestation.json` is published, any registry that includes your 
 
 If all four pass, your item is indexed as `Dual-Attested` and the `signing_profile` field is written to the manifest entry.
 
-You don't need to notify registries — they crawl on schedule. If the registry supports the optional webhook, you can configure it for faster propagation (see `registry-webhook` in the [Publisher Action spec](../../specs/publisher-action.md)).
+You don't need to notify registries — they crawl on schedule. If the registry supports the optional webhook, you can configure it for faster propagation (see `registry-webhook` in the [Publisher Action spec](../../specs/github/publisher-action.md)).
 
 ---
 

@@ -1,0 +1,18 @@
+# 0011. Single-path Rekor query — content-hash query filtered by `{issuer, subject}` vs `publisherSigning.rekorLogIndex` accelerator
+
+Date: 2026-05-12
+Status: Accepted
+Feature: npm-distribution-spec
+Supersedes: ADR-0008
+
+## Context
+
+ADR-0008 kept `publisherSigning.rekorLogIndex` as an OPTIONAL "discovery accelerator" alongside the hash-keyed Rekor query, on the theory that a Conforming Client could skip the query step when the Publisher had recorded the index in `package.json`. Round-3 reviewers (Remy, SpecPurist, Karpathy) converged: two verification paths is two implementations to test, two failure modes to enumerate, and two ways for a Conforming Client to drift from the spec without any external observer noticing. The Path 1 (`rekorLogIndex`) acceleration is also nominal — the Rekor public API serves the index-keyed lookup and the hash-keyed query off the same hot path, so the "accelerator" framing overstates the real performance delta against the cost of carrying a second normative algorithm in the spec. The deeper failure is the trust shape: a `rekorLogIndex` written into `package.json` by a Publisher who later turns out to be compromised points the Conforming Client at an attacker-chosen Rekor entry; the Client still has to verify the entry's signing identity matches `{issuer, subject}`, but the index field has *zero* security value if the Client must verify identity anyway. Worse, the existence of the field invites implementations that trust the index and skip the identity check — exactly the "works fine without it" failure mode (`CLAUDE.md:125`) the protocol forbids. Dropping `rekorLogIndex` entirely makes the single normative algorithm load-bearing (`specs/npm-distribution.md:117`): query Rekor by `content_hash`, filter by `{issuer, subject}`, refuse on zero matches.
+
+## Decision
+
+Chose **Single-path Rekor query: a Conforming Client MUST query Rekor for entries whose payload `content_hash` matches the canonical Content Hash, MUST filter the result set by the `{issuer, subject}` pair from `publisherSigning`, and MUST refuse if zero entries match. The `publisherSigning.rekorLogIndex` field is removed from the schema.** over **Preserve `rekorLogIndex` as an OPTIONAL accelerator with a "Client MUST verify the entry's identity matches `{issuer, subject}`" guardrail (ADR-0008's Round-2 shape); preserve `rekorLogIndex` as REQUIRED to eliminate the dual-path conformance burden (every Publisher must record the index)**.
+
+## Consequences
+
+The `publisherSigning.rekorLogIndex` field is gone from the schema in `specs/npm-distribution.md`. The §Publisher Verification section carries exactly one query algorithm; conformance code `NPM-PUB-01` anchors on the single MUST at `specs/npm-distribution.md:117`, `NPM-PUB-02` anchors on the zero-match refusal, and `NPM-PUB-03` anchors on the certificate-identity match. The reference workflow `reference/moat-npm-publisher.yml` no longer writes `rekorLogIndex` into `package.json`; the workflow's bundle-derivation step is shorter as a result. A package that was published under the Round-2 schema and carried `rekorLogIndex` is still valid — the field is simply ignored on read (the Round-3 schema does not list it, but the JSON object permits unknown keys per §Schema). The ADR-0008 Decision's choice of "Sigstore Rekor authoritative; `package.json` carries `publisherSigning.{issuer, subject}` REQUIRED" is preserved; only the `rekorLogIndex` accelerator choice is reversed. This is the second Round-3 reversal that follows the supersession convention codified in ADR-0014 (the meta-ADR): the new ADR carries `Supersedes:` between `Feature:` and the blank line, and ADR-0008's `Status:` is flipped to `Superseded by ADR-0011`.

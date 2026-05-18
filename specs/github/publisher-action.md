@@ -2,7 +2,7 @@
 
 **Version:** 0.2.0 (Draft)
 **Requires:** moat-spec.md ≥ 0.5.0
-**Part of:** [MOAT Specification](../moat-spec.md)
+**Part of:** [MOAT Specification](../../moat-spec.md)
 
 > The Publisher Action is the primary adoption mechanism for the `Dual-Attested` trust tier. Any source repo adopts it with a single workflow file — no key management, no MOAT-specific knowledge required.
 
@@ -12,9 +12,9 @@
 
 1. Detects source repository visibility. If `private` or `internal` and `allow-private-repo: true` is not set, exits immediately with a non-zero code and a clear error message. See Private Repository Guard.
 2. Discovers content items via two-tier model: canonical category directories (`skills/`, `agents/`, `rules/`, `commands/`) or `.moat/publisher.yml` if present.
-3. Computes content hashes using the MOAT algorithm ([`reference/moat_hash.py`](../reference/moat_hash.py)). Errors (symlinks, empty directories) skip the item with a logged warning.
+3. Computes content hashes using the MOAT algorithm ([`reference/moat_hash.py`](../../reference/moat_hash.py)). Errors (symlinks, empty directories) skip the item with a logged warning.
 4. Builds one attestation payload JSON per content item (schema below).
-5. Signs each payload with `cosign sign-blob --new-bundle-format` using Sigstore keyless OIDC. GitHub Actions provides the OIDC token automatically — no keys or secrets required. The `--new-bundle-format` flag is REQUIRED — it produces a Sigstore protobuf bundle v0.3 as mandated by [Signature Envelope](../moat-spec.md#signature-envelope). The workflow path and branch are encoded into the OIDC certificate at signing time and recorded automatically in `publisher_workflow_ref` in `moat-attestation.json`. Registries read this field to derive the expected OIDC subject for publisher verification — no manual filename configuration is needed.
+5. Signs each payload with `cosign sign-blob --new-bundle-format` using Sigstore keyless OIDC. GitHub Actions provides the OIDC token automatically — no keys or secrets required. The `--new-bundle-format` flag is REQUIRED — it produces a Sigstore protobuf bundle v0.3 as mandated by [Signature Envelope](../../moat-spec.md#signature-envelope). The workflow path and branch are encoded into the OIDC certificate at signing time and recorded automatically in `publisher_workflow_ref` in `moat-attestation.json`. Registries read this field to derive the expected OIDC subject for publisher verification — no manual filename configuration is needed.
 6. Rekor creates a transparency log entry. `cosign` returns a v0.3 bundle. The Publisher Action reads the Rekor log id from `verificationMaterial.tlogEntries[0].logId.keyId` and the log index from `verificationMaterial.tlogEntries[0].logIndex`, and records them as `rekor_log_id` and `rekor_log_index` in `moat-attestation.json`.
 7. Writes/updates `moat-attestation.json` with Rekor references for each attested item, including the `private_repo` field.
 8. Pushes `moat-attestation.json` to the `moat-attestation` branch with commit message `chore(moat): update attestation`. If the branch does not exist, the action creates it. The `moat-attestation` branch is never merged into the source branch — it contains only attestation data.
@@ -152,7 +152,7 @@ Location: `moat-attestation` branch root. One file per repo. The file is never p
 
 Publishers can post signed Rekor revocation entries without waiting for their registry to update. To revoke: add an entry to `moat-attestation.json` revocations and trigger the action. It posts a signed Rekor revocation entry and optionally notifies the registry via webhook.
 
-Publisher revocations are **warnings, not hard blocks.** The registry is the gating authority for hard blocks. This prevents abuse (compromised publisher accounts triggering mass revocations). See [main spec](../moat-spec.md) for full client behavior rules.
+Publisher revocations are **warnings, not hard blocks.** The registry is the gating authority for hard blocks. This prevents abuse (compromised publisher accounts triggering mass revocations). See [main spec](../../moat-spec.md) for full client behavior rules.
 
 ---
 

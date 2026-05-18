@@ -6,7 +6,7 @@
 **Editor:** Holden Hewett
 **License:** Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 **Repository:** https://github.com/OpenScribbler/moat
-**Sub-specs:** [`specs/publisher-action.md`](specs/publisher-action.md), [`specs/registry-action.md`](specs/registry-action.md), [`specs/moat-verify.md`](specs/moat-verify.md)
+**Sub-specs:** [`specs/github/publisher-action.md`](specs/github/publisher-action.md), [`specs/github/registry-action.md`](specs/github/registry-action.md), [`specs/moat-verify.md`](specs/moat-verify.md), [`specs/npm-distribution.md`](specs/npm-distribution.md)
 **OWASP alignment:** [`docs/owasp-alignment.md`](docs/owasp-alignment.md)
 
 ### Document Status
@@ -100,7 +100,7 @@ requires clients to surface trust tier and revocation state clearly so the End U
 
 **Publisher** — Creates content and keeps it in a source repository. Wants accurate source attribution, visible lineage
 for forks, and an optional low-friction way to co-attest content from the source repository. A publisher may adopt the
-[Publisher Action](specs/publisher-action.md) to produce source-side attestations, but MOAT does not require the
+[Publisher Action](specs/github/publisher-action.md) to produce source-side attestations, but MOAT does not require the
 publisher to run a registry or implement client behavior.
 
 **Registry Operator** — Runs a registry that crawls or ingests content from source repositories, computes content
@@ -140,12 +140,12 @@ MOAT ecosystem:
 MOAT trust chain for a content item without installing or executing it. Its use case is diagnosis, validation, and
 interoperability testing. It is therefore not a conforming client and not a runtime.
 
-**[Publisher Action](specs/publisher-action.md)** — A GitHub Actions workflow that publishers can adopt to generate
+**[Publisher Action](specs/github/publisher-action.md)** — A GitHub Actions workflow that publishers can adopt to generate
 source-side attestations. This is normative for the Dual-Attested trust tier, but it is not required to run a registry
 or be a conforming client. Registries that want to support Dual-Attested content MUST be able to consume attestations
 produced by the Publisher Action.
 
-**[Registry Action](specs/registry-action.md)** — A GitHub Actions workflow that registry operators adopt to crawl
+**[Registry Action](specs/github/registry-action.md)** — A GitHub Actions workflow that registry operators adopt to crawl
 publisher sources, compute content hashes, determine trust tiers, sign the manifest, and publish it. This is the
 normative mechanism for producing a MOAT registry manifest. A publisher who also runs the Registry Action from the same
 repository is a self-publishing operator.
@@ -215,7 +215,7 @@ with content hashes, per-item metadata, and the registry's signature logged to R
 
 The **Publisher Action** (optional) allows source repos to co-sign their own content, enabling the Dual-Attested tier.
 Registries can also crawl from sources with no MOAT awareness. Full spec:
-[`specs/publisher-action.md`](specs/publisher-action.md)
+[`specs/github/publisher-action.md`](specs/github/publisher-action.md)
 
 ### 3. Conforming Clients
 
@@ -278,12 +278,12 @@ skills/
 agents/
 ```
 
-The [Publisher Action](specs/publisher-action.md) uses a two-tier discovery model:
+The [Publisher Action](specs/github/publisher-action.md) uses a two-tier discovery model:
 
 - **Tier 1:** Canonical category directories
 - **Tier 2:** `.moat/publisher.yml` for custom layouts; when present it overrides Tier 1
 
-`moat-attestation.json` is a reserved filename. The [Publisher Action](specs/publisher-action.md) writes this file to a
+`moat-attestation.json` is a reserved filename. The [Publisher Action](specs/github/publisher-action.md) writes this file to a
 dedicated `moat-attestation` branch — it is never present in the source branch and is therefore never included in
 content hashing. Publishers MUST NOT create files named `moat-attestation.json` anywhere in their source branch; such
 files have no protocol meaning and their presence is a conformance error.
@@ -678,8 +678,8 @@ These items are required for conformance. A conforming registry, a conforming cl
   test vectors. Two independent implementations in different languages must pass all test vectors before the spec
   advances beyond Draft.
 - **[`reference/moat_verify.py`](reference/moat_verify.py)** — `moat-verify` reference implementation (Python). Spec: [`specs/moat-verify.md`](specs/moat-verify.md)
-- **[`reference/moat-publisher.yml`](reference/moat-publisher.yml)** — Publisher Action workflow template. Spec: [`specs/publisher-action.md`](specs/publisher-action.md)
-- **[`reference/moat-registry.yml`](reference/moat-registry.yml)** — Registry Action workflow template. Spec: [`specs/registry-action.md`](specs/registry-action.md)
+- **[`reference/moat-publisher.yml`](reference/moat-publisher.yml)** — Publisher Action workflow template. Spec: [`specs/github/publisher-action.md`](specs/github/publisher-action.md)
+- **[`reference/moat-registry.yml`](reference/moat-registry.yml)** — Registry Action workflow template. Spec: [`specs/github/registry-action.md`](specs/github/registry-action.md)
 - **[`reference/generate_test_vectors.py`](reference/generate_test_vectors.py)** — **Normative.** See [Reference implementations](#reference-implementations) above for the authoritative description.
 
 ### Informative profiles
@@ -1065,7 +1065,7 @@ payload = json.dumps(
   from the manifest entry alone. Verifiers reconstruct the payload from the `content_hash` field and verify the
   signature without storing extra registry context in the Rekor record.
 
-See [Publisher Action](specs/publisher-action.md#attestation-payload-schema-normative) for the publisher-side
+See [Publisher Action](specs/github/publisher-action.md#attestation-payload-schema-normative) for the publisher-side
 signing requirement.
 
 ---

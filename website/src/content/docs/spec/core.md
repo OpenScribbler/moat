@@ -6,7 +6,7 @@ description: The MOAT core specification — provenance and integrity protocol f
 :::note[Spec metadata]
 **Version:** 0.7.1 (Draft) · **Editor:** Holden Hewett · **License:** Apache-2.0 · **Repository:** [OpenScribbler/moat](https://github.com/OpenScribbler/moat)
 
-**Sub-specs:** [Publisher Action](/spec/publisher-action) · [Registry Action](/spec/registry-action) · [moat-verify](/spec/moat-verify)
+**Sub-specs:** [Publisher Action](/spec/publisher-action) · [Registry Action](/spec/registry-action) · [npm Distribution](/spec/npm-distribution) · [moat-verify](/spec/moat-verify)
 :::
 
 ### Document Status
