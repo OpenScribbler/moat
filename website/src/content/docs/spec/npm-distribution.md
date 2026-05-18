@@ -4,7 +4,7 @@ description: "MOAT npm Distribution sub-specification — how MOAT attestations 
 ---
 # npm Distribution Specification
 
-**Version:** 0.2.0 (Draft)
+**Version:** 0.3.0 (Draft)
 **Requires:** moat-spec.md ≥ 0.7.1
 **Part of:** [MOAT Specification](../moat-spec.md)
 
@@ -263,7 +263,8 @@ This section enumerates the refusal modes a Conforming Client MAY emit when an n
 | `NPM-PROV-02` | npm provenance signal used to compute, raise, or lower the MOAT Trust Tier. | `specs/npm-distribution.md:183` |
 | `NPM-PROV-03` | Both-present display inferred one signal from the other. | `specs/npm-distribution.md:194` |
 | `NPM-PROV-04` | Provenance-only Content Item not displayed as `Unsigned`. | `specs/npm-distribution.md:196` |
-| `NPM-SCOPE-01` | `distribution_uri` host is not `registry.npmjs.org` and the Content Item was attested or refused on the basis of this sub-spec rather than treated as outside its coverage. | `specs/npm-distribution.md:272` |
+| `NPM-SCOPE-01-A` | `distribution_uri` host is not `registry.npmjs.org` and the Content Item was *wrongly attested* on the basis of this sub-spec rather than treated as outside its coverage. | `specs/npm-distribution.md:275` |
+| `NPM-SCOPE-01-B` | `distribution_uri` host is not `registry.npmjs.org` and the Content Item was *wrongly refused* on the basis of this sub-spec rather than treated as outside its coverage. | `specs/npm-distribution.md:277` |
 
 ---
 
@@ -273,10 +274,16 @@ This section enumerates the refusal modes a Conforming Client MAY emit when an n
 
 **Planned future version:** Other registry transports — PyPI for Python content, Cargo for Rust, container registries for OCI-packaged content — will require their own sub-specs at this same boundary level. Those transports differ enough in tarball layout, manifest format, and registry-side attestation primitives that a single combined sub-spec would obscure rather than clarify. This sub-spec reserves no normative ground over those transports; future MOAT versions will add per-transport sub-specs as the transports themselves stabilize.
 
-**Out-of-spec host coverage (`NPM-SCOPE-01`):** A Conforming Client encountering a `distribution_uri` whose host is not `registry.npmjs.org` MUST treat the item as outside this sub-spec's normative coverage — neither attested nor refused on the basis of this sub-spec alone. Private-registry hosts and other npm-protocol-compatible registries fall under this rule until their respective sub-specs are published; the rationale is described informatively under §Out of Scope below.
+**Out-of-spec host coverage (`NPM-SCOPE-01-A` / `NPM-SCOPE-01-B`):** A Conforming Client encountering a `distribution_uri` whose host is not `registry.npmjs.org` MUST treat the item as outside this sub-spec's normative coverage. The two failure modes are split below so an operator reading logs can distinguish which guard tripped.
+
+A Conforming Client MUST NOT emit a positive attestation result on the basis of this sub-spec when the `distribution_uri` host is not `registry.npmjs.org` (wrongly-attested failure mode — surfaced as `NPM-SCOPE-01-A`).
+
+A Conforming Client MUST NOT emit a refusal on the basis of this sub-spec when the `distribution_uri` host is not `registry.npmjs.org` (wrongly-refused failure mode — surfaced as `NPM-SCOPE-01-B`).
+
+Private-registry hosts and other npm-protocol-compatible registries fall under this rule until their respective sub-specs are published; the rationale is described informatively under §Out of Scope below.
 
 ### Out of Scope
 
-**Private-registry backfill:** This sub-spec does not cover Registry backfill against a *private* npm registry (an authenticated, access-controlled npm-protocol-compatible registry — for example, an enterprise-internal mirror at `npm.internal.example.com`). The public-`registry.npmjs.org`-only scope is deliberate: a private-registry backfill flow would need to resolve at least three additional questions that are out of scope here — (1) how a Registry authenticates to fetch a private tarball without the Publisher's credentials, (2) how the Registry expresses *which* private registry a `distribution_uri` points at when the URL alone is not globally unique, and (3) how a Conforming Client distinguishes "this hash is revoked on the public registry" from "this hash is revoked on a specific private registry". Each of those three has its own ADR-shaped design question and cannot be answered by extending this sub-spec piecewise. A future sub-spec at `specs/npm-distribution-private.md` (or equivalent) will cover the private-registry case. The normative obligation that a Conforming Client treat a non-`registry.npmjs.org` `distribution_uri` as outside this sub-spec's coverage is stated in §Scope above (`NPM-SCOPE-01`), so this paragraph carries only the informative rationale. The planned future direction is recorded in [`ROADMAP.md`](../ROADMAP.md).
+**Private-registry backfill:** This sub-spec does not cover Registry backfill against a *private* npm registry (an authenticated, access-controlled npm-protocol-compatible registry — for example, an enterprise-internal mirror at `npm.internal.example.com`). The public-`registry.npmjs.org`-only scope is deliberate: a private-registry backfill flow would need to resolve at least three additional questions that are out of scope here — (1) how a Registry authenticates to fetch a private tarball without the Publisher's credentials, (2) how the Registry expresses *which* private registry a `distribution_uri` points at when the URL alone is not globally unique, and (3) how a Conforming Client distinguishes "this hash is revoked on the public registry" from "this hash is revoked on a specific private registry". Each of those three has its own ADR-shaped design question and cannot be answered by extending this sub-spec piecewise. A future sub-spec at `specs/npm-distribution-private.md` (or equivalent) will cover the private-registry case. The normative obligation that a Conforming Client treat a non-`registry.npmjs.org` `distribution_uri` as outside this sub-spec's coverage is stated in §Scope above (`NPM-SCOPE-01-A` / `NPM-SCOPE-01-B`), so this paragraph carries only the informative rationale. The planned future direction is recorded in [`ROADMAP.md`](../ROADMAP.md).
 
 **Runtime gating by AI agent runtimes:** Already covered by the §Revocation §Post-materialization revocation paragraph above; restated here for completeness. Runtime execution gating sits in the AI-agent-runtime layer, outside MOAT's protocol boundary as defined in [`moat-spec.md` §Conforming Client](../moat-spec.md#conforming-client).
