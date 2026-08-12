@@ -3,8 +3,8 @@
   "manifest_uri": "https://raw.githubusercontent.com/OpenScribbler/moat/moat-registry/registry.json",
   "name": "moat-spec-registry",
   "operator": "Holden Hewett",
-  "updated_at": "2026-08-11T01:06:58Z",
-  "expires": "2026-08-14T01:06:58Z",
+  "updated_at": "2026-08-12T01:14:40Z",
+  "expires": "2026-08-15T01:14:40Z",
   "self_published": true,
   "registry_signing_profile": {
     "issuer": "https://token.actions.githubusercontent.com",
