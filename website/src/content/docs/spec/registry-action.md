@@ -4,7 +4,7 @@ description: "Specification for the MOAT Registry Action GitHub Actions workflow
 ---
 
 :::note[Spec metadata]
-**Version:** 0.2.0 (Draft) · **Requires:** moat-spec.md ≥ 0.5.0
+**Version:** 0.3.0 (Draft) · **Requires:** moat-spec.md ≥ 0.5.0
 :::
 
 The Registry Action is the standard mechanism for producing a MOAT registry manifest. Any GitHub repository becomes a registry with a single workflow file and a `.moat/registry.yml` config — no key management, no MOAT-specific knowledge required.

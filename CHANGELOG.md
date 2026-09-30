@@ -2,9 +2,9 @@
 
 All notable changes to the MOAT specification are documented in this file.
 
-## [Unreleased]
+## [0.8.0] — 2026-09-30 (Draft)
 
-Breaking change: the cosign bundle format is now pinned to Sigstore protobuf bundle v0.3. Conforming Publisher Actions and Registry Actions MUST invoke `cosign sign-blob --new-bundle-format`. The legacy JSON bundle layout (top-level `base64Signature` / `cert` / `rekorBundle`) is no longer supported. Strict consumers (e.g., sigstore-go) reject legacy bundles, so any registry that emitted them is unverifiable by modern clients and MUST republish. New sub-spec: `specs/npm-distribution.md` defines how MOAT attestations travel via the npm Registry. The two GitHub-specific sub-specs have moved into `specs/github/` with no normative change.
+npm distribution sub-spec, Sigstore bundle v0.3 pin, and a default-branch guard for the Registry Action. Publisher Action and Registry Action sub-specs bump to 0.3.0; `specs/npm-distribution.md` ships at 0.3.0. Breaking change: the cosign bundle format is now pinned to Sigstore protobuf bundle v0.3. Conforming Publisher Actions and Registry Actions MUST invoke `cosign sign-blob --new-bundle-format`. The legacy JSON bundle layout (top-level `base64Signature` / `cert` / `rekorBundle`) is no longer supported. Strict consumers (e.g., sigstore-go) reject legacy bundles, so any registry that emitted them is unverifiable by modern clients and MUST republish. New sub-spec: `specs/npm-distribution.md` defines how MOAT attestations travel via the npm Registry. The two GitHub-specific sub-specs have moved into `specs/github/` with no normative change.
 
 ### Added
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Slice 5 conformance: website spec mirror, Astro sidebar entry, and
-# CHANGELOG [Unreleased] entries (Added bullet citing the new sub-spec,
+# CHANGELOG [0.8.0] entries (Added bullet citing the new sub-spec,
 # Changed bullets for the GitHub reorg with 'no normative change' phrasing).
 
 set -uo pipefail
@@ -49,39 +49,39 @@ else
   fi
 fi
 
-# A3: '## [Unreleased]' appears exactly once in the first 40 lines of CHANGELOG.md.
-n_unreleased=$(head -40 CHANGELOG.md | grep -cE '^## \[Unreleased\]' 2>/dev/null)
+# A3: '## [0.8.0]' appears exactly once in the first 40 lines of CHANGELOG.md.
+n_unreleased=$(head -40 CHANGELOG.md | grep -cE '^## \[0\.8\.0\]' 2>/dev/null)
 n_unreleased=${n_unreleased:-0}
 if [[ "$n_unreleased" -ne 1 ]]; then
-  echo "FAIL [A3]: expected exactly 1 '## [Unreleased]' heading in head -40 of CHANGELOG.md, found $n_unreleased"
+  echo "FAIL [A3]: expected exactly 1 '## [0.8.0]' heading in head -40 of CHANGELOG.md, found $n_unreleased"
   fail=1
 fi
 
-# A3 continued: extract the [Unreleased] block (lines after the heading,
+# A3 continued: extract the [0.8.0] block (lines after the heading,
 # up to the next versioned heading), and assert both ### Added and
 # ### Changed sub-headings appear within it.
-unreleased_block=$(awk '/^## \[Unreleased\]/{flag=1; next} /^## \[[0-9]/{flag=0} flag' CHANGELOG.md)
+unreleased_block=$(awk '/^## \[0\.8\.0\]/{flag=1; next} /^## \[[0-9]/{flag=0} flag' CHANGELOG.md)
 if ! echo "$unreleased_block" | grep -qE '^### Added[[:space:]]*$'; then
-  echo "FAIL [A3]: '### Added' missing from [Unreleased] block"
+  echo "FAIL [A3]: '### Added' missing from [0.8.0] block"
   fail=1
 fi
 if ! echo "$unreleased_block" | grep -qE '^### Changed[[:space:]]*$'; then
-  echo "FAIL [A3]: '### Changed' missing from [Unreleased] block"
+  echo "FAIL [A3]: '### Changed' missing from [0.8.0] block"
   fail=1
 fi
 
 # A4: bold-label '**specs/npm-distribution.md**' appears at least once in
-# the [Unreleased] block — a reader scanning the changelog can see that the
+# the [0.8.0] block — a reader scanning the changelog can see that the
 # new sub-spec is the headline content of this release.
 n_npm=$(echo "$unreleased_block" | grep -cE '\*\*specs/npm-distribution\.md\*\*' 2>/dev/null)
 n_npm=${n_npm:-0}
 if [[ "$n_npm" -lt 1 ]]; then
-  echo "FAIL [A4]: '**specs/npm-distribution.md**' missing from [Unreleased] block"
+  echo "FAIL [A4]: '**specs/npm-distribution.md**' missing from [0.8.0] block"
   fail=1
 fi
 
 # A5: bold-label '**specs/github/<publisher|registry>-action.md**' appears
-# at least twice in the [Unreleased] block (one for each sub-spec moved),
+# at least twice in the [0.8.0] block (one for each sub-spec moved),
 # and every such line contains the literal phrase 'no normative change'
 # per .claude/rules/changelog.md (path-only moves are PATCH-level).
 github_lines=$(echo "$unreleased_block" | grep -nE '\*\*specs/github/(publisher|registry)-action\.md\*\*' || true)
@@ -90,7 +90,7 @@ if [[ -n "$github_lines" ]]; then
   n_github=$(echo "$github_lines" | wc -l)
 fi
 if [[ "$n_github" -lt 2 ]]; then
-  echo "FAIL [A5]: expected ≥2 '**specs/github/{publisher|registry}-action.md**' bullets in [Unreleased], found $n_github"
+  echo "FAIL [A5]: expected ≥2 '**specs/github/{publisher|registry}-action.md**' bullets in [0.8.0], found $n_github"
   fail=1
 fi
 if [[ -n "$github_lines" ]]; then
@@ -103,10 +103,10 @@ if [[ -n "$github_lines" ]]; then
 fi
 
 # A6: changelog convention lint — no panel/persona/finding-ID markers in
-# the [Unreleased] section per .claude/rules/changelog.md.
+# the [0.8.0] section per .claude/rules/changelog.md.
 forbidden=$(echo "$unreleased_block" | grep -niE '(panel|persona|five-persona|adversarial|reviewer feedback|agent consensus|SC-[0-9]|DQ-[0-9]|SB-[0-9])' || true)
 if [[ -n "$forbidden" ]]; then
-  echo "FAIL [A6]: forbidden process-metadata phrases found in [Unreleased] block:"
+  echo "FAIL [A6]: forbidden process-metadata phrases found in [0.8.0] block:"
   echo "$forbidden"
   fail=1
 fi

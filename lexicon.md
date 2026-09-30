@@ -96,7 +96,7 @@ _This lexicon is biased toward terms the upcoming `npm-distribution-spec` work w
 | **Test Vector** | One of the canonical input/output pairs produced by `reference/generate_test_vectors.py`. Test vectors are the **normative** specification of correct hashing output — when implementation and vector disagree, the implementation is wrong. | "test case" (loose; test vectors are the normative artifact), "fixture" |
 | **Conforming Implementation** | An implementation that produces output matching all test vectors (for hashing) and meets all MUST-level requirements (for clients, registries, verifiers). | "compliant implementation", "MOAT-compatible" |
 | **Schema Version** | An integer version on the manifest, lockfile, registry index, or attestation payload that gates format evolution. Distinct from MOAT's overall spec semver version. | "version" (alone — collides with `content[].version` display label and the spec version), "format version" |
-| **Spec Version** | The semver number of `moat-spec.md` itself (currently 0.7.1 Draft). Distinct from any `schema_version` field. | "MOAT version" (loose), "protocol version" |
+| **Spec Version** | The semver number of `moat-spec.md` itself (currently 0.8.0 Draft). Distinct from any `schema_version` field. | "MOAT version" (loose), "protocol version" |
 
 ## Relationships
 

@@ -83,7 +83,7 @@ jobs:
         run: |
           python3 << 'PYEOF'
           """
-          MOAT Registry Action — reference implementation v0.2.0
+          MOAT Registry Action — reference implementation v0.3.0
 
           Reads .moat/registry.yml, crawls sources, determines trust tiers, signs
           per-item canonical payloads and the manifest, writes registry.json
@@ -250,7 +250,7 @@ jobs:
           def is_private_uri(uri):
               """True if the URI is not accessible to unauthenticated requests."""
               try:
-                  req = urllib.request.Request(uri, headers={"User-Agent": "moat-registry-action/0.2.0"})
+                  req = urllib.request.Request(uri, headers={"User-Agent": "moat-registry-action/0.3.0"})
                   urllib.request.urlopen(req, timeout=10)
                   return False
               except urllib.error.HTTPError as e:

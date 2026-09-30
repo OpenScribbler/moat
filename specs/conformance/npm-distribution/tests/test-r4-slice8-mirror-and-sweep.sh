@@ -7,7 +7,7 @@
 #       canonical specs/npm-distribution.md, AND R4 anchors that landed in
 #       slices 6-7 (NPM-SCOPE-01, the snake_case editorial note) are
 #       present in the mirror.
-#   8.2 [Unreleased] CHANGELOG body carries no panel/persona/finding-ID
+#   8.2 [0.8.0] CHANGELOG body carries no panel/persona/finding-ID
 #       language — the changelog-rule MUST list (panel, persona, reviewer,
 #       adversarial, consensus, and `SC-N`/`DQ-N`/`SB-N` finding-ID
 #       patterns) is rejected.
@@ -60,14 +60,14 @@ else
   fail=1
 fi
 
-# 8.2: [Unreleased] CHANGELOG body has no internal-process language.
+# 8.2: [0.8.0] CHANGELOG body has no internal-process language.
 unreleased_body="$(awk '
-  /^## \[Unreleased\]/{p=1; next}
+  /^## \[0\.8\.0\]/{p=1; next}
   p && /^## \[/{exit}
   p {print}
 ' "$CHANGELOG")"
 if [[ -z "$unreleased_body" ]]; then
-  echo "FAIL [slice-8.2] no [Unreleased] section found in CHANGELOG"
+  echo "FAIL [slice-8.2] no [0.8.0] section found in CHANGELOG"
   fail=1
 else
   # Scan for forbidden internal-process tokens. Pattern is anchored on
@@ -77,9 +77,9 @@ else
     | grep -inE '\b(panel|persona|adversarial|reviewer feedback|agent consensus)\b|\b(SC|DQ|SB)-[0-9]+\b' \
     || true)"
   if [[ -z "$bad" ]]; then
-    echo "OK   [slice-8.2] [Unreleased] CHANGELOG body free of internal-process language"
+    echo "OK   [slice-8.2] [0.8.0] CHANGELOG body free of internal-process language"
   else
-    echo "FAIL [slice-8.2] [Unreleased] CHANGELOG body carries forbidden internal-process tokens:"
+    echo "FAIL [slice-8.2] [0.8.0] CHANGELOG body carries forbidden internal-process tokens:"
     echo "$bad" | sed 's/^/  /'
     fail=1
   fi
