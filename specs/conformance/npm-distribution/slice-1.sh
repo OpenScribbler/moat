@@ -46,7 +46,7 @@ fi
 # "let backfill work" as informative rationale; Round 3 requires a normative
 # scope marker — one of: "for Registry-backfilled items only", "scoped to
 # Registry-backfilled", or "applies when a Registry backfills".
-default_block="$(awk '/\*\*Default \(normative — MUST\):/,/\*\*Subdirectory mode/' "$spec")"
+default_block="$(awk '/\*\*Default rule for Registry-backfilled items \(normative — MUST\):/,/\*\*Subdirectory mode/' "$spec")"
 if [[ -z "$default_block" ]]; then
   echo "FAIL A3 Default-mode normative block not found at expected anchor"
   fail=1
@@ -58,8 +58,9 @@ else
 fi
 
 # A4 (D5): exclusion-list MUST is reframed as a two-layer composition.
-# Anchored on the "Fixed exclusion list (normative — MUST)" block.
-excl_block="$(awk '/\*\*Fixed exclusion list \(normative — MUST\):/,/\*\*Rationale/' "$spec")"
+# Anchored on the "Fixed exclusion list — layering" block through the
+# "No Publisher extension" MUST NOT that follows it.
+excl_block="$(awk '/\*\*Fixed exclusion list — layering/,/\*\*Rationale/' "$spec")"
 if [[ -z "$excl_block" ]]; then
   echo "FAIL A4 Fixed-exclusion-list block not found at expected anchor"
   fail=1

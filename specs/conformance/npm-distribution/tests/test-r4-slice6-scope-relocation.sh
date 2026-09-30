@@ -77,29 +77,32 @@ else
   fail=1
 fi
 
-# Assertion 6.4: the §Conformance table row for NPM-SCOPE-01 cites a
+# Assertion 6.4: the §Conformance table rows for NPM-SCOPE-01-A and
+# NPM-SCOPE-01-B (the R5 split of NPM-SCOPE-01) each cite a
 # specs/npm-distribution.md:<line> anchor pointing at a MUST/MUST NOT line.
-scope_row="$(grep -E '^\| `NPM-SCOPE-01`' "$SPEC" | head -1)"
-if [[ -z "$scope_row" ]]; then
-  echo "FAIL [slice-6.4]: no §Conformance table row for NPM-SCOPE-01 found"
-  fail=1
-else
+for code in NPM-SCOPE-01-A NPM-SCOPE-01-B; do
+  scope_row="$(grep -E "^\| \`${code}\`" "$SPEC" | head -1)"
+  if [[ -z "$scope_row" ]]; then
+    echo "FAIL [slice-6.4]: no §Conformance table row for ${code} found"
+    fail=1
+    continue
+  fi
   scope_cite="$(echo "$scope_row" | grep -oE 'specs/npm-distribution\.md:[0-9]+' | head -1)"
   if [[ -z "$scope_cite" ]]; then
-    echo "FAIL [slice-6.4]: NPM-SCOPE-01 row has no specs/npm-distribution.md:<line> citation"
+    echo "FAIL [slice-6.4]: ${code} row has no specs/npm-distribution.md:<line> citation"
     fail=1
-  else
-    cited_line="${scope_cite##*:}"
-    target="$(sed -n "${cited_line}p" "$SPEC")"
-    if echo "$target" | grep -qE '\bMUST(\b| NOT\b)'; then
-      echo "OK   [slice-6.4] NPM-SCOPE-01 cites $scope_cite which carries MUST/MUST NOT"
-    else
-      echo "FAIL [slice-6.4]: NPM-SCOPE-01 cites $scope_cite which does NOT carry MUST/MUST NOT"
-      echo "  cited line: $target"
-      fail=1
-    fi
+    continue
   fi
-fi
+  cited_line="${scope_cite##*:}"
+  target="$(sed -n "${cited_line}p" "$SPEC")"
+  if echo "$target" | grep -qE '\bMUST(\b| NOT\b)'; then
+    echo "OK   [slice-6.4] ${code} cites $scope_cite which carries MUST/MUST NOT"
+  else
+    echo "FAIL [slice-6.4]: ${code} cites $scope_cite which does NOT carry MUST/MUST NOT"
+    echo "  cited line: $target"
+    fail=1
+  fi
+done
 
 if (( fail == 0 )); then
   echo "slice-6 (scope-relocation) conformance: OK"
