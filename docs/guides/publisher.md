@@ -23,7 +23,7 @@ When a registry crawls your repository, it checks whether you have a `moat-attes
 
 The Publisher Action finds content items using the same two-tier model as the Registry Action:
 
-**Tier 1 — canonical directories:** Any of `skills/`, `subagents/`, `rules/`, `commands/` at the repository root. Each subdirectory inside one of these is treated as one content item.
+**Tier 1 — canonical directories:** Any of `skills/`, `agents/`, `rules/`, `commands/` at the repository root. Each subdirectory inside one of these is treated as one content item.
 
 ```
 my-repo/
@@ -262,7 +262,7 @@ If you rename the workflow file after your first run, the existing Rekor entries
 **Run succeeds but `moat-attestation` branch doesn't exist**
 
 The action only creates the branch if it finds content items. Check:
-- Your repo has at least one content directory (`skills/`, `subagents/`, `rules/`, `commands/`) or a `.moat/publisher.yml` config
+- Your repo has at least one content directory (`skills/`, `agents/`, `rules/`, `commands/`) or a `.moat/publisher.yml` config
 - Content directories are not empty
 
 **`rekor_log_index` is missing from an item**
