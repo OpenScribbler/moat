@@ -67,7 +67,7 @@ Copy the workflow file from the [Registry Action spec](/spec/registry-action) to
 
 The workflow is pre-configured with:
 - A daily schedule (`cron: '0 0 * * *'`)
-- A push trigger on `.moat/registry.yml` changes (for emergency revocation)
+- A push trigger on `.moat/registry.yml` changes to your default branch (for emergency revocation). The trigger lists `main`; change it if your default branch has another name. Runs from any other branch fail on purpose, because the manifest's signing identity includes the branch.
 - `workflow_dispatch` for manual runs
 
 ### 3. Verify required permissions

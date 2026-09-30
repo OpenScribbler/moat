@@ -4,10 +4,16 @@ name: MOAT Registry Action
 # TRIGGER CONFIGURATION
 #
 # The action pushes registry.json to the `moat-registry` branch, NOT to the
-# branch that triggered it. An unscoped `push` trigger on main is therefore
-# safe, but the `paths: ['.moat/registry.yml']` trigger is intentional: a config
-# change (e.g., adding a revocation) immediately kicks off a run — this is
-# the normative emergency revocation path.
+# branch that triggered it, so it cannot re-trigger itself. The `push` trigger
+# is scoped to the default branch because the manifest's signing identity
+# embeds the triggering ref: a run from any other branch would republish
+# registry.json under a different OIDC subject. Replace `main` below if your
+# default branch is named differently. The first step also refuses push and
+# workflow_dispatch runs from any other branch.
+#
+# The `paths: ['.moat/registry.yml']` filter is intentional: a config change
+# (e.g., adding a revocation) immediately kicks off a run — this is the
+# normative emergency revocation path.
 #
 # The `workflow_run` trigger chains this action after moat-publisher.yml so
 # that adding both workflow files is sufficient to bootstrap a compliant
@@ -22,6 +28,8 @@ on:
   schedule:
     - cron: '0 0 * * *'   # Daily at midnight UTC — adjust interval as needed
   push:
+    branches:
+      - main    # your default branch; see trigger note above
     paths:
       - '.moat/registry.yml'     # Immediate run on config change (emergency revocation path)
   workflow_dispatch:       # Manual trigger for testing and on-demand refresh
@@ -42,6 +50,12 @@ jobs:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
 
     steps:
+      - name: Refuse runs from non-default branches
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref != format('refs/heads/{0}', github.event.repository.default_branch)
+        run: |
+          echo "::error::MOAT Registry Action must run from the default branch, not ${GITHUB_REF}. The manifest's signing identity embeds the triggering ref."
+          exit 1
+
       - name: Checkout registry repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
