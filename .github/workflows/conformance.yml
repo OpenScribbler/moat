@@ -1,0 +1,30 @@
+name: Conformance checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Python reference checks
+        run: |
+          python3 reference/test_normalization.py
+          python3 reference/generate_test_vectors.py
+
+      - name: npm-distribution conformance scripts
+        run: |
+          fail=0
+          for script in specs/conformance/npm-distribution/*.sh specs/conformance/npm-distribution/tests/*.sh; do
+            echo "::group::$script"
+            if bash "$script"; then echo "PASS $script"; else echo "::error::FAIL $script"; fail=1; fi
+            echo "::endgroup::"
+          done
+          exit $fail
