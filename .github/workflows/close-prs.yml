@@ -16,22 +16,19 @@ jobs:
           script: |
             const prNumber = context.payload.pull_request.number;
 
-            // Query the REST API for author_association instead of reading it
-            // from the pull_request_target event payload. The payload field is
-            // often empty on `opened` events even for OWNER/MEMBER/COLLABORATOR
-            // authors, which caused this workflow to auto-close the
-            // maintainer's own PRs (see v0.6.1 release cycle).
-            const { data: pr } = await github.rest.pulls.get({
+            // Skip authors with write access. author_association is not a
+            // usable signal: GITHUB_TOKEN sees private org members as
+            // CONTRIBUTOR, which closed the maintainer's own PRs. The
+            // collaborator permission endpoint reports the real access level.
+            const login = context.payload.pull_request.user.login;
+            const { data: perm } = await github.rest.repos.getCollaboratorPermissionLevel({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              pull_number: prNumber,
+              username: login,
             });
 
-            const trusted = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
-            if (trusted.has(pr.author_association)) {
-              core.info(
-                `Skipping auto-close: @${pr.user.login} has author_association=${pr.author_association}`
-              );
+            if (['admin', 'write'].includes(perm.permission)) {
+              core.info(`Skipping auto-close: @${login} has ${perm.permission} access`);
               return;
             }
 
