@@ -11,7 +11,7 @@
 ## What It Does (on push)
 
 1. Detects source repository visibility. If `private` or `internal` and `allow-private-repo: true` is not set, exits immediately with a non-zero code and a clear error message. See Private Repository Guard.
-2. Discovers content items via two-tier model: canonical category directories (`skills/`, `agents/`, `rules/`, `commands/`) or `.moat/publisher.yml` if present.
+2. Discovers content items via two-tier model: canonical category directories (`skills/`, `agents/`, `rules/`, `commands/`) plus any items listed in `.moat/publisher.yml` if present.
 3. Computes content hashes using the MOAT algorithm ([`reference/moat_hash.py`](../../reference/moat_hash.py)). Errors (symlinks, empty directories) skip the item with a logged warning.
 4. Builds one attestation payload JSON per content item (schema below).
 5. Signs each payload with `cosign sign-blob --new-bundle-format` using Sigstore keyless OIDC. GitHub Actions provides the OIDC token automatically — no keys or secrets required. The `--new-bundle-format` flag is REQUIRED — it produces a Sigstore protobuf bundle v0.3 as mandated by [Signature Envelope](../../moat-spec.md#signature-envelope). The workflow path and branch are encoded into the OIDC certificate at signing time and recorded automatically in `publisher_workflow_ref` in `moat-attestation.json`. Registries read this field to derive the expected OIDC subject for publisher verification — no manual filename configuration is needed.

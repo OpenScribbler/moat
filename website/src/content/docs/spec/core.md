@@ -281,7 +281,7 @@ agents/
 The [Publisher Action](/spec/publisher-action) uses a two-tier discovery model:
 
 - **Tier 1:** Canonical category directories
-- **Tier 2:** `.moat/publisher.yml` for custom layouts; when present it overrides Tier 1
+- **Tier 2:** `.moat/publisher.yml` for custom layouts; it supplements Tier 1, so the action discovers items from both. List only items outside the canonical directories in it, since an item listed in both tiers is discovered twice.
 
 `moat-attestation.json` is a reserved filename. The [Publisher Action](/spec/publisher-action) writes this file to a
 dedicated `moat-attestation` branch — it is never present in the source branch and is therefore never included in
@@ -554,7 +554,7 @@ These items are required for conformance. A conforming registry, a conforming cl
 
 - **Content type registry** — normative list of current types (`skill`, `agent`, `rules`, `command`), category
   directory names, and deferred types (`hook`, `mcp`).
-- **Repository layout convention** — canonical directory structure and two-tier discovery model (`.moat/publisher.yml` override).
+- **Repository layout convention** — canonical directory structure and two-tier discovery model (`.moat/publisher.yml` supplements the canonical directories).
 - **Registry manifest format** — the signed document a registry publishes. The core artifact of MOAT. Top-level
   fields: `schema_version`, `manifest_uri`, `name`, `operator`, `updated_at`, `registry_signing_profile`,
   `content`, `revocations`. Per-item entries: `name`, `display_name`, `content_hash`, `source_uri`, `attested_at`,

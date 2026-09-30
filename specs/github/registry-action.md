@@ -15,7 +15,7 @@
    a. Fetches the source repository at HEAD using an authenticated GitHub API request. Source failures (network error, non-existent repo, rate limit) are non-fatal — the run continues and the failure is logged per source.
    b. Checks source repository visibility. If private and `allow-private-source: true` is not set, skips the source with a warning. See Private Repository Guard.
    c. Attempts to fetch `moat-attestation.json` from the source's `moat-attestation` branch. If the branch or file does not exist, the source contributes Signed items only.
-3. Discovers content items from each source via the same two-tier model as the Publisher Action: canonical category directories (`skills/`, `agents/`, `rules/`, `commands/`) or `.moat/publisher.yml` if present.
+3. Discovers content items from each source via the same two-tier model as the Publisher Action: canonical category directories (`skills/`, `agents/`, `rules/`, `commands/`) plus any items listed in `.moat/publisher.yml` if present.
 4. Computes content hashes for all discovered items using the MOAT algorithm ([`reference/moat_hash.py`](../../reference/moat_hash.py)).
 5. Determines trust tier per item. See Trust Tier Determination.
 6. Signs each Signed or Dual-Attested item's canonical payload with `cosign sign-blob --new-bundle-format` using Sigstore keyless OIDC. GitHub Actions provides the OIDC token automatically — no keys or secrets required. The `--new-bundle-format` flag is REQUIRED — it produces a Sigstore protobuf bundle v0.3 as mandated by [Signature Envelope](../../moat-spec.md#signature-envelope). Records the Rekor log index from `verificationMaterial.tlogEntries[0].logIndex` per item.
