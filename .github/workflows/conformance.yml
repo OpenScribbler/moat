@@ -19,6 +19,7 @@ jobs:
         run: |
           python3 reference/test_normalization.py
           python3 reference/generate_test_vectors.py
+          python3 reference/test_author_key.py
 
       - name: npm-distribution conformance scripts
         env:

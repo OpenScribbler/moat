@@ -123,9 +123,10 @@ enforcement, or execution semantics for it; it appears here to make that boundar
 > - **Registry Operator only** — Indexes and attests content from external publishers; does not create content.
 > - **Publisher + Registry Operator (self-publishing)** — Creates and distributes their own content from a
 >   single repository. The Publisher Action and Registry Action run from the same repo, producing two distinct
->   Rekor entries under two distinct OIDC identities (one per workflow file path). This is valid Dual-Attested —
->   the independence comes from the OIDC subject binding, not from organizational separation. The manifest's
->   `self_published` field discloses this configuration to End Users.
+>   Rekor entries under two distinct signer subjects (one per workflow file path). This is valid Dual-Attested —
+>   the independence comes from the signer subject binding, not from organizational separation. The manifest's
+>   `self_published` field discloses this configuration to End Users. A Self-Publisher MAY instead produce the
+>   publisher attestation with an Author Key held outside CI; see [Author-Key Profile](#author-key-profile).
 > - **Publisher + Registry Operator + Conforming Client** — A team that creates content, operates a registry,
 >   and ships a client that installs from it. Common in closed-ecosystem tools. MOAT's trust model still applies:
 >   the End User retains the ability to verify all attestations independently.
@@ -155,6 +156,11 @@ repository is a self-publishing operator.
 **[`reference/generate_test_vectors.py`](reference/generate_test_vectors.py)** — **Normative.** The test vectors produced by this script are the authoritative specification of correct hashing output. When a conforming implementation and a test vector disagree, the implementation is non-conforming. When `moat_hash.py` and a test vector disagree, `moat_hash.py` has a bug — the test vector is correct.
 
 **[`reference/moat_hash.py`](reference/moat_hash.py)** — **Informative.** Python reference implementation of the MOAT content hashing algorithm. Useful as a starting point for implementations in other languages, and as a cross-check during development. It is not the normative specification — the test vectors are. Two independent implementations in different languages must pass all test vectors before the spec advances beyond Draft.
+
+**[`reference/moat_author_key.py`](reference/moat_author_key.py)** — **Informative.** Python reference implementation of the
+Author-Key Profile's verification rules: fingerprints, allowed-signers parsing, list digests, item and list-change
+messages, and SSHSIG verification for the accepted key types. Not constant-time; it verifies and must not be used to
+sign with real keys.
 
 **[`reference/moat_verify.py`](reference/moat_verify.py)** — Python reference implementation of `moat-verify` —
 standalone verification tool supporting online (`--registry`) and offline (`--lockfile`) modes.
@@ -302,11 +308,16 @@ https://raw.githubusercontent.com/{owner}/{repo}/moat-attestation/moat-attestati
 
 | Tier              | Meaning                                                                                    |
 |-------------------|--------------------------------------------------------------------------------------------|
-| **Dual-Attested** | Registry-signed and independently attested by the source repo CI for the same content hash |
+| **Dual-Attested** | Registry-signed and independently attested by the Publisher for the same content hash      |
 | **Signed**        | Registry-signed with a Rekor transparency log entry. Tamper-evident. Registry-attested.    |
 | **Unsigned**      | No MOAT attestation. Works, but labeled clearly.                                           |
 
 `Dual-Attested` will be rare at launch. Its absence is not a negative signal; `Signed` is the standard tier.
+
+The publisher attestation of a Dual-Attested item comes from one of two mechanisms: keyless signing in the source
+repository's CI (the Publisher Action), or an Author Key under the [Author-Key Profile](#author-key-profile). Both
+yield the same tier; the Author-Key Profile is not a separate tier, and the registry's own attestation is keyless in
+both cases.
 
 ### Registry Trust
 
@@ -326,7 +337,55 @@ https://raw.githubusercontent.com/{owner}/{repo}/moat-attestation/moat-attestati
 
 The content hash identifies a content directory by canonical byte sequence using the normative
 [`reference/moat_hash.py`](reference/moat_hash.py) reference implementation. Resolved normalization rules, exclusion
-rules, and conformance expectations are defined by the reference implementation and its test vectors.
+rules, and conformance expectations are defined by the reference implementation and its test vectors. This is the
+directory algorithm, and it applies to every content item except an ACIF content item.
+
+#### ACIF Content Items
+
+An ACIF content item is a content item in the Agent Content Interchange Format ([ACIF](https://github.com/OpenScribbler/agent-content-interchange-format/blob/main/specs/core/spec.md)) whose
+manifest entry carries the `acif` member. Its Content Hash is not computed by the directory algorithm. It is
+`sha256:` followed by the item's ACIF attestation input digest: the value ACIF publishes as
+`registry_section.attestation_hash`, whose construction ACIF defines in
+[ACIF Registry Specification §6](https://github.com/OpenScribbler/agent-content-interchange-format/blob/main/specs/registry-spec/spec.md). That digest binds the item's ACIF `body_hash` and `metadata_hash`,
+so one signature covers the item's body and the frontmatter declarations (such as an agent's tool, model, and MCP
+server grants) that `body_hash` excludes. MOAT does not restate the construction; `reference/moat_hash.py`
+(`acif_content_hash`) implements it and the [ACIF test vectors](#attestation-payload) pin it.
+
+**Marker (normative).** A conforming client identifies an ACIF content item only by its manifest entry: the entry
+carries `acif`, an object whose `entry_file` member is the item's canonical entry file as a path relative to the
+item root (for example `SKILL.md`). A source repository declares its ACIF content items in the `acif` list of
+`.moat/publisher.yml`, which the Publisher Action and Registry Action specifications define, and the registry sets
+`acif` from that declaration. An entry without `acif` is not an ACIF content item, whatever its files contain, and
+its Content Hash is computed by the directory algorithm. A conforming client MUST compute the Content Hash by
+the method the marker selects. A wrong marker fails closed: the attestation input preimage begins with the line
+`acif-attestation-input-v1`, which no directory-algorithm manifest line can equal, so the two methods agree on the
+same bytes only through a SHA-256 collision.
+
+**Computation (normative).** A conforming client MUST compute an ACIF content item's Content Hash over the bytes it
+installs:
+
+1. Compute `body_hash` over the installed item directory as [ACIF Core §7](https://github.com/OpenScribbler/agent-content-interchange-format/blob/main/specs/core/spec.md) defines, with `acif.entry_file`
+   as the entry file. MOAT applies none of ACIF's canonicalization rewrites; the installed bytes are hashed as they
+   are. These are the item bytes the client fetched. A client that renders the item into a provider's format before
+   writing it hashes the fetched bytes, never the rendered output.
+2. Derive the item's `publisher_section` from the installed item as [ACIF Publisher Specification §5](https://github.com/OpenScribbler/agent-content-interchange-format/blob/main/specs/publisher-spec/spec.md)
+   defines, and compute `metadata_hash` from it as §6 of that specification defines. An item with no
+   `publisher_section` has no `metadata_hash`.
+3. Compute the attestation input digest from those two values as ACIF Registry Specification §6 defines.
+4. Map the digest's `{algorithm, value}` to the Content Hash string `<algorithm>:<value>`. The algorithm MUST be
+   `sha256` and the value MUST be 64 lowercase hexadecimal characters; any other value is a hard failure.
+
+A conforming client MUST NOT take `body_hash`, `metadata_hash`, or `attestation_hash` from an ACIF record, a
+sidecar, or a manifest field in place of recomputing them. A Content Hash matched against a record field alone
+does not verify the item.
+
+*Informative — relationship to the directory algorithm:* An ACIF content item's Content Hash never equals the
+directory algorithm's output for the same bytes, because it is the digest of a different preimage. The underlying
+`body_hash` also differs for a single-file item, because a single-file `body_hash` is the digest of the entry file's
+frontmatter-stripped, LF-normalized text rather than of a manifest (TV-ACIF-01, TV-ACIF-02). For a multi-file item
+the `body_hash` construction is the directory algorithm's manifest construction, so the two agree exactly when the
+entry file carries no frontmatter and the item root holds no `acif-sidecar.yaml` (TV-ACIF-03); entry-file
+frontmatter is stripped from the multi-file manifest too (TV-ACIF-04).
 
 ### Trust Anchor Model
 
@@ -421,7 +480,10 @@ MOAT does not defend against manifest replay attacks within the valid window. Fo
 
 ### Signature Envelope
 
-The normative signing mechanism for this version of MOAT is Sigstore keyless OIDC signing via Fulcio/Rekor.
+Sigstore keyless OIDC signing via Fulcio/Rekor is the normative signing mechanism for registry manifests,
+registry per-item attestations, and Publisher Action attestations. A Publisher MAY instead produce its publisher
+attestation under the [Author-Key Profile](#author-key-profile), which signs with an Author Key and records the
+signature in Rekor. These are the only two normative signing mechanisms in this version.
 
 **Bundle format (normative):** All cosign signatures produced by conforming Publisher Actions, Registry Actions, and any other MOAT-conforming signer MUST be Sigstore protobuf bundle v0.3 (`mediaType: application/vnd.dev.sigstore.bundle.v0.3+json`). Conforming signers invoking `cosign sign-blob` MUST pass `--new-bundle-format`. The legacy JSON bundle layout (top-level `base64Signature` / `cert` / `rekorBundle.Payload.logIndex`) is not supported by this version of MOAT — strict consumers (e.g., sigstore-go) reject it, and conforming clients MAY refuse to parse it. Verifiers locate the Rekor log identity at `verificationMaterial.tlogEntries[].logId.keyId` and the log index at `verificationMaterial.tlogEntries[].logIndex`.
 
@@ -444,7 +506,7 @@ for the canonical format, serialization rules, and test vector.
 1. Fetch the manifest at `manifest_uri`
 2. Fetch the bundle at `{manifest_uri}.sigstore`
 3. Verify the bundle covers the exact bytes of the downloaded manifest file
-4. Confirm the signing certificate's OIDC issuer and subject match the manifest's `registry_signing_profile`
+4. Confirm the signing certificate's OIDC issuer and signer subject (SAN) match the manifest's `registry_signing_profile`
 5. Confirm the Rekor transparency log entry in the bundle is valid
 
 Rekor unavailability is a hard failure — there is no fallback to bundle-only verification without Rekor
@@ -461,6 +523,111 @@ confirmation. See [Trust Anchor Model](#trust-anchor-model).
   subsequent fetches.
 - On subsequent fetches: if `registry_signing_profile` has changed, conforming clients MUST require End User
   re-approval before accepting the manifest. `operator` and `name` changes do NOT trigger re-approval.
+
+### Author-Key Profile
+
+The Author-Key Profile lets a Publisher produce the publisher attestation of a Dual-Attested item with a key the
+Publisher holds — an **Author Key** — instead of keyless signing in CI. It is the second attestation of the existing
+Dual-Attested tier, not a new tier: the registry crawls, signs, and serves every item exactly as it does for a
+keyless publisher attestation. *(Informative: the profile serves the Self-Publisher, whose source and registry are
+one repository. An Author Key held outside CI gives that Publisher an attestation that push access to the repository
+alone cannot produce.)*
+
+**Signature scheme (normative).** An Author-Key signature is an OpenSSH SSHSIG signature
+([PROTOCOL.sshsig](https://github.com/openssh/openssh-portable/blob/master/PROTOCOL.sshsig)) with namespace `file` and hash algorithm `sha512`, armored as `ssh-keygen -Y sign -n file`
+writes it. The accepted key types are `ssh-ed25519`, `sk-ssh-ed25519@openssh.com`, and
+`sk-ecdsa-sha2-nistp256@openssh.com`; Publishers SHOULD use one of the two security-key (`sk-`) types. Verifiers MUST
+reject any other key type, namespace, or hash algorithm. For the `sk-` types, verifiers MUST reject a signature whose
+flags byte lacks the user-presence bit (`0x01`). `ssh-keygen -Y verify` does not check that bit, so a verifier that
+delegates signature checking to it MUST check the flag itself.
+
+**Key fingerprint (normative).** An Author Key's fingerprint is `SHA256:` followed by the unpadded standard base64
+encoding of the SHA-256 digest of the key's SSH public-key blob — the form `ssh-keygen -l` prints.
+
+**Signed messages (normative).** An Author Key signs exactly two kinds of message. Each begins with a domain
+separator line, so a signature over one kind never verifies as the other, as a bare
+[Attestation Payload](#attestation-payload), or as any other file the same key has signed under namespace `file`:
+
+| Message | Bytes |
+|---|---|
+| Item message | `moat-author-item-v1` LF, then the canonical Attestation Payload for the item's Content Hash |
+| List-change message | `moat-allowed-signers-change-v1` LF, the previous list digest, LF, the new list digest, LF |
+
+**Transparency log entry (normative).** The Publisher MUST record each item signature in Rekor as a `rekord` entry
+with public-key format `ssh`, whose data is the item message, whose signature is the armored SSHSIG, and whose public
+key is the Author Key in OpenSSH public-key form with no comment field. The entry identifies the signer only by the
+key; its fingerprint is computed from it. The public key MUST NOT carry a comment, an email address, or any other
+personal identifier, and verifiers MUST reject an entry whose public key carries a comment.
+
+**Allowed-signers list (normative).** A source repository lists its Author Keys in `.moat/allowed_signers` at the
+repository root. The file is UTF-8 text. Each line is blank, a comment beginning with `#`, or exactly three
+whitespace-separated fields: the key's fingerprint, its key type, and its base64 public-key blob. The fingerprint
+field MUST equal the fingerprint computed from the blob, and the key type MUST equal the blob's own type and be an
+accepted type. A list with any other line, or with no key, is malformed, and verifiers MUST refuse a malformed list
+as a whole. *(Informative: the format is a subset of OpenSSH's allowed-signers format with the fingerprint as the
+principal, so `ssh-keygen -Y verify -f .moat/allowed_signers -I <fingerprint> -n file` checks a signature against
+it.)* The list digest is `sha256:` followed by the lowercase hexadecimal SHA-256 of the list's canonical text: the
+file bytes with a leading UTF-8 byte-order mark removed and each CRLF and lone CR replaced by LF.
+
+**List changes (normative).** A change to the list is valid only when signed by a key the previous list allows. To
+change the list, the Publisher signs the list-change message for the previous and new list digests with a key in
+the previous list, and commits the armored signature as `.moat/allowed_signers.sig` beside the new list.
+
+**Client verification (normative).** To accept the publisher attestation of an item whose `signing_profile` is in
+key-fingerprint form, a conforming client MUST:
+
+1. Compute the item's Content Hash over the bytes it installs.
+2. Resolve the trusted allowed-signers list for the item's `source_uri` (below).
+3. Locate the Publisher's Rekor entry by querying Rekor for entries whose data hash is the SHA-256 of the item
+   message built from the Content Hash of step 1, and select the `rekord` entries whose public key's fingerprint
+   equals `signing_profile.key_fingerprint`. Zero such entries is a verification failure.
+4. Verify the selected entry's SSHSIG over that item message under the signature scheme above.
+5. Confirm that `signing_profile.key_fingerprint` is in the trusted allowed-signers list.
+
+A failure at any step is a verification hard failure: the client MUST refuse to install the item. A client MUST
+refuse an item signed by a key that is not in the trusted list even when the signature is otherwise valid.
+
+**Trust on first use (normative).** A conforming client keeps one trusted allowed-signers list per `source_uri`, in
+the lockfile's `allowed_signers` map. When a key-fingerprint `signing_profile` names a `source_uri` with no trusted
+list, the client MUST obtain explicit End User confirmation before installing any item from it, and MUST present:
+the `source_uri`; the registry that served the list; each listed key's fingerprint and key type; for each key,
+whether its type is a security-key (`sk-`) type; and the statement that a key type does not prove the private key is
+held in hardware. On confirmation the client MUST record the list verbatim, its digest, the confirmation time, and
+`confirmed_by: "end_user"`.
+
+**List changes on the client (normative).** When `signing_profile.allowed_signers` differs from the trusted list
+(by list digest), the client MUST accept the new list without End User confirmation only when
+`signing_profile.allowed_signers_change` is a signature that verifies over the list-change message for the trusted
+list's digest and the new list's digest, by a key in the trusted list. The client then records the new list with
+`confirmed_by: "signed_change"` and SHOULD tell the End User which fingerprints were added and removed. Any other
+change MUST be handled as a first sight: the client MUST NOT install items from that `source_uri` until the End User
+confirms the new list, and MUST warn that the change was not signed by a previously trusted key. A client that
+missed an intermediate list sees a change that does not chain from its record, which is also a first sight. The
+trusted list is keyed by `source_uri`, not by registry, so a registry serving a different list than the one
+recorded triggers this rule.
+
+**Hardware backing (normative).** A verifier cannot establish from this profile that an Author Key's private key
+is held in hardware. An `sk-` key type and the user-presence flag show that the signature passed through a FIDO
+authenticator interface, but the profile carries no authenticator attestation, and software authenticators exist.
+Conforming clients MUST NOT describe a key, a signature, or an item as hardware-backed, and MAY describe an `sk-`
+key as a security-key type.
+
+**Test vectors.** `reference/generate_test_vectors.py` prints the keys, lists, messages, and signatures below; every
+key derives from a fixed seed and every signature is deterministic. Each item vector signs the item message for
+TV-ACIF-04's Content Hash. `reference/test_author_key.py` checks the vectors against `ssh-keygen`.
+
+| Vector | Case | Expected |
+|---|---|---|
+| TV-AK-01 | Item signed by `ssh-ed25519` key A; trusted list {A} | `ok` |
+| TV-AK-02 | Item signed by key B; trusted list {A} | `signer_not_allowed` |
+| TV-AK-03 | TV-AK-01's signature, checked after `scripts/run.sh` is changed, so the recomputed Content Hash differs | `signature_invalid` |
+| TV-AK-04 | List change {A} → {A, B} signed by key B | `signer_not_allowed` |
+| TV-AK-05 | List change {A} → {A, C} signed by key A | `ok` |
+| TV-AK-05b | Item signed by key C after TV-AK-05's rotation; trusted list {A, C} | `ok` |
+| TV-AK-06 | Item signed by `sk-ssh-ed25519@openssh.com` key D, user-presence flag set | `ok` |
+| TV-AK-07 | Item signed by `sk-ecdsa-sha2-nistp256@openssh.com` key E, user-presence flag set | `ok` |
+| TV-AK-08 | Item signed by key D with flags `0x00` | `signature_invalid` |
+| TV-AK-09 | List line naming key B's fingerprint beside key A's blob | `allowed_signers_malformed` |
 
 ### Trust State Error Vocabulary
 
@@ -515,7 +682,7 @@ This section defines how conforming clients handle schema version changes when t
 
 When verifying an attestation payload, conforming verifiers MUST check the `content_hash` value BEFORE accepting the `_version` field. The verification order is:
 
-1. Verify `content_hash` matches the locally computed hash of the content directory.
+1. Verify `content_hash` matches the Content Hash computed locally over the installed content (by the directory algorithm, or for an ACIF content item as [ACIF Content Items](#acif-content-items) defines).
 2. Verify `_version` is a recognized schema version.
 3. Verify the Rekor certificate identity.
 
@@ -561,7 +728,8 @@ These items are required for conformance. A conforming registry, a conforming cl
   `derived_from`, `scan_status`, and `signing_profile` (REQUIRED for Dual-Attested items; omitted for Signed and
   Unsigned). See [Registry Manifest](#registry-manifest).
 - **Content hashing algorithm** — deterministic, one-pass, Go dirhash-inspired. Defined by normative reference
-  implementation ([`reference/moat_hash.py`](reference/moat_hash.py)), not pseudocode.
+  implementation ([`reference/moat_hash.py`](reference/moat_hash.py)), not pseudocode. An ACIF content item's
+  Content Hash is instead the ACIF attestation input digest; see [ACIF Content Items](#acif-content-items).
 - **Hash format** — `<algorithm>:<hex>` with no length constraints.
 - **Algorithm requirements** — `sha256` is the REQUIRED algorithm; conforming implementations MUST support it.
   `sha512` is OPTIONAL. The following algorithms are FORBIDDEN and MUST NOT appear in content hashes: `sha1`,
@@ -574,20 +742,26 @@ These items are required for conformance. A conforming registry, a conforming cl
   `signing_profile` field declaring the publisher's expected CI signing identity. See [signing_profile](#signing_profile)
   for the format and known CI provider values.
 
-  Signing identity is expressed as an OIDC issuer URL and subject claim — the values captured in the
-  Rekor/Fulcio certificate at signing time. This model is provider-agnostic; any CI platform with OIDC support
-  produces these fields. Registries populate `signing_profile` from the publisher's `moat-attestation.json`
-  when indexing a Dual-Attested item. Conforming clients MUST verify that the Rekor certificate's OIDC issuer
-  and subject match the declared `signing_profile`. This check is load-bearing for the Dual-Attested tier —
-  without it there is no interoperability guarantee that clients are verifying the correct publisher identity.
+  A publisher signing identity takes one of two forms. The keyless form is an OIDC issuer URL and a signer
+  subject — the values captured in the Fulcio certificate at signing time. The signer subject is the certificate's
+  Subject Alternative Name (SAN) URI, which Fulcio derives from provider-specific token claims (see
+  [signing_profile](#signing_profile)); it is never the OIDC token's `sub` claim, which does not appear in the
+  certificate. This form is provider-agnostic; any CI platform Fulcio supports produces these fields. The
+  key-fingerprint form names an Author Key by its fingerprint and is defined by the
+  [Author-Key Profile](#author-key-profile). Registries populate `signing_profile` from the publisher's
+  `moat-attestation.json` when indexing a Dual-Attested item. For the keyless form, conforming clients MUST verify
+  that the Rekor certificate's OIDC issuer and SAN match the declared `signing_profile`. For the key-fingerprint
+  form, conforming clients MUST verify the publisher attestation as the Author-Key Profile defines. This check is
+  load-bearing for the Dual-Attested tier — without it there is no interoperability guarantee that clients are
+  verifying the correct publisher identity.
 
-  **Rename-attack binding (normative for GitHub Actions issuer):** OIDC subjects derived from repository names
-  are vulnerable to rename and transfer attacks. If a publisher renames or transfers their repository, the subject
-  claim changes, and an attacker who claims the old name could produce matching attestations. For signatures whose
+  **Rename-attack binding (normative for GitHub Actions issuer):** Signer subjects derived from repository names
+  are vulnerable to rename and transfer attacks. If a publisher renames or transfers their repository, the signer
+  subject changes, and an attacker who claims the old name could produce matching attestations. For signatures whose
   issuer is `https://token.actions.githubusercontent.com`, conforming clients MUST match the immutable numeric
   repository ID and repository owner ID embedded as OIDC extensions on the Fulcio certificate, in addition to the
-  SAN/subject match. Mismatch on any dimension (issuer, subject, repository ID, owner ID) is a verification hard
-  failure.
+  signer subject match. Mismatch on any dimension (issuer, signer subject, repository ID, owner ID) is a
+  verification hard failure.
 
   The authoritative OID references are:
 
@@ -654,6 +828,7 @@ These items are required for conformance. A conforming registry, a conforming cl
   | TOFU signing profile acceptance required (first registry add) | Exit non-zero. A trust decision that requires human judgment MUST NOT be made silently by a pipeline. |
   | `registry_signing_profile` change detected | Exit non-zero. A signing profile change could indicate registry key compromise. |
   | Publisher revocation encountered | Exit non-zero. Non-interactive clients MUST NOT proceed past revocation warnings. |
+  | Allowed-signers confirmation required (first sight of an Author-Key source, or a list change not signed by a trusted key) | Exit non-zero. Trusting an Author Key is a human judgment. |
   | Manifest staleness exceeded | Exit non-zero. A stale manifest means the pipeline is operating on potentially outdated trust data. |
 
   A conforming non-interactive client MUST NOT auto-accept any trust decision that requires human judgment. A pre-approval mechanism — so operators can authorize registries and signing-profile changes out-of-band, letting pipelines consume them without interactive prompts — is deferred work; see [ROADMAP.md](https://github.com/OpenScribbler/moat/blob/main/ROADMAP.md#non-interactive-trust-onboarding).
@@ -685,6 +860,8 @@ These items are required for conformance. A conforming registry, a conforming cl
 ### Informative profiles
 
 - **Sigstore profile** — keyless OIDC signing via Fulcio/Rekor.
+
+The [Author-Key Profile](#author-key-profile) is normative and defined in the Trust Model.
 
 ---
 
@@ -746,7 +923,7 @@ Minimum structure:
   "self_published": false,
   "registry_signing_profile": {
     "issuer": "https://token.actions.githubusercontent.com",
-    "subject": "repo:owner/repo:ref:refs/heads/main"
+    "subject": "https://github.com/owner/repo/.github/workflows/moat-registry.yml@refs/heads/main"
   },
   "content": [
     {
@@ -774,7 +951,7 @@ Minimum structure:
 | `self_published`                   | OPTIONAL                                       | `true` if the registry operator and publisher are the same entity (same repository runs both Publisher Action and Registry Action). Absent is equivalent to `false`. Conforming clients SHOULD surface this to End Users when `true`. |
 | `registry_signing_profile`         | REQUIRED                                       | The registry's CI signing identity. Conforming clients MUST track this per registry; changes on a subsequent fetch require End User re-approval before the manifest is accepted. See [Signature Envelope](#signature-envelope). |
 | `registry_signing_profile.issuer`  | REQUIRED                                       | OIDC issuer URL of the registry's CI provider                                                                                                                                                                                   |
-| `registry_signing_profile.subject` | REQUIRED                                       | OIDC subject claim as produced by the registry's CI provider                                                                                                                                                                    |
+| `registry_signing_profile.subject` | REQUIRED                                       | Signer subject: the Subject Alternative Name (SAN) URI in the registry's Fulcio signing certificate. See [signing_profile](#signing_profile) for the per-provider form.                                                        |
 | `content`                          | REQUIRED                                       | Array of per-item entries                                                                                                                                                                                                       |
 | `content[].name`                   | REQUIRED                                       | Canonical identifier for the content item                                                                                                                                                                                       |
 | `content[].display_name`           | REQUIRED                                       | Human-readable name                                                                                                                                                                                                             |
@@ -788,6 +965,8 @@ Minimum structure:
 | `content[].version`                | OPTIONAL                                       | Display label only; `content_hash` is normative identity                                                                                                                                                                        |
 | `content[].scan_status`            | OPTIONAL                                       | See [scan_status](#scan_status)                                                                                                                                                                                                 |
 | `content[].signing_profile`        | REQUIRED for Dual-Attested                     | See [signing_profile](#signing_profile)                                                                                                                                                                                         |
+| `content[].acif`                   | OPTIONAL                                       | Present only on an ACIF content item; its presence selects the [ACIF Content Items](#acif-content-items) Content Hash method |
+| `content[].acif.entry_file`        | REQUIRED when `acif` is present                | The item's canonical entry file, as a path relative to the item root                                                                                                                                                          |
 | `content[].attestation_hash_mismatch` | OPTIONAL                                    | `true` if the registry's computed hash for this item differed from the hash recorded in the publisher's `moat-attestation.json`. Present only when a mismatch was detected; absent otherwise. Indicates that the publisher's attestation does not cover the current content. |
 | `revocations`                      | REQUIRED                                       | Array of revocation entries; empty array if none                                                                                                                                                                                |
 | `revocations[].content_hash`       | REQUIRED                                       | Hash of the revoked content item                                                                                                                                                                                                |
@@ -797,9 +976,10 @@ Minimum structure:
 
 **Field notes:**
 
-- `registry_signing_profile` is the registry-level signing identity. It is structurally identical to per-item
-  `signing_profile` (issuer + subject) but scoped to the manifest document itself, not to a publisher's content
-  attestation. Conforming implementations MUST NOT conflate these two fields.
+- `registry_signing_profile` is the registry-level signing identity. It is structurally identical to the keyless
+  form of per-item `signing_profile` (issuer + subject) but scoped to the manifest document itself, not to a
+  publisher's content attestation. Conforming implementations MUST NOT conflate these two fields. A
+  `registry_signing_profile` is always in keyless form.
 - `operator` and `name` are display labels. Conforming clients MUST NOT treat changes to these fields as signing
   identity changes and MUST NOT require re-approval when they change.
 - `updated_at` uses the registry's clock. The staleness check runs against the client's own `fetched_at`
@@ -833,7 +1013,15 @@ Minimum structure:
       "signed_payload": {}
     }
   ],
-  "revoked_hashes": []
+  "revoked_hashes": [],
+  "allowed_signers": {
+    "https://github.com/owner/repo": {
+      "list": "<allowed-signers file, verbatim>",
+      "digest": "sha256:<hex>",
+      "confirmed_at": "RFC 3339 UTC",
+      "confirmed_by": "end_user|signed_change"
+    }
+  }
 }
 ```
 
@@ -852,6 +1040,12 @@ Minimum structure:
 | `entries[].pinned_at`          | REQUIRED | Local install timestamp (client clock; not externally verifiable)                                     |
 | `entries[].attestation_bundle` | REQUIRED | Full cosign bundle captured at install time; `null` for `UNSIGNED` content                            |
 | `entries[].signed_payload`     | REQUIRED | The original payload passed to `cosign sign-blob` at attestation time; `null` for `UNSIGNED` content |
+| `entries[].acif`               | REQUIRED for an ACIF content item | The manifest entry's `acif` object, copied verbatim; absent otherwise                     |
+| `allowed_signers`              | REQUIRED once any list is trusted | Trusted allowed-signers lists keyed by `source_uri`; see [Author-Key Profile](#author-key-profile). Absent is equivalent to empty |
+| `allowed_signers[uri].list`    | REQUIRED | The trusted list, verbatim                                                                    |
+| `allowed_signers[uri].digest`  | REQUIRED | List digest of `list`                                                                         |
+| `allowed_signers[uri].confirmed_at` | REQUIRED | RFC 3339 UTC time the list became trusted (client clock)                                 |
+| `allowed_signers[uri].confirmed_by` | REQUIRED | `end_user` (confirmed by the End User) or `signed_change` (accepted as a signed list change) |
 | `revoked_hashes`               | REQUIRED | Array of hard-blocked content hash strings; empty array if none                                       |
 
 **Field notes:**
@@ -889,7 +1083,7 @@ Minimum structure:
       "manifest_url": "https://example.com/moat-manifest.json",
       "registry_signing_profile": {
         "issuer": "https://token.actions.githubusercontent.com",
-        "subject": "repo:owner/repo:ref:refs/heads/main"
+        "subject": "https://github.com/owner/repo/.github/workflows/moat-registry.yml@refs/heads/main"
       },
       "description": "A registry of example skills"
     }
@@ -909,7 +1103,7 @@ Minimum structure:
 | `registries[].manifest_url`                    | REQUIRED | URL of the registry's signed manifest                |
 | `registries[].registry_signing_profile`        | REQUIRED | Expected signing identity for this registry's manifest |
 | `registries[].registry_signing_profile.issuer` | REQUIRED | OIDC issuer URL                                      |
-| `registries[].registry_signing_profile.subject`| REQUIRED | OIDC subject claim                                   |
+| `registries[].registry_signing_profile.subject`| REQUIRED | Signer subject (Fulcio certificate SAN URI)          |
 | `registries[].description`                     | OPTIONAL | Short description of the registry's scope or focus   |
 
 **Field notes:**
@@ -957,26 +1151,30 @@ Minimum structure:
 
 ### signing_profile
 
-`signing_profile` declares a publisher's expected CI signing identity on Dual-Attested manifest entries. Conforming
-clients MUST verify the Rekor certificate's OIDC issuer and subject match this field. When the issuer is GitHub
-Actions, conforming clients MUST additionally match the numeric repository and owner IDs — see the
-[rename-attack binding](#publisher-signing-identity-model) requirement.
+`signing_profile` declares a publisher's expected signing identity on Dual-Attested manifest entries, in one of two
+forms. A profile that carries `issuer` is in **keyless form**; a profile that carries `key_fingerprint` is in
+**key-fingerprint form**. A profile that carries both, or neither, is malformed, and conforming clients MUST NOT
+present the item as Dual-Attested.
 
-Minimum structure (any OIDC provider):
+For the keyless form, conforming clients MUST verify the Rekor certificate's OIDC issuer and SAN match this field.
+When the issuer is GitHub Actions, conforming clients MUST additionally match the numeric repository and owner IDs —
+see the [rename-attack binding](#publisher-signing-identity-model) requirement.
+
+Minimum keyless structure (any OIDC provider):
 
 ```json
 {
   "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:owner/repo:ref:refs/heads/main"
+  "subject": "https://github.com/owner/repo/.github/workflows/moat-publisher.yml@refs/heads/main"
 }
 ```
 
-Required structure when `issuer` is `https://token.actions.githubusercontent.com`:
+Required keyless structure when `issuer` is `https://token.actions.githubusercontent.com`:
 
 ```json
 {
   "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:owner/repo:ref:refs/heads/main",
+  "subject": "https://github.com/owner/repo/.github/workflows/moat-publisher.yml@refs/heads/main",
   "repository_id": "123456789",
   "repository_owner_id": "987654321"
 }
@@ -984,13 +1182,33 @@ Required structure when `issuer` is `https://token.actions.githubusercontent.com
 
 | Field                  | Required                          | Description                                                                                   |
 |------------------------|-----------------------------------|-----------------------------------------------------------------------------------------------|
-| `issuer`               | REQUIRED                          | OIDC issuer URL from the CI provider                                                          |
-| `subject`              | REQUIRED                          | OIDC subject claim as produced by the CI provider's token                                     |
+| `issuer`               | REQUIRED in keyless form          | OIDC issuer URL from the CI provider                                                          |
+| `subject`              | REQUIRED in keyless form          | Signer subject: the Fulcio certificate's SAN URI, in the form the known-provider table below gives. Not the OIDC token's `sub` claim |
 | `repository_id`        | REQUIRED for GitHub Actions issuer; OPTIONAL for others | Decimal string matching the Fulcio cert extension at OID `1.3.6.1.4.1.57264.1.15`          |
 | `repository_owner_id`  | REQUIRED for GitHub Actions issuer; OPTIONAL for others | Decimal string matching the Fulcio cert extension at OID `1.3.6.1.4.1.57264.1.17`          |
 | `profile_version`      | OPTIONAL                          | Integer schema version for additive extensions; absent or `1` = baseline v1 shape. Current: 1 |
 | `subject_regex`        | OPTIONAL                          | Regex alternative to exact `subject` match for publishers that sign across multiple refs      |
 | `issuer_regex`         | OPTIONAL                          | Regex alternative to exact `issuer` match for organizations running multiple OIDC instances   |
+
+Key-fingerprint structure ([Author-Key Profile](#author-key-profile)):
+
+```json
+{
+  "key_fingerprint": "SHA256:c+9RtDpLaogkdIBaK4R83aEOVfIlPvftuiSpqVLOQA4",
+  "allowed_signers": "SHA256:c+9RtDpLaogkdIBaK4R83aEOVfIlPvftuiSpqVLOQA4 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII5C8Sf8CM8ca7csOPFWeq4DJeLtXJEUFJ1C6C7CZ4Ig\n"
+}
+```
+
+| Field                    | Required                         | Description |
+|--------------------------|----------------------------------|-------------|
+| `key_fingerprint`        | REQUIRED in key-fingerprint form | Fingerprint of the Author Key that signed the publisher attestation |
+| `allowed_signers`        | REQUIRED in key-fingerprint form | The source repository's `.moat/allowed_signers` file at the crawled commit, verbatim, as a JSON string |
+| `allowed_signers_change` | OPTIONAL                         | The source repository's `.moat/allowed_signers.sig` file at the crawled commit, verbatim: the armored list-change signature. Absent when the source has no such file |
+
+In key-fingerprint form, `subject_regex`, `issuer_regex`, `repository_id`, and `repository_owner_id` MUST be absent.
+A registry MUST NOT emit two entries for the same `source_uri` whose key-fingerprint profiles carry different
+`allowed_signers` values in one manifest, and a conforming client that receives such a manifest MUST NOT install
+any item from that `source_uri` from it. The npm distribution channel defines only the keyless form.
 
 **Back-compatibility:** Profiles captured before versioning are treated as `profile_version: 1`. Conforming clients
 MUST accept profiles without a `profile_version` field and MUST treat them as v1. The `profile_version` field bumps
@@ -1003,26 +1221,35 @@ binding requirement — they apply only to the issuer/subject dimensions.
 
 *Informative — known CI provider values:*
 
-| Provider | Issuer | Subject format |
-|----------|--------|----------------|
-| GitHub Actions | `https://token.actions.githubusercontent.com` | `repo:{owner}/{repo}:ref:refs/heads/{branch}` |
-| GitLab CI | `https://gitlab.com` | `project_path:{namespace}/{project}:ref_type:branch:ref:{branch}` |
+| Provider | Issuer | Signer subject (certificate SAN) | Fulcio derives it from |
+|----------|--------|----------------------------------|------------------------|
+| GitHub Actions | `https://token.actions.githubusercontent.com` | `https://github.com/{owner}/{repo}/{workflow_path}@refs/heads/{branch}` | `job_workflow_ref`, prefixed with `https://github.com/` |
+| GitLab CI (GitLab.com) | `https://gitlab.com` | `https://gitlab.com/{namespace}/{project}//{ci_config_path}@refs/heads/{branch}` | `ci_config_ref_uri`, prefixed with `https://` |
 
-Other providers with OIDC support: the issuer is the provider's OIDC endpoint URL; the subject format is
-provider-defined. Consult the provider's OIDC documentation. Providers are added to this table when their subject
-format is verified against a working Sigstore implementation. Forgejo/Codeberg Actions OIDC support is not yet
+Source: Fulcio's OIDC documentation ([`docs/oidc.md`](https://github.com/sigstore/fulcio/blob/main/docs/oidc.md)) and its issuer configuration
+([`config/identity/config.yaml`](https://github.com/sigstore/fulcio/blob/main/config/identity/config.yaml)), which map each issuer to the claim that becomes the SAN. Two
+consequences follow. For GitHub Actions, `{workflow_path}` is the path of the workflow that ran the signing job,
+such as `.github/workflows/moat-publisher.yml`; when that job runs in a reusable workflow, the SAN names the reusable
+workflow, not the caller. For GitLab CI, the double slash before `{ci_config_path}` is part of the claim and is
+preserved. A tag ref appears as `@refs/tags/{tag}` in both forms.
+
+Other providers with OIDC support: the issuer is the provider's OIDC endpoint URL; the SAN form is defined by
+Fulcio's configuration for that issuer. Providers are added to this table when their SAN form is verified against
+Fulcio's issuer configuration and a working Sigstore implementation. Forgejo/Codeberg Actions OIDC support is not yet
 shipped as of this writing (April 2026). Tracking: Gitea PR
 [#36988](https://github.com/go-gitea/gitea/pull/36988) (draft, opened 2026-03-25) and Forgejo PR
 [#5344](https://codeberg.org/forgejo/forgejo/pulls/5344) (closed 2025-02-02, no active successor). When either
-ships, the issuer will be `<instance-url>/api/actions/oidc` and the subject format will mirror GitHub's. Check
-these PRs before updating this table.
+ships, the issuer will be `<instance-url>/api/actions/oidc`; its SAN form is fixed only when Fulcio's issuer
+configuration adds it. Check these PRs and that configuration before updating this table.
 
 ### Attestation Payload
 
 The canonical payload signed by both the Registry Action and the Publisher Action to create per-item Rekor
 entries. Signing identical payload bytes for the same content hash is what enables the Registry Action to verify
 publisher attestations at crawl time — Publisher and Registry entries for the same item are distinguished by the
-OIDC subject in the Rekor certificate (different workflow file paths), not by payload content.
+signer subject (certificate SAN) in the Rekor certificate (different workflow file paths), not by payload content.
+Under the [Author-Key Profile](#author-key-profile) the Publisher signs this payload wrapped in a domain-separated
+item message, and the entry is distinguished by the Author Key's fingerprint.
 
 Minimum structure:
 
@@ -1068,6 +1295,21 @@ payload = json.dumps(
 See [Publisher Action](/spec/publisher-action#attestation-payload-schema-normative) for the publisher-side
 signing requirement.
 
+**ACIF test vectors:** The payload for an [ACIF content item](#acif-content-items) carries the attestation input
+digest as its Content Hash. Item files, the `publisher_section` each `metadata_hash` is computed from, and the full
+preimages are printed by `reference/generate_test_vectors.py`. Each skill's entry file is `SKILL.md`.
+
+| Vector | Item | `body_hash` | `metadata_hash` | Content Hash | SHA-256 of payload |
+|---|---|---|---|---|---|
+| TV-ACIF-01 | Single-file, no frontmatter | `sha256:12d3cb2f53305b53fff6ca4ff1166fd1d063b1319642e0a0906a5539c8fa57b7` | absent | `sha256:609902f740f65673401adc2b6e3a549ae1ff77817791ba3e1c410c77b463cdda` | `b1d75a3ff67826bf67e7fe970450195f039884da2ab8a56e6210c745704d086a` |
+| TV-ACIF-02 | Single-file, CRLF line endings, frontmatter | `sha256:12d3cb2f53305b53fff6ca4ff1166fd1d063b1319642e0a0906a5539c8fa57b7` | `sha256:b864cc13e7d6658f120ec10fa7ebf0da222487f5ba9440cee5221c5501021122` | `sha256:d76a2362e3672347120e74159450b38099b7bb4ba8bd648593c8eaa14abd87c8` | `e82b1b676791f7a044f05b18cf75193b2c0e1c2757740a0a478e3ffb55af6890` |
+| TV-ACIF-03 | Multi-file, no frontmatter | `sha256:fef9a3e615ab4d41c1a990908bf9a3e5b47f70a73eaa16fc7e1578c9f4ab60df` | absent | `sha256:e42751ba6779bf949837e9bc88e84600909d6941c85185ae92f6ac5d9c13c34e` | `efbbcc1fb71c482d0254e76568f9baecf6fc87ae97db101f6a809531dd3f754c` |
+| TV-ACIF-04 | Multi-file, entry-file frontmatter | `sha256:b08c2af8a9d5c2eced158b49a13bacfe3d0a22221b965bd2a46672bc5b8f9648` | `sha256:8f1d5123f9ef00c769939da3b95ba9708f6a4a98ad5fcffc0f89103727c44bb5` | `sha256:4cf794439192206d27c8137607b37884316f26f3fe52d725b1ac1dfcac58c2ff` | `e413a17e93045558f8ef62c35609b44464321851174f5e86d1d9bf4f3acad2f2` |
+
+Payload bytes are `{"_version":1,"content_hash":"<Content Hash>"}` with the Content Hash from the table. The
+generator cross-checks TV-ACIF-01..04 `body_hash` values against ACIF's own vectors and the attestation input
+construction against ACIF's TV-L3 (e) cases.
+
 ---
 
 ## Security Considerations
@@ -1105,6 +1347,25 @@ TOFU (trust-on-first-use) for manually-added registries is a known attack surfac
 The lockfile is not protected by a MAC or checksum. An attacker with local write access can modify the lockfile directly. However, an attacker with local write access can also modify the installed content directly — the lockfile is not the weakest link. Detection (via `moat-verify`) is the right approach: `moat-verify` re-hashes installed content and compares against the lockfile, detecting both content tampering and lockfile manipulation when the two diverge.
 
 **Detection scope (precision note):** `moat-verify` detects accidental corruption and inconsistent modification — cases where the lockfile says hash X but content hashes to Y. It does NOT detect targeted tampering where an attacker modifies installed content AND updates the lockfile with matching hashes AND removes revocation entries consistently. This is an inherent limitation of any local-only integrity check without an external trust anchor. Users requiring stronger guarantees should verify against the registry manifest and Rekor log directly.
+
+### Author-Key Trust
+
+The Author-Key Profile moves the publisher trust decision from a CI identity to a key list, and its first-sight
+confirmation is a TOFU boundary of the same kind as manually adding a registry: an attacker who controls the source
+repository or the serving registry before the End User's first install can present their own key. After first
+sight, a list change is accepted silently only when a trusted key signs it, so a stolen trusted key can rewrite the
+list. Clients report accepted changes so an End User can notice one they did not expect, and a Publisher whose key
+is compromised recovers through a registry revocation and End User re-confirmation, not through the list. The
+profile does not prove a key is held in hardware; see the Hardware backing rule in the
+[Author-Key Profile](#author-key-profile).
+
+### ACIF Content Item Coverage
+
+An ACIF content item's Content Hash covers its body and its declared metadata, including the frontmatter grants
+that ACIF's `body_hash` alone excludes. A verifier that matched a signature against a `body_hash` or
+`attestation_hash` copied from a record, instead of recomputing both hashes over installed bytes, would accept
+content whose grants changed after signing. The [ACIF Content Items](#acif-content-items) computation rule forbids
+that.
 
 ---
 

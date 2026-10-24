@@ -1,0 +1,25 @@
+# 0017. ACIF content items sign the ACIF attestation input digest, selected by a registry-set marker
+
+Date: 2026-10-24
+Status: Accepted
+Feature: acif-content-items
+
+## Context
+
+An item in the Agent Content Interchange Format (ACIF) carries its own content identity. [ACIF Core §7](https://github.com/OpenScribbler/agent-content-interchange-format/blob/main/specs/core/spec.md) defines `body_hash` over the item's body: for a single-file item, the entry file's text with frontmatter stripped and line endings normalized; for a multi-file item, a manifest construction that matches MOAT's directory algorithm except that entry-file frontmatter is stripped. [ACIF Publisher Specification §6](https://github.com/OpenScribbler/agent-content-interchange-format/blob/main/specs/publisher-spec/spec.md) defines `metadata_hash` over the publisher section that ACIF observes from that frontmatter, which is where an agent's tool, model, and MCP server grants live.
+
+MOAT's directory algorithm hashes the same item differently: a single-file item never matches `body_hash`, and a multi-file item matches it only when the entry file has no frontmatter and the item root holds no ACIF sidecar (TV-ACIF-01 through TV-ACIF-04 show each case). A registry serving ACIF items would carry two unrelated identities for one item. Signing `body_hash` alone would align the identities but leave the frontmatter grants outside the signature, so an attacker could widen an agent's tool grants without invalidating it. [ACIF Registry Specification §6](https://github.com/OpenScribbler/agent-content-interchange-format/blob/main/specs/registry-spec/spec.md) defines an attestation input digest over both `body_hash` and `metadata_hash` for exactly this purpose.
+
+## Decision
+
+Chose **an ACIF content item's MOAT Content Hash is `sha256:` followed by the ACIF attestation input digest, cited to ACIF Registry Specification §6 rather than restated; a client recomputes `body_hash`, `metadata_hash`, and the digest over the bytes it installs; the client learns an item is ACIF only from a registry-set `content[].acif` object carrying `entry_file`, which the registry derives from an `acif` list the Publisher declares in `.moat/publisher.yml`** over **keep the directory algorithm for ACIF items; sign the bare `body_hash`; detect ACIF items from their files; add `body_hash` and `metadata_hash` to a new attestation payload version**.
+
+## Consequences
+
+The Attestation Payload is unchanged (`{"_version":1,"content_hash":…}`); only the Content Hash method differs, so Rekor entries, signing, and the lockfile keep their shape. The lockfile copies the manifest's `acif` object into `entries[].acif` so offline verification uses the same method. `reference/moat_hash.py` implements the construction (`acif_content_hash`), and `reference/generate_test_vectors.py` publishes TV-ACIF-01 through TV-ACIF-04 (single-file and multi-file, with `metadata_hash` absent and present, with full payload bytes) and cross-checks its digest against ACIF's own TV-L3 (e) vectors.
+
+The marker is in the signed manifest, so it is registry-attested; detecting ACIF from files was rejected because any directory with a `SKILL.md` and frontmatter would become ambiguous, and an attacker who could add a file could switch the method. A wrong marker fails closed rather than open: the digest's preimage begins with the line `acif-attestation-input-v1`, which no directory-algorithm manifest line can equal, so the two methods agree on the same bytes only through a SHA-256 collision. Explicit `entry_file` is needed because some ACIF content types do not pin one entry file name.
+
+MOAT hashes installed bytes as they are and applies none of ACIF's canonicalization rewrites, because the signature must cover what is installed. A client that renders the item into a provider's format hashes the fetched bytes it renders from, never the rendered output, which matches the bytes ACIF Registry Specification §11.3 has a consumer recompute over. An item that ACIF tooling would canonicalize before hashing gets a different value from ACIF's published record; a Publisher should ship ACIF-canonical bytes. A client must never take a hash from an ACIF record or sidecar, because a match against a record field proves nothing about the installed bytes.
+
+Clients gain a dependency: deriving the publisher section requires ACIF's observation rules, which read YAML frontmatter. The reference implementation takes the publisher section as an input and leaves observation to an ACIF implementation. `moat-verify` does not verify ACIF items in this version and says so; `moat_hash.py --acif` computes the value for manual comparison. A new payload version carrying both hashes was rejected because every existing verifier would need a second payload shape for what one digest already binds.

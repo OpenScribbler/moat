@@ -79,6 +79,11 @@ Apply the MOAT content hashing algorithm (`reference/moat_hash.py::content_hash(
 Fail with exit code 2 if: directory does not exist or is not a directory; directory contains symlinks; directory is
 empty after VCS directory exclusion.
 
+**ACIF content items:** This version of `moat-verify` computes the directory algorithm only and does not verify
+[ACIF content items](/spec/core#acif-content-items) (manifest entries carrying `acif`). An ACIF item's Content Hash is not
+found in Step 3, so the run fails there. `reference/moat_hash.py --acif <entry_file> <directory>` computes an ACIF
+item's Content Hash for manual comparison.
+
 Output:
 ```
 Content hash: sha256:<hex>
@@ -98,7 +103,7 @@ URI.
 
 **Verify manifest bundle:** Fetch the bundle at `{manifest_uri}.sigstore`. Verify:
 1. The bundle covers the exact bytes of the fetched manifest file
-2. The signing certificate's OIDC issuer and subject match `registry_signing_profile`
+2. The signing certificate's OIDC issuer and SAN (signer subject) match `registry_signing_profile`
 3. The Rekor transparency log entry in the bundle is valid
 
 **Rekor unavailability is a hard failure — never a silent pass.** Exit code 3 (infrastructure failure).
@@ -164,7 +169,7 @@ Verification:
    verification fails.
 4. Extract OIDC signing identity from the verified certificate.
 5. Verify the signer identity matches the manifest's `registry_signing_profile`. The signing certificate's OIDC
-   issuer MUST equal `registry_signing_profile.issuer` and the subject MUST equal `registry_signing_profile.subject`.
+   issuer MUST equal `registry_signing_profile.issuer` and its SAN MUST equal `registry_signing_profile.subject`.
    Fail with exit 1 if either does not match — a different signing identity means this Rekor entry was not created
    by the registry operator declared in the manifest.
 
@@ -188,8 +193,13 @@ Fetch `<source-uri>/raw/main/moat-attestation.json`. Current scope: GitHub repos
 
 Fail (exit 1) if: source URI unreachable; `moat-attestation.json` missing or malformed; no matching `content_hash` entry.
 
-Verify the Rekor entry using the same procedure as Step 4, plus: verify certificate OIDC issuer is
-`https://token.actions.githubusercontent.com` and certificate subject matches:
+If the matching `moat-attestation.json` item carries `key_fingerprint`, its publisher attestation uses the
+[Author-Key Profile](/spec/core#author-key-profile), which this version of `moat-verify` does not verify. `moat-verify`
+MUST then fail Step 5 with exit 1 and say that Author-Key publisher attestations are not supported; it MUST NOT report
+the item as `DUAL-ATTESTED`.
+
+Otherwise, verify the Rekor entry using the same procedure as Step 4, plus: verify certificate OIDC issuer is
+`https://token.actions.githubusercontent.com` and certificate SAN matches:
 ```
 https://github.com/<owner>/<repo>/.github/workflows/moat-publisher.yml@refs/heads/<branch>
 ```
@@ -357,12 +367,12 @@ What this script did NOT verify:
   },
   "registry_attestation": {
     "rekor_log_index": 12345678,
-    "signer_subject": "repo:owner/repo:ref:refs/heads/main",
+    "signer_subject": "https://github.com/owner/repo/.github/workflows/moat-registry.yml@refs/heads/main",
     "signer_issuer": "https://token.actions.githubusercontent.com"
   },
   "item_attestation": {
     "rekor_log_index": 87654321,
-    "signer_subject": "repo:owner/repo:ref:refs/heads/main",
+    "signer_subject": "https://github.com/owner/repo/.github/workflows/moat-registry.yml@refs/heads/main",
     "signer_issuer": "https://token.actions.githubusercontent.com"
   },
   "publisher_attestation": null,
@@ -394,7 +404,7 @@ What this script did NOT verify:
     "bundle_verified": true
   },
   "bundle_attestation": {
-    "signer_subject": "repo:owner/repo:ref:refs/heads/main",
+    "signer_subject": "https://github.com/owner/repo/.github/workflows/moat-registry.yml@refs/heads/main",
     "signer_issuer": "https://token.actions.githubusercontent.com",
     "verified_offline": true
   },
