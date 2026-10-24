@@ -19,14 +19,14 @@ The Registry Action is the standard mechanism for producing a MOAT registry mani
    b. Checks source repository visibility. If private and `allow-private-source: true` is not set, skips the source with a warning. See Private Repository Guard.
    c. Attempts to fetch `moat-attestation.json` from the source's `moat-attestation` branch. If the branch or file does not exist, the source contributes Signed items only.
 3. Discovers content items from each source via the same two-tier model as the Publisher Action: canonical category directories (`skills/`, `agents/`, `rules/`, `commands/`) plus any items listed in `.moat/publisher.yml` if present.
-4. Computes content hashes for all discovered items using the MOAT algorithm (`reference/moat_hash.py`).
+4. Computes content hashes for all discovered items: by the MOAT directory algorithm (`reference/moat_hash.py`), or for an item in the source's `.moat/publisher.yml` `acif` list, as [ACIF Content Items](/spec/core#acif-content-items) defines. See ACIF Content Items below.
 5. Determines trust tier per item. See Trust Tier Determination.
 6. Signs each Signed or Dual-Attested item's canonical payload with `cosign sign-blob --new-bundle-format` using Sigstore keyless OIDC. GitHub Actions provides the OIDC token automatically — no keys or secrets required. The `--new-bundle-format` flag is REQUIRED — it produces a Sigstore protobuf bundle v0.3 as mandated by [Signature Envelope](../moat-spec.md#signature-envelope). Records the Rekor log index from `verificationMaterial.tlogEntries[0].logIndex` per item.
 7. Assembles the registry manifest (`registry.json`) with all indexed items, revocations (registry-initiated from `.moat/registry.yml` plus publisher-initiated from `moat-attestation.json` sources), and metadata fields including the runtime-derived `registry_signing_profile`. Before writing the manifest, the action MUST verify that no two content entries share the same `(name, type)` compound key. If duplicates are detected, the action MUST exit non-zero with a clear error message identifying the conflicting entries and the source repositories they originated from. This enforces the normative uniqueness constraint at manifest generation time.
 8. Signs the assembled manifest with `cosign sign-blob --new-bundle-format`. The resulting Sigstore protobuf bundle v0.3 is written to `registry.json.sigstore` alongside `registry.json`.
 9. Pushes `registry.json` and `registry.json.sigstore` to the `moat-registry` branch with commit message `chore(moat): update registry manifest`. If the branch does not exist, the action creates it as an orphan. The `moat-registry` branch is never merged into the source branch — it contains only manifest data.
 
-**Branch isolation note:** The Registry Action pushes to `moat-registry`, not to the branch that triggered it. Pushes to `moat-registry` do not re-trigger the action, so recursive execution is structurally impossible. Registry operators MUST NOT configure the action to trigger on pushes to the `moat-registry` branch. The action MUST be configured with a schedule trigger (e.g., daily) as its primary crawl mechanism and SHOULD include `workflow_dispatch` for manual runs. The `paths: ['.moat/registry.yml']` push trigger is intentional — it makes an emergency revocation (editing `.moat/registry.yml`) immediately kick off a run. The `push` trigger MUST be scoped to the repository's default branch, and the action MUST exit non-zero on a `push` or `workflow_dispatch` run from any other ref: the manifest's signing identity embeds the triggering ref, so a run from another branch would republish `registry.json` under a different OIDC subject. When the registry repository is also a Publisher (self-publishing) or when the operator wants a compliant registry to bootstrap from two workflow files alone, the action SHOULD include a `workflow_run` trigger chaining this action after `moat-publisher.yml` completes; the `update-registry` job MUST then guard on `github.event.workflow_run.conclusion == 'success'` so the registry does not crawl after a failed publisher build.
+**Branch isolation note:** The Registry Action pushes to `moat-registry`, not to the branch that triggered it. Pushes to `moat-registry` do not re-trigger the action, so recursive execution is structurally impossible. Registry operators MUST NOT configure the action to trigger on pushes to the `moat-registry` branch. The action MUST be configured with a schedule trigger (e.g., daily) as its primary crawl mechanism and SHOULD include `workflow_dispatch` for manual runs. The `paths: ['.moat/registry.yml']` push trigger is intentional — it makes an emergency revocation (editing `.moat/registry.yml`) immediately kick off a run. The `push` trigger MUST be scoped to the repository's default branch, and the action MUST exit non-zero on a `push` or `workflow_dispatch` run from any other ref: the manifest's signing identity embeds the triggering ref, so a run from another branch would republish `registry.json` under a different signer subject. When the registry repository is also a Publisher (self-publishing) or when the operator wants a compliant registry to bootstrap from two workflow files alone, the action SHOULD include a `workflow_run` trigger chaining this action after `moat-publisher.yml` completes; the `update-registry` job MUST then guard on `github.event.workflow_run.conclusion == 'success'` so the registry does not crawl after a failed publisher build.
 
 **All-sources-fail behavior:** If every source in `sources` fails to return content, the action MUST exit non-zero. A run that contacts no sources successfully produces no manifest update and must not silently succeed.
 
@@ -80,13 +80,13 @@ For each discovered content item, the action applies these rules in order:
    - The action's computed hash differs from the hash in `moat-attestation.json` (see Hash Mismatch below).
 3. **Registry Rekor entry + verified publisher Rekor entry** → `Dual-Attested`.
 
-**Publisher Rekor verification procedure:** To qualify an item as Dual-Attested, the action MUST verify the publisher's Rekor entry by:
+**Publisher Rekor verification procedure (keyless):** To qualify an item whose `moat-attestation.json` entry has no `key_fingerprint` as Dual-Attested, the action MUST verify the publisher's Rekor entry by:
 
 1. Locating the item's `rekor_log_index` in `moat-attestation.json`.
 2. Fetching the Rekor entry at that index from the transparency log.
 3. Confirming the entry's certificate OIDC issuer is `https://token.actions.githubusercontent.com`.
-4. Confirming the entry's certificate OIDC subject matches the expected publisher subject, constructed from the
-   source URI and the `publisher_workflow_ref` field in `moat-attestation.json`:
+4. Confirming the entry's certificate SAN (the signer subject) matches the expected publisher signer subject,
+   constructed from the source URI and the `publisher_workflow_ref` field in `moat-attestation.json`:
    ```
    https://github.com/{owner}/{repo}/{publisher_workflow_ref}
    ```
@@ -99,10 +99,22 @@ If any step fails, the item falls back to `Signed`. The fallback is non-fatal fo
 
 ```
 Publisher Rekor verification failed for skills/my-skill (log index 12345678):
-  Expected OIDC subject: https://github.com/alice/my-skills/.github/workflows/moat-publisher.yml@refs/heads/main
-  Observed OIDC subject: https://github.com/alice/my-skills/.github/workflows/ci.yml@refs/heads/main
+  Expected signer subject: https://github.com/alice/my-skills/.github/workflows/moat-publisher.yml@refs/heads/main
+  Observed signer subject: https://github.com/alice/my-skills/.github/workflows/ci.yml@refs/heads/main
   Item will be indexed as Signed.
 ```
+
+On success the action sets the entry's `signing_profile` in keyless form from the verified certificate.
+
+**Publisher Rekor verification procedure (Author-Key Profile):** To qualify an item whose `moat-attestation.json` entry carries `key_fingerprint` as Dual-Attested, the action MUST verify the publisher's Rekor entry under the [Author-Key Profile](/spec/core#author-key-profile) by:
+
+1. Reading `.moat/allowed_signers`, and `.moat/allowed_signers.sig` if present, from the source repository at the crawled commit. A missing or malformed list fails this procedure.
+2. Fetching the Rekor entry at the item's `rekor_log_index`, and confirming it is a `rekord` entry with public-key format `ssh`.
+3. Confirming the entry's public key carries no comment, that its fingerprint equals `key_fingerprint`, and that `key_fingerprint` is in the list.
+4. Confirming the entry's data hash is the SHA-256 of the item message built from the action's computed Content Hash.
+5. Verifying the entry's SSHSIG over that item message under the profile's signature scheme, including the user-presence flag for `sk-` key types.
+
+If any step fails, the item falls back to `Signed`, with the same non-fatal logging as the keyless procedure. On success the action sets the entry's `signing_profile` in key-fingerprint form: `key_fingerprint`, `allowed_signers` set to the list file's text verbatim, and `allowed_signers_change` set to the `.sig` file's text verbatim when that file exists. Every entry from one source in a manifest carries the list read at the same crawled commit. The registry does not check the list-change signature; that check belongs to the client, which compares against the list it already trusts.
 
 **Hash mismatch (normative):** If the action's computed `content_hash` for an item differs from the `content_hash` recorded in `moat-attestation.json`, the Registry Action MUST downgrade the item from Dual-Attested to Signed. The action's computed hash is authoritative. Specifically:
 
@@ -153,7 +165,7 @@ Each Signed or Dual-Attested item is attested with one registry-signed payload. 
 
 Serialization rules: UTF-8, no BOM, no trailing newline, no insignificant whitespace, lexicographic key order. The payload MUST be identical to the one produced by `moat-verify` for the same item. See [core spec attestation payload](/spec/core#per-item-attestation-payload) for the full canonical form and test vector.
 
-**Registry Rekor entry:** `cosign sign-blob` creates a `hashedrekord` entry. The certificate subject encodes the GitHub Actions OIDC identity for the Registry Action workflow:
+**Registry Rekor entry:** `cosign sign-blob` creates a `hashedrekord` entry. The certificate's SAN (the signer subject) is the Registry Action workflow's identity, which Fulcio derives from the token's `job_workflow_ref` claim:
 
 ```
 https://github.com/{owner}/{repo}/.github/workflows/moat-registry.yml@refs/heads/main
@@ -161,7 +173,13 @@ https://github.com/{owner}/{repo}/.github/workflows/moat-registry.yml@refs/heads
 
 This identity is what `moat-verify` and conforming clients use to confirm registry attestations came from a legitimate Registry Action run on the declared registry repository.
 
-**`registry_signing_profile` derivation:** The action derives the registry's signing identity from its own OIDC token at runtime and writes it to the manifest's `registry_signing_profile` field automatically. Registry operators do not declare their signing identity in `.moat/registry.yml` — the OIDC token is the authoritative source and self-declaration is redundant and error-prone.
+**`registry_signing_profile` derivation:** The action derives the registry's signing identity from its own OIDC token at runtime and writes it to the manifest's `registry_signing_profile` field automatically. Registry operators do not declare their signing identity in `.moat/registry.yml` — the OIDC token is the authoritative source and self-declaration is redundant and error-prone. `registry_signing_profile.subject` is the SAN form above (`https://github.com/` followed by the token's `job_workflow_ref` claim), not the token's `sub` claim.
+
+---
+
+## ACIF Content Items (normative)
+
+The action reads the `acif` list from each source's `.moat/publisher.yml` at the crawled commit (format defined in [Publisher Action](/spec/publisher-action#acif-content-items-normative)). For each listed item, the action MUST compute the Content Hash as [ACIF Content Items](/spec/core#acif-content-items) defines and MUST set the item's manifest entry `acif` to `{"entry_file": <entry_file>}`. The action MUST NOT set `acif` on any item the list does not name. A listed `path` that matches no discovered item, or an `entry_file` that is not a regular file in the item, MUST be logged as an error, and the action MUST NOT index that item.
 
 ---
 
@@ -183,14 +201,14 @@ Revocation entries from `moat-attestation.json` are propagated on each scheduled
 
 A publisher may run both the Publisher Action and the Registry Action from the same repository. This produces valid `Dual-Attested` content even within a single repo.
 
-The independence guarantee comes from the OIDC subject binding, not from organizational separation. The two workflow files produce two distinct OIDC subjects:
+The independence guarantee comes from the signer subject binding, not from organizational separation. The two workflow files produce two distinct signer subjects:
 
 - Publisher Action: `.../{publisher_workflow_ref}` (canonical: `.github/workflows/moat-publisher.yml@refs/heads/main`)
 - Registry Action: `.../.github/workflows/moat-registry.yml@refs/heads/main`
 
 These map to two distinct, independently verifiable Rekor entries. Compromising one workflow's execution context does not automatically compromise the other.
 
-**Assurance caveat:** Self-publishing Dual-Attested provides integrity, tamper evidence, and replay protection. It does not provide the organizational independence that cross-repo Dual-Attested provides: both OIDC identities are accessible to anyone with push access to the repository. End Users who require organizational independence between publisher and registry operator MUST use separate repositories controlled by separate GitHub accounts or organizations.
+**Assurance caveat:** Self-publishing Dual-Attested provides integrity, tamper evidence, and replay protection. It does not provide the organizational independence that cross-repo Dual-Attested provides: with the Publisher Action, both OIDC identities are accessible to anyone with push access to the repository. A self-publisher MAY instead produce the publisher attestation under the [Author-Key Profile](/spec/core#author-key-profile), with an Author Key held outside the repository. Push access alone then cannot produce a publisher attestation that a client holding the source's trusted allowed-signers list accepts unprompted: the client treats a list change not signed by a trusted key, a switch to a keyless `signing_profile` for that source, and an update to an installed item whose `source_uri` differs from the one the client recorded for it (such as a respelling with a trailing slash or a letter-case change), as a first sight that needs End User confirmation, and refuses a replayed older list outright. An attacker who removes the publisher attestation altogether leaves the item with only the registry attestation, at the Signed tier. End Users who require organizational independence between publisher and registry operator MUST use separate repositories controlled by separate GitHub accounts or organizations.
 
 **Disclosure:** When the Registry Action detects that the registry repository URI matches a source URI (self-publishing), it MUST set `self_published: true` in the manifest. Conforming clients SHOULD surface this to End Users so they can make an informed trust decision.
 

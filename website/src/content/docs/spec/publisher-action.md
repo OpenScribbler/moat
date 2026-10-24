@@ -17,7 +17,7 @@ The Publisher Action is the primary adoption mechanism for the `Dual-Attested` t
 2. Discovers content items via two-tier model: canonical category directories (`skills/`, `agents/`, `rules/`, `commands/`) plus any items listed in `.moat/publisher.yml` if present.
 3. Computes content hashes using the MOAT algorithm (`reference/moat_hash.py`). Errors (symlinks, empty directories) skip the item with a logged warning.
 4. Builds one attestation payload JSON per content item (schema below).
-5. Signs each payload with `cosign sign-blob --new-bundle-format` using Sigstore keyless OIDC. GitHub Actions provides the OIDC token automatically — no keys or secrets required. The `--new-bundle-format` flag is REQUIRED — it produces a Sigstore protobuf bundle v0.3 as mandated by [Signature Envelope](../moat-spec.md#signature-envelope). The workflow path and branch are encoded into the OIDC certificate at signing time and recorded automatically in `publisher_workflow_ref` in `moat-attestation.json`. Registries read this field to derive the expected OIDC subject for publisher verification — no manual filename configuration is needed.
+5. Signs each payload with `cosign sign-blob --new-bundle-format` using Sigstore keyless OIDC. GitHub Actions provides the OIDC token automatically — no keys or secrets required. The `--new-bundle-format` flag is REQUIRED — it produces a Sigstore protobuf bundle v0.3 as mandated by [Signature Envelope](../moat-spec.md#signature-envelope). The workflow path and branch are encoded into the OIDC certificate at signing time and recorded automatically in `publisher_workflow_ref` in `moat-attestation.json`. Registries read this field to derive the expected signer subject (the signing certificate's SAN) for publisher verification — no manual filename configuration is needed.
 6. Rekor creates a transparency log entry. `cosign` returns a v0.3 bundle. The Publisher Action reads the Rekor log id from `verificationMaterial.tlogEntries[0].logId.keyId` and the log index from `verificationMaterial.tlogEntries[0].logIndex`, and records them as `rekor_log_id` and `rekor_log_index` in `moat-attestation.json`.
 7. Writes/updates `moat-attestation.json` with Rekor references for each attested item, including the `private_repo` field.
 8. Pushes `moat-attestation.json` to the `moat-attestation` branch with commit message `chore(moat): update attestation`. If the branch does not exist, the action creates it. The `moat-attestation` branch is never merged into the source branch — it contains only attestation data.
@@ -61,7 +61,9 @@ The `.moat/` directory at the repository root is reserved for MOAT protocol file
 
 Currently defined files:
 
-- `.moat/publisher.yml` — tier-2 discovery config (this spec)
+- `.moat/publisher.yml` — tier-2 discovery config and ACIF content item declarations (this spec)
+- `.moat/allowed_signers` — the source's Author Keys ([Author-Key Profile](/spec/core#author-key-profile))
+- `.moat/allowed_signers.sig` — signature over the latest allowed-signers list change ([Author-Key Profile](/spec/core#author-key-profile))
 - `.moat/registry.yml` — registry operator config ([registry-action](/spec/registry-action))
 
 **Unknown-file warning (normative — MUST):** The Publisher Action MUST emit a warning for any file under `.moat/` whose name matches `^[^.].*\.(yml|yaml)$` and is not a currently defined file. Example:
@@ -73,6 +75,25 @@ Warning: .moat/foo.yml is not a recognized MOAT config file. The .moat/ director
 Non-YAML files under `.moat/` (e.g., `.moat/README.md`, `.moat/.gitkeep`) MUST NOT trigger the warning.
 
 **Attestation exclusion (normative — MUST):** Files under `.moat/` MUST NOT be included in the attestation payload. They are protocol metadata, not content. Their presence or absence does not affect any `content_hash`.
+
+---
+
+## ACIF Content Items (normative)
+
+A Publisher declares which discovered items are [ACIF content items](/spec/core#acif-content-items) in a top-level `acif` list in `.moat/publisher.yml`:
+
+```yaml
+acif:
+  - path: skills/my-skill
+    entry_file: SKILL.md
+```
+
+| Field | Required | Description |
+|---|---|---|
+| `acif[].path` | REQUIRED | Repository-relative path of a content item discovered by tier 1 or tier 2 |
+| `acif[].entry_file` | REQUIRED | The item's canonical entry file, as a path relative to the item root |
+
+For each listed item, the Publisher Action MUST compute the Content Hash as [ACIF Content Items](/spec/core#acif-content-items) defines, over the item's bytes at the source commit, instead of by the directory algorithm. A `path` that matches no discovered item, or an `entry_file` that is not a regular file in the item, MUST be logged as an error, and the action MUST NOT attest that item. An item not in the list is not an ACIF content item.
 
 ---
 
@@ -104,17 +125,17 @@ Each content item produces one payload. This is what gets signed and recorded in
 {"_version":1,"content_hash":"sha256:abc123..."}
 ```
 
-Serialization rules: UTF-8, no BOM, no trailing newline, no insignificant whitespace, lexicographic key order. This is identical to the canonical payload the Registry Action signs for the same item. Both the Publisher Action and Registry Action sign the same payload bytes — they are distinguished by the OIDC subject in the Rekor certificate, not by payload content.
+Serialization rules: UTF-8, no BOM, no trailing newline, no insignificant whitespace, lexicographic key order. This is identical to the canonical payload the Registry Action signs for the same item. Both the Publisher Action and Registry Action sign the same payload bytes — they are distinguished by the signer subject (certificate SAN) in the Rekor certificate, not by payload content.
 
 **Why the same payload?** A richer payload (with `item_name`, `source_ref`, `attested_at`, etc.) cannot be verified by the Registry Action at crawl time because `source_ref` and `attested_at` are unknown to the registry — they cannot be reconstructed. The OIDC certificate already encodes the repository, workflow path, and ref at signing time; a richer payload would duplicate that data without adding verifiability.
 
-**Rekor entry:** `cosign sign-blob` creates a `hashedrekord` entry. The certificate subject encodes the GitHub Actions OIDC identity:
+**Rekor entry:** `cosign sign-blob` creates a `hashedrekord` entry. The certificate's Subject Alternative Name (SAN) — the signer subject — is the workflow identity Fulcio derives from the token's `job_workflow_ref` claim:
 
 ```
 https://github.com/{owner}/{repo}/.github/workflows/moat-publisher.yml@refs/heads/main
 ```
 
-This identity is what registries and `moat-verify` use to confirm the attestation came from a legitimate Publisher Action run on the claimed source repository. The Rekor certificate's `sub` claim encodes the repository, workflow path, and ref — no additional provenance fields in the payload are needed or verified.
+This identity is what registries and `moat-verify` use to confirm the attestation came from a legitimate Publisher Action run on the claimed source repository. The SAN encodes the repository, workflow path, and ref — no additional provenance fields in the payload are needed or verified. The OIDC token's `sub` claim does not appear in the certificate.
 
 **Workflow filename and branch:** The Publisher Action may use any valid workflow filename. At runtime it reads its own path and branch from `GITHUB_WORKFLOW_REF` (a GitHub-injected environment variable) and records the result as `publisher_workflow_ref` in `moat-attestation.json`. The Registry Action reads this field when verifying publisher Rekor entries — the registry never needs to know the filename in advance. The recommended filename is `.github/workflows/moat-publisher.yml`, which the reference workflow uses by default.
 
@@ -145,9 +166,51 @@ Location: `moat-attestation` branch root. One file per repo. The file is never p
 
 **`private_repo` field:** REQUIRED. `true` when the action ran on a `private` or `internal` repository; `false` for `public`. This annotation is visible to registries and conforming clients — they MAY use it to isolate, flag, or reject attestations from private repositories. Attestations created before this field was added will not have it; conforming registries SHOULD treat absent `private_repo` as unknown visibility rather than assuming public.
 
-**`publisher_workflow_ref` field:** OPTIONAL. The workflow path and ref that produced this attestation, derived from `GITHUB_WORKFLOW_REF` at signing time (e.g., `.github/workflows/moat-publisher.yml@refs/heads/main`). The Registry Action reads this field to construct the expected OIDC subject for publisher verification. If absent, the Registry Action cannot construct the expected subject and MUST downgrade the item to `Signed` (no legacy-path fallback).
+**`publisher_workflow_ref` field:** OPTIONAL. The workflow path and ref that produced this attestation, derived from `GITHUB_WORKFLOW_REF` at signing time (e.g., `.github/workflows/moat-publisher.yml@refs/heads/main`). The Registry Action reads this field to construct the expected signer subject for publisher verification. If absent, the Registry Action cannot construct the expected subject and MUST downgrade every item without `key_fingerprint` to `Signed` (no legacy-path fallback).
 
 **`source_ref` field (per item):** OPTIONAL. Full commit SHA at the time of attestation. Stored in `moat-attestation.json` as informational context only — it is not part of the signed payload and MUST NOT be used in trust decisions. The Rekor certificate's encoded ref is authoritative for provenance; `source_ref` here is for human auditing and tooling convenience.
+
+**`key_fingerprint` field (per item):** OPTIONAL. Present only when the item's publisher attestation was produced under the [Author-Key Profile](/spec/core#author-key-profile): the fingerprint of the Author Key that signed it. Its presence tells the Registry Action to verify the Rekor entry at `rekor_log_index` as an Author-Key entry rather than a keyless one. The Publisher Action never writes it; a Publisher using an Author Key writes `moat-attestation.json` itself, in the same format.
+
+---
+
+## Author-Key Signing (informative)
+
+A Publisher using the [Author-Key Profile](/spec/core#author-key-profile) signs on a machine that holds the Author Key, outside CI. One way to do it with stock OpenSSH and `rekor-cli`, for an item whose Content Hash is `$HASH`:
+
+```sh
+# Item message: domain separator line, then the canonical payload (no trailing newline)
+printf 'moat-author-item-v1\n{"_version":1,"content_hash":"%s"}' "$HASH" > item.msg
+
+# SSHSIG over the message, namespace "file"; writes item.msg.sig
+ssh-keygen -Y sign -f ~/.ssh/id_ed25519_sk -n file item.msg
+
+# Public key without its comment field
+cut -d' ' -f1,2 ~/.ssh/id_ed25519_sk.pub > author.pub
+
+# Record a rekord entry; the output names the log index for moat-attestation.json
+rekor-cli upload --type rekord --pki-format ssh \
+  --artifact item.msg --signature item.msg.sig --public-key author.pub
+```
+
+A new list starts with its sequence line, `# moat-sequence: 0`. Each key's `.moat/allowed_signers` line is its fingerprint followed by the comment-free public key:
+
+```sh
+printf '# moat-sequence: 0\n' > .moat/allowed_signers
+printf '%s %s\n' "$(ssh-keygen -l -f author.pub | cut -d' ' -f2)" "$(cat author.pub)" >> .moat/allowed_signers
+```
+
+To change the list, edit it, raise its sequence line by one, sign the list-change message with a key in the previous list, and commit the signature with the new list. The message binds the source repository's URI exactly as registries record it in `content[].source_uri` (for GitHub, `https://github.com/{owner}/{repo}`) and the new sequence. For lists with LF line endings and no byte-order mark, the list digest is `sha256:` plus the file's `sha256sum`:
+
+```sh
+source_uri=https://github.com/owner/repo
+seq=$(sed -n 's/^# moat-sequence: //p' .moat/allowed_signers)
+prev=$(git show HEAD:.moat/allowed_signers | sha256sum | cut -c1-64)
+new=$(sha256sum < .moat/allowed_signers | cut -c1-64)
+printf 'moat-allowed-signers-change-v1\n%s\n%s\nsha256:%s\nsha256:%s\n' "$source_uri" "$seq" "$prev" "$new" > change.msg
+ssh-keygen -Y sign -f ~/.ssh/id_ed25519_sk -n file change.msg
+mv change.msg.sig .moat/allowed_signers.sig
+```
 
 ---
 

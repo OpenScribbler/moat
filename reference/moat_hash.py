@@ -13,8 +13,11 @@ output to this script if this script contains a bug.
 
 Usage:
     python3 moat_hash.py <directory>
+    python3 moat_hash.py --acif <entry-file> --publisher-section <file.json> <directory>
+    python3 moat_hash.py --acif <entry-file> --no-publisher-section <directory>
 """
 import hashlib
+import json
 import sys
 import unicodedata
 from pathlib import Path
@@ -198,14 +201,244 @@ def content_hash(directory: str | Path) -> str:
     return "sha256:" + hashlib.sha256(manifest).hexdigest()
 
 
+# ── ACIF content items ────────────────────────────────────────────────────────
+#
+# For an ACIF content item the MOAT Content Hash is not the directory hash
+# above. It is "sha256:" + the item's ACIF attestation input digest
+# ([ACIF-REGISTRY] §6), computed over the installed bytes. It equals the
+# attestation_hash an ACIF record publishes only when the item's bytes are
+# already ACIF-canonical. That digest covers both ACIF hashes of the item:
+#
+#   body_hash      [ACIF-CORE] §7.2-§7.5 (frontmatter-bearing content types)
+#   metadata_hash  [ACIF-PUBLISHER] §6 (absent when no publisher_section)
+#
+# This reference recomputes body_hash from the item's bytes. metadata_hash is
+# computed from a publisher_section object the caller supplies: deriving that
+# object from the item's declaration surface (frontmatter or authored sidecar)
+# is ACIF's observation step ([ACIF-PUBLISHER] §5) and needs a YAML parser,
+# which this stdlib-only script does not carry.
+
+ACIF_SIDECAR_NAME = "acif-sidecar.yaml"
+ACIF_ATTESTATION_INPUT_TAG = b"acif-attestation-input-v1"
+
+
+def canonical_text(data: bytes) -> bytes:
+    """BOM strip + single-pass CRLF/CR -> LF (the same rule _hash_text streams)."""
+    if data.startswith(UTF8_BOM):
+        data = data[3:]
+    return data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+
+
+def strip_frontmatter(data: bytes) -> bytes:
+    """
+    [ACIF-CORE] §7.3 entry-file frontmatter strip, over the canonical text form.
+    The block opens with a leading '---' line and closes at the next '---' line,
+    terminated by LF or by end of input; both delimiter lines are removed.
+    """
+    text = canonical_text(data)
+    if not text.startswith(b"---\n"):
+        return text
+    end = text.find(b"\n---\n", 3)
+    if end != -1:
+        return text[end + len(b"\n---\n"):]
+    if text.endswith(b"\n---"):
+        return b""
+    return text
+
+
+def _acif_root_excluded_from_classification(name: str) -> bool:
+    upper = name.upper()
+    return upper.startswith("LICENSE") or upper.startswith("README") \
+        or name == ACIF_SIDECAR_NAME
+
+
+def _acif_body(directory: str | Path, entry_file: str) -> tuple[list[tuple[str, Path]], str, bool]:
+    """
+    The files an ACIF body_hash covers, as (relative path, path) pairs, plus
+    the NFC entry path and whether the body is multi-file. A single-file body
+    covers the entry file alone.
+    """
+    if not isinstance(entry_file, str) or not entry_file or entry_file.startswith("/") \
+            or Path(entry_file).is_absolute() or ".." in entry_file.replace("\\", "/").split("/"):
+        raise ValueError(f"Malformed acif entry_file: {entry_file!r}")
+    root = Path(directory)
+    files: list[tuple[str, Path]] = []
+    for path in root.rglob("*"):
+        if any(part in VCS_DIRS for part in path.relative_to(root).parts):
+            continue
+        if path.is_symlink():
+            raise ValueError(f"Symlink rejected: {path.relative_to(root).as_posix()}")
+        if not path.is_file():
+            continue
+        if path.parent == root and path.name == ACIF_SIDECAR_NAME:
+            continue
+        rel = unicodedata.normalize("NFC", path.relative_to(root).as_posix())
+        files.append((rel, path))
+
+    entry = unicodedata.normalize("NFC", entry_file)
+    rels = [rel for rel, _ in files]
+    if len(rels) != len(set(rels)):
+        raise ValueError("NFC path collision — content is unpublishable")
+    if entry not in rels:
+        raise ValueError(f"Entry file not found: {entry_file}")
+
+    multi_file = any(
+        rel != entry and not ("/" not in rel and _acif_root_excluded_from_classification(rel))
+        for rel in rels
+    )
+    if not multi_file:
+        files = [(rel, path) for rel, path in files if rel == entry]
+    return files, entry, multi_file
+
+
+def acif_installed_files(directory: str | Path, entry_file: str) -> list[str]:
+    """
+    The relative paths a conforming client installs for an ACIF content item:
+    exactly the files its body_hash covers (moat-spec.md §ACIF Content Items).
+    A single-file body installs the entry file alone, so root LICENSE*/README*
+    files are dropped; the root acif-sidecar.yaml and VCS metadata directories
+    are never installed.
+    """
+    files, _, _ = _acif_body(directory, entry_file)
+    return sorted(rel for rel, _ in files)
+
+
+def acif_body_hash(directory: str | Path, entry_file: str) -> str:
+    """
+    ACIF body_hash for a frontmatter-bearing item, returned as "sha256:<hex>".
+
+    entry_file is the canonical entry file's path relative to the item root
+    (SKILL.md for a skill). Single-file bodies hash the entry file's
+    frontmatter-stripped canonical text; multi-file bodies hash the §7.4
+    manifest, with the entry file's per-file hash taken over that same
+    stripped text. Root LICENSE*/README* files count only against the
+    single/multi-file classification; they are hashed in a multi-file body.
+    """
+    files, entry, multi_file = _acif_body(directory, entry_file)
+    if not multi_file:
+        return "sha256:" + hashlib.sha256(strip_frontmatter(files[0][1].read_bytes())).hexdigest()
+
+    entries = []
+    for rel, path in files:
+        if rel == entry:
+            h = hashlib.sha256(strip_frontmatter(path.read_bytes())).hexdigest()
+        else:
+            h = _hash_text(path) if is_text(path) else _hash_binary(path)
+        entries.append((rel, h))
+    entries.sort(key=lambda e: e[0].encode("utf-8"))
+    manifest = "".join(f"{h}  {p}\n" for p, h in entries).encode("utf-8")
+    return "sha256:" + hashlib.sha256(manifest).hexdigest()
+
+
+JCS_MAX_SAFE_INTEGER = 2**53 - 1
+
+
+def jcs(value) -> bytes:
+    """
+    RFC 8785 canonical JSON for the value space ACIF records use: objects,
+    arrays, strings, booleans, null and integers within ±(2**53 - 1).
+    RFC 8785 serializes numbers as IEEE-754 doubles, and an integer beyond
+    ±(2**53 - 1) cannot round-trip through a double, so two producers that
+    parse it differently can disagree on its digits. Non-integer numbers and
+    integers outside that range are refused with TypeError rather than
+    serialized approximately.
+    """
+    def enc(v) -> str:
+        if isinstance(v, dict):
+            items = sorted(v.items(), key=lambda kv: kv[0].encode("utf-16-be"))
+            return "{" + ",".join(f"{enc_str(k)}:{enc(x)}" for k, x in items) + "}"
+        if isinstance(v, list):
+            return "[" + ",".join(enc(x) for x in v) + "]"
+        if isinstance(v, bool):
+            return "true" if v else "false"
+        if v is None:
+            return "null"
+        if isinstance(v, int) and abs(v) <= JCS_MAX_SAFE_INTEGER:
+            return str(v)
+        if isinstance(v, int):
+            raise TypeError(f"integer {v} is outside ±(2**53 - 1) and cannot round-trip through "
+                            "an IEEE-754 double")
+        if isinstance(v, str):
+            return enc_str(v)
+        raise TypeError(f"unsupported JCS value: {type(v).__name__}")
+
+    def enc_str(s: str) -> str:
+        return json.dumps(s, ensure_ascii=False, separators=(",", ":"))
+
+    return enc(value).encode("utf-8")
+
+
+def acif_metadata_hash(publisher_section: dict | None) -> str | None:
+    """[ACIF-PUBLISHER] §6: SHA-256 of JCS(publisher_section) || LF; None when absent."""
+    if publisher_section is None:
+        return None
+    return "sha256:" + hashlib.sha256(jcs(publisher_section) + b"\n").hexdigest()
+
+
+def acif_attestation_input_preimage(body_hash: str, metadata_hash: str | None) -> bytes:
+    """
+    [ACIF-REGISTRY] §6 attestation input preimage:
+      "acif-attestation-input-v1" LF BH LF MH LF
+    where BH and MH are "<algorithm>:<value>" and MH is the four bytes "null"
+    when the record has no metadata_hash.
+    """
+    mh = metadata_hash if metadata_hash is not None else "null"
+    return (ACIF_ATTESTATION_INPUT_TAG + b"\n" + body_hash.encode("utf-8") + b"\n"
+            + mh.encode("utf-8") + b"\n")
+
+
+def content_hash_from_acif(field: dict) -> str:
+    """
+    Map an ACIF {algorithm, value} hash field to a MOAT "<algorithm>:<hex>"
+    Content Hash. Only sha256 with a 64-character lowercase hex value maps;
+    anything else is refused.
+    """
+    algorithm, value = field.get("algorithm"), field.get("value")
+    if algorithm != "sha256":
+        raise ValueError(f"Unsupported ACIF hash algorithm: {algorithm!r}")
+    if not isinstance(value, str) or len(value) != 64 \
+            or any(c not in "0123456789abcdef" for c in value):
+        raise ValueError("ACIF hash value is not 64 lowercase hex characters")
+    return f"sha256:{value}"
+
+
+def acif_content_hash(directory: str | Path, entry_file: str,
+                      publisher_section: dict | None) -> str:
+    """
+    MOAT Content Hash of an ACIF content item: "sha256:" + the ACIF attestation
+    input digest over the installed bytes. Equals an ACIF record's
+    attestation_hash only when those bytes are already ACIF-canonical.
+    """
+    body = acif_body_hash(directory, entry_file)
+    meta = acif_metadata_hash(publisher_section)
+    digest = hashlib.sha256(acif_attestation_input_preimage(body, meta)).hexdigest()
+    return content_hash_from_acif({"algorithm": "sha256", "value": digest})
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
-if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print(f"Usage: {sys.argv[0]} <directory>", file=sys.stderr)
-        sys.exit(1)
+def _main(argv: list[str]) -> int:
+    usage = (f"Usage: {argv[0]} <directory>\n"
+             f"       {argv[0]} --acif <entry-file> --publisher-section <file.json> <directory>\n"
+             f"       {argv[0]} --acif <entry-file> --no-publisher-section <directory>")
+    args = argv[1:]
     try:
-        print(content_hash(sys.argv[1]))
-    except (ValueError, OSError) as e:
+        if len(args) == 1 and not args[0].startswith("--"):
+            print(content_hash(args[0]))
+            return 0
+        if len(args) == 5 and args[0] == "--acif" and args[2] == "--publisher-section":
+            section = json.loads(Path(args[3]).read_text(encoding="utf-8"))
+            print(acif_content_hash(args[4], args[1], section))
+            return 0
+        if len(args) == 4 and args[0] == "--acif" and args[2] == "--no-publisher-section":
+            print(acif_content_hash(args[3], args[1], None))
+            return 0
+    except (ValueError, OSError, TypeError) as e:
         print(f"error: {e}", file=sys.stderr)
-        sys.exit(1)
+        return 1
+    print(usage, file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(_main(sys.argv))

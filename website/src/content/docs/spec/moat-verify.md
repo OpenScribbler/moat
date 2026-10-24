@@ -56,7 +56,7 @@ Verifies against the stored install snapshot. Proves "this content was valid whe
 | Code | Online mode                                                                                           | Offline mode                                                                                                                       |
 |------|-------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------|
 | `0`  | All verifications passed.                                                                             | All verifications passed.                                                                                                          |
-| `1`  | Verification failed: hash not in manifest, Rekor entry invalid, content hash mismatch.               | Verification failed: hash not in lockfile, content hash mismatch, bundle signature validation failed.                              |
+| `1`  | Verification failed: hash not in manifest, Rekor entry invalid, content hash mismatch, unsupported item (an ACIF content item in Step 3, an Author-Key publisher attestation in Step 5). | Verification failed: hash not in lockfile, content hash mismatch, bundle signature validation failed, unsupported item (an ACIF content item in Step 3). |
 | `2`  | Input error: bad directory, invalid arguments, unsupported `--source` URI, unknown `schema_version`. | Input error: bad directory, lockfile not found or malformed, `--source` + `--lockfile` combined, `--registry` + `--lockfile` combined, unknown `moat_lockfile_version`. |
 | `3`  | Infrastructure failure: registry unreachable, Rekor unreachable, malformed manifest from remote.     | Corrupt stored artifact: `attestation_bundle` structurally invalid, or cosign signature error not attributable to hash mismatch. Recovery: re-run with `--registry`. |
 
@@ -79,6 +79,21 @@ Apply the MOAT content hashing algorithm (`reference/moat_hash.py::content_hash(
 Fail with exit code 2 if: directory does not exist or is not a directory; directory contains symlinks; directory is
 empty after VCS directory exclusion.
 
+**ACIF content items:** This version of `moat-verify` computes the directory algorithm only and does not verify
+[ACIF content items](/spec/core#acif-content-items) (manifest entries carrying `acif`). Step 3 fails a
+matching entry that carries `acif` with exit 1, in both modes. `reference/moat_hash.py` computes an ACIF item's Content Hash for manual
+comparison, and requires the caller to state whether the item has a `publisher_section`:
+
+```
+python3 reference/moat_hash.py --acif <entry_file> --publisher-section <publisher_section.json> <directory>
+python3 reference/moat_hash.py --acif <entry_file> --no-publisher-section <directory>
+```
+
+`<publisher_section.json>` holds the item's ACIF `publisher_section` as a JSON object, derived by an ACIF
+implementation's observation rules from the item's entry-file frontmatter and any publisher-authored root
+`acif-sidecar.yaml`. Use `--no-publisher-section` only for an item that declares no metadata; for an item with
+frontmatter or a root sidecar it yields a different Content Hash.
+
 Output:
 ```
 Content hash: sha256:<hex>
@@ -98,7 +113,7 @@ URI.
 
 **Verify manifest bundle:** Fetch the bundle at `{manifest_uri}.sigstore`. Verify:
 1. The bundle covers the exact bytes of the fetched manifest file
-2. The signing certificate's OIDC issuer and subject match `registry_signing_profile`
+2. The signing certificate's OIDC issuer and SAN (signer subject) match `registry_signing_profile`
 3. The Rekor transparency log entry in the bundle is valid
 
 **Rekor unavailability is a hard failure — never a silent pass.** Exit code 3 (infrastructure failure).
@@ -130,6 +145,16 @@ Fail (exit 1) if no match:
     Computed: sha256:<hex>
     Registry: <url>
 ```
+
+If the matching entry carries `acif`, it is an ACIF content item, which this version of `moat-verify` does not
+verify. `moat-verify` MUST then fail Step 3 with exit 1, before any Rekor request, with:
+```
+[✗] ACIF content items are not supported by this version of moat-verify
+    Name:     <item-name>
+    Computed: sha256:<hex>
+```
+The check does not depend on the entry's `content_hash`: an untrusted manifest can pair `acif` with a
+directory-algorithm hash, and `moat-verify` MUST NOT verify such an entry by the directory algorithm.
 
 If found:
 ```
@@ -164,7 +189,7 @@ Verification:
    verification fails.
 4. Extract OIDC signing identity from the verified certificate.
 5. Verify the signer identity matches the manifest's `registry_signing_profile`. The signing certificate's OIDC
-   issuer MUST equal `registry_signing_profile.issuer` and the subject MUST equal `registry_signing_profile.subject`.
+   issuer MUST equal `registry_signing_profile.issuer` and its SAN MUST equal `registry_signing_profile.subject`.
    Fail with exit 1 if either does not match — a different signing identity means this Rekor entry was not created
    by the registry operator declared in the manifest.
 
@@ -188,8 +213,18 @@ Fetch `<source-uri>/raw/main/moat-attestation.json`. Current scope: GitHub repos
 
 Fail (exit 1) if: source URI unreachable; `moat-attestation.json` missing or malformed; no matching `content_hash` entry.
 
-Verify the Rekor entry using the same procedure as Step 4, plus: verify certificate OIDC issuer is
-`https://token.actions.githubusercontent.com` and certificate subject matches:
+If the matching `moat-attestation.json` item carries `key_fingerprint`, its publisher attestation uses the
+[Author-Key Profile](/spec/core#author-key-profile), which this version of `moat-verify` does not verify. `moat-verify`
+MUST then fail Step 5 with exit 1, before any Rekor request for the publisher attestation and whatever
+`rekor_log_index` the item carries, with:
+```
+[✗] Author-Key publisher attestations are not supported by this version of moat-verify
+    Key fingerprint: <key_fingerprint>
+```
+It MUST NOT report the item as `DUAL-ATTESTED`.
+
+Otherwise, verify the Rekor entry using the same procedure as Step 4, plus: verify certificate OIDC issuer is
+`https://token.actions.githubusercontent.com` and certificate SAN matches:
 ```
 https://github.com/<owner>/<repo>/.github/workflows/moat-publisher.yml@refs/heads/<branch>
 ```
@@ -226,6 +261,14 @@ Lockfile: <path> (version: <moat_lockfile_version>, <N> entries)
 ### Step 3: Look up content hash
 
 Search all entries in `entries` for a matching `content_hash`.
+
+**A matching entry carries `acif`:** Exit 1, before any bundle verification. The entry is an ACIF content item,
+which this version of `moat-verify` does not verify.
+```
+[✗] ACIF content items are not supported by this version of moat-verify
+    Name:     <name>
+    Computed: sha256:<hex>
+```
 
 **No match:** Exit 1.
 ```
@@ -357,12 +400,12 @@ What this script did NOT verify:
   },
   "registry_attestation": {
     "rekor_log_index": 12345678,
-    "signer_subject": "repo:owner/repo:ref:refs/heads/main",
+    "signer_subject": "https://github.com/owner/repo/.github/workflows/moat-registry.yml@refs/heads/main",
     "signer_issuer": "https://token.actions.githubusercontent.com"
   },
   "item_attestation": {
     "rekor_log_index": 87654321,
-    "signer_subject": "repo:owner/repo:ref:refs/heads/main",
+    "signer_subject": "https://github.com/owner/repo/.github/workflows/moat-registry.yml@refs/heads/main",
     "signer_issuer": "https://token.actions.githubusercontent.com"
   },
   "publisher_attestation": null,
@@ -394,7 +437,7 @@ What this script did NOT verify:
     "bundle_verified": true
   },
   "bundle_attestation": {
-    "signer_subject": "repo:owner/repo:ref:refs/heads/main",
+    "signer_subject": "https://github.com/owner/repo/.github/workflows/moat-registry.yml@refs/heads/main",
     "signer_issuer": "https://token.actions.githubusercontent.com",
     "verified_offline": true
   },
