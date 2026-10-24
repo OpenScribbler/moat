@@ -8,6 +8,7 @@ panel/
 .vscode/
 __pycache__/
 CLAUDE.md
+!/CLAUDE.md
 .claude/*
 !.claude/rules/
 .wolf/
