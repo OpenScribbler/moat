@@ -21,6 +21,12 @@ moat_author_key.py:
      source_uri it was signed for and is `signature_invalid` for any other,
      and replaying an earlier change after a later one was recorded is
      `sequence_not_greater`.
+  6. Signatures `ssh-keygen -Y sign` makes outside the profile are
+     `signature_invalid`: one under a namespace other than `file`, one with
+     `-O hashalg=sha256`, and one over the bare canonical payload without the
+     `moat-author-item-v1` line.
+  7. List parsing: fields separate on spaces or tabs only, and a sequence line
+     with whitespace before `#` or after `<n>` makes the list malformed.
 
 Requires ssh-keygen from OpenSSH 8.2 or later on PATH.
 
@@ -50,11 +56,12 @@ def ssh_verify(tmp: pathlib.Path, list_bytes: bytes, principal: str, sig: str, m
     return r.returncode == 0
 
 
-def ssh_sign(tmp: pathlib.Path, key: str, message: bytes) -> str:
+def ssh_sign(tmp: pathlib.Path, key: str, message: bytes, namespace: str = "file",
+             options: tuple[str, ...] = ()) -> str:
     (tmp / "msg").write_bytes(message)
     (tmp / "msg.sig").unlink(missing_ok=True)
     subprocess.run(["ssh-keygen", "-Y", "sign", "-q", "-f", str(tmp / key),
-                    "-n", "file", str(tmp / "msg")], check=True)
+                    "-n", namespace, *options, str(tmp / "msg")], check=True)
     return (tmp / "msg.sig").read_text()
 
 
@@ -133,8 +140,34 @@ def main() -> int:
             ("replay of the addition after the removal",
              ak.verify_list_change(src, r2, r1, add), ak.SEQUENCE_NOT_GREATER),
         ]
+        item_sig = (tmp / "item.sig").read_text()
+        item_msg = ak.item_message(content_hash)
+        checks += [
+            ("item signed under namespace git",
+             ak.verify_item(content_hash, ssh_sign(tmp, "real", item_msg, "git"), real_list),
+             ak.SIGNATURE_INVALID),
+            ("item signed with hashalg=sha256",
+             ak.verify_item(content_hash, ssh_sign(tmp, "real", item_msg, options=("-O", "hashalg=sha256")),
+                            real_list),
+             ak.SIGNATURE_INVALID),
+            ("bare payload without the moat-author-item-v1 line",
+             ak.verify_item(content_hash, ssh_sign(tmp, "real", ak.canonical_payload(content_hash)), real_list),
+             ak.SIGNATURE_INVALID),
+            ("tab-separated fields",
+             ak.verify_item(content_hash, item_sig, real_list.replace(b" ", b"\t").replace(
+                 b"#\tmoat-sequence:\t0", b"# moat-sequence: 0")), ak.OK),
+            ("no-break space between fields",
+             ak.verify_item(content_hash, item_sig, real_list.replace(
+                 real_line.encode(), real_line.replace(" ", "\u00a0", 1).encode())), ak.LIST_MALFORMED),
+            ("leading space before the sequence line",
+             ak.verify_item(content_hash, item_sig, b" " + real_list), ak.LIST_MALFORMED),
+            ("leading tab before the sequence line",
+             ak.verify_item(content_hash, item_sig, b"\t" + real_list), ak.LIST_MALFORMED),
+            ("trailing space after the sequence number",
+             ak.verify_item(content_hash, item_sig, real_list.replace(b": 0\n", b": 0 \n")), ak.LIST_MALFORMED),
+        ]
         for label, got, want in checks:
-            print(f"  ssh-keygen list change, {label}: {got}")
+            print(f"  ssh-keygen, {label}: {got}")
             if got != want:
                 failures.append(f"{label}: expected {want}, got {got}")
 

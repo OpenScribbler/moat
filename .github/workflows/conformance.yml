@@ -21,6 +21,7 @@ jobs:
           python3 reference/generate_test_vectors.py
           python3 reference/test_author_key.py
           python3 reference/test_acif.py
+          python3 reference/test_verify_unsupported.py
 
       - name: npm-distribution conformance scripts
         env:

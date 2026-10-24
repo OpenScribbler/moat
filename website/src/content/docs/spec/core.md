@@ -348,8 +348,8 @@ manifest entry carries the `acif` member. Its Content Hash is not computed by th
 ([ACIF Registry Specification §6](https://github.com/OpenScribbler/agent-content-interchange-format/blob/main/specs/registry-spec/spec.md)), computed over the bytes the client fetches and installs. It equals the
 `registry_section.attestation_hash` ACIF publishes only when the item's bytes are already ACIF-canonical. The
 digest binds the item's ACIF `body_hash` and `metadata_hash`, so one signature covers the files `body_hash` covers
-and the frontmatter values ACIF observation places in `publisher_section` (such as an agent's tool, model, and MCP
-server grants), which `body_hash` excludes. MOAT does not restate the construction; `reference/moat_hash.py`
+and the values ACIF observation places in `publisher_section` from the entry file's frontmatter and any
+publisher-authored root sidecar (such as an agent's tool, model, and MCP server grants), which `body_hash` excludes. MOAT does not restate the construction; `reference/moat_hash.py`
 (`acif_content_hash`) implements it and the [ACIF test vectors](#attestation-payload) pin it.
 
 **Marker (normative).** A conforming client identifies an ACIF content item only by its manifest entry: the entry
@@ -358,7 +358,14 @@ item root (for example `SKILL.md`). A source repository declares its ACIF conten
 `.moat/publisher.yml`, which the Publisher Action and Registry Action specifications define, and the registry sets
 `acif` from that declaration. An entry without `acif` is not an ACIF content item, whatever its files contain, and
 its Content Hash is computed by the directory algorithm. A conforming client MUST compute the Content Hash by
-the method the marker selects. A wrong marker fails closed: the attestation input preimage begins with the line
+the method the marker selects. A registry MUST set `acif` only on an item whose `type` is `skill`, `agent`, `rules`,
+or `command`, which correspond to ACIF's frontmatter-bearing content types `skill`, `agent`, `rule`, and `command`;
+a conforming client MUST treat `acif` on an item of any other type as a hard failure. *(Informative: ACIF's
+sidecar-only content types carry executable wiring in the sidecar, which MOAT does not install, so they are not ACIF
+content items until MOAT defines them normatively.)* An `acif` member that is not an object (including `null`), that
+has no `entry_file`, or whose `entry_file` is not a non-empty string, is an absolute path, or contains a `..` path
+segment, is malformed; a conforming client MUST treat a malformed `acif` member as a hard failure and MUST refuse the
+item before it hashes any of the item's files. A wrong marker fails closed: the attestation input preimage begins with the line
 `acif-attestation-input-v1`, which no directory-algorithm manifest line can equal, so the two methods agree on the
 same bytes only through a SHA-256 collision.
 
@@ -369,9 +376,10 @@ bytes it fetched, before it installs any of them:
    as the entry file. MOAT applies none of ACIF's canonicalization rewrites; the installed bytes are hashed as they
    are. These are the item bytes the client fetched. A client that renders the item into a provider's format before
    writing it hashes the fetched bytes, never the rendered output.
-2. Derive the item's `publisher_section` from the installed item as [ACIF Publisher Specification §5](https://github.com/OpenScribbler/agent-content-interchange-format/blob/main/specs/publisher-spec/spec.md)
-   defines, and compute `metadata_hash` from it as §6 of that specification defines. An item with no
-   `publisher_section` has no `metadata_hash`.
+2. Derive the item's `publisher_section` from the fetched item, including a publisher-authored root
+   `acif-sidecar.yaml`, as [ACIF Publisher Specification §5](https://github.com/OpenScribbler/agent-content-interchange-format/blob/main/specs/publisher-spec/spec.md) defines, and compute `metadata_hash` from
+   it as §6 of that specification defines. An item with no `publisher_section` has no `metadata_hash`. The root
+   sidecar is never installed (below), so its values reach the client only through `metadata_hash`.
 3. Compute the attestation input digest from those two values as ACIF Registry Specification §6 defines.
 4. Map the digest's `{algorithm, value}` to the Content Hash string `<algorithm>:<value>`. The algorithm MUST be
    `sha256` and the value MUST be 64 lowercase hexadecimal characters; any other value is a hard failure.
@@ -390,10 +398,17 @@ the files `body_hash` covers under ACIF Core §7:
 
 `body_hash` excludes the entry file's frontmatter, and `metadata_hash` covers only the values ACIF observation places
 in `publisher_section`. A conforming client MUST refuse to install an ACIF content item whose entry-file frontmatter
-carries a key that observation did not place in `publisher_section`, because no signature covers that key's value.
-The entry file is installed with its frontmatter. The signature covers the observed values, not the frontmatter's
-text, so a frontmatter edit that leaves every observed value unchanged, such as a YAML comment, whitespace, or key
-order, does not move the Content Hash. `reference/moat_hash.py` (`acif_installed_files`) lists the files a client installs.
+carries a frontmatter key ACIF observation does not record, because no signature covers that key's value.
+Frontmatter that repeats a key, or whose top level is not a map, is malformed under ACIF Core §2, and a conforming
+client MUST treat it as a hard failure. The entry file is installed with its frontmatter. The signature covers the
+observed values as ACIF observation reads them under the YAML 1.2 core schema ACIF Core §2 defines, not the
+frontmatter's text, so a frontmatter edit that leaves every observed value unchanged, such as a YAML comment,
+whitespace, or key order, does not move the Content Hash. A runtime that reads the frontmatter under another YAML
+schema can read different values from the same text: under YAML 1.1 an unquoted `yes`, `no`, `on`, or `off` is a
+boolean and a leading-zero integer such as `017` is octal, where the YAML 1.2 core schema reads a string and a
+decimal integer. An edit that unquotes such a value leaves the Content Hash unchanged and changes what a YAML 1.1
+runtime reads, so a conforming client SHOULD refuse to install an item whose frontmatter scalars read differently
+under YAML 1.1 than under the YAML 1.2 core schema. `reference/moat_hash.py` (`acif_installed_files`) lists the files a client installs.
 
 *Informative — relationship to the directory algorithm:* An ACIF content item's Content Hash never equals the
 directory algorithm's output for the same bytes, because it is the digest of a different preimage. The underlying
@@ -577,11 +592,13 @@ personal identifier, and verifiers MUST reject an entry whose public key carries
 
 **Allowed-signers list (normative).** A source repository lists its Author Keys in `.moat/allowed_signers` at the
 repository root. The file is UTF-8 text. Each line is blank, a comment beginning with `#`, the sequence line, or
-exactly three whitespace-separated fields: the key's fingerprint, its key type, and its base64 public-key blob. The
+exactly three fields separated by spaces or tabs: the key's fingerprint, its key type, and its base64 public-key
+blob. No other character separates fields. The
 fingerprint field MUST equal the fingerprint computed from the blob, and the key type MUST equal the blob's own type
 and be an accepted type. The list MUST contain exactly one sequence line, `# moat-sequence: <n>`, where `<n>` is a
 decimal integer with no sign and no leading zeros, at most 2^53−1; a comment line whose text after `#` and optional
-whitespace begins with `moat-sequence` is the sequence line and MUST have exactly that form. A list with any other
+whitespace begins with `moat-sequence` is the sequence line and MUST have exactly that form, with nothing before
+the `#` or after `<n>`. A list with any other
 line, with no key, or without exactly one well-formed sequence line is malformed, and verifiers MUST refuse a
 malformed list as a whole. *(Informative: the format is a subset of OpenSSH's allowed-signers format with the
 fingerprint as the principal, and OpenSSH reads the sequence line as a comment, so
@@ -634,6 +651,14 @@ missed an intermediate list sees a change that does not chain from its record, w
 trusted list is keyed by `source_uri`, not by registry, so a registry serving a different list than the one
 recorded triggers this rule.
 
+**Removing a trusted list (normative).** A conforming client MUST let the End User remove the trusted allowed-signers
+list recorded for a `source_uri`. After removal, the next list the client sees for that `source_uri` is a first
+sight. When a client refuses a list because its sequence is not greater than the recorded sequence, the refusal
+message MUST tell the End User that removing the source's trusted list is the recovery path if the Publisher's key
+was compromised. A revocation does not remove or reset a trusted list. *(Informative: a stolen trusted key can sign
+a list with a sequence no later list can exceed, up to 2^53−1, so the Publisher cannot recover through the list
+itself.)*
+
 **Keyless signing profile after a trusted list (normative).** When a conforming client holds a trusted
 allowed-signers list for a `source_uri` and an item from that `source_uri` carries a keyless `signing_profile`, the
 client MUST handle it as a first sight: it MUST NOT install the item until the End User confirms the change from
@@ -642,6 +667,17 @@ key in the trusted list. On confirmation the client MUST remove that `source_uri
 `allowed_signers` map. *(Informative: without this rule, an attacker with push access to a Self-Publisher's
 repository could delete `.moat/allowed_signers`, produce a keyless publisher attestation from CI, and pass a client
 that trusted the Author Key.)*
+
+**Source change for an installed item (normative).** The lockfile records the `source_uri` each installed item came
+from (`entries[].source_uri`). When an update to an installed item (a manifest entry with the same `name` and `type`
+from the same registry) carries a `source_uri` that differs from the one the lockfile recorded for it, and the client
+holds a trusted allowed-signers list for the recorded `source_uri`, the client MUST handle the update as a first
+sight: it MUST NOT install the update until the End User confirms the change of source, and MUST warn that the item no
+longer comes from the source whose Author Keys the client trusts. On confirmation the client records the new
+`source_uri` in the entry. *(Informative: a Self-Publisher's registry configuration sits in the same repository as its
+source, so push access can respell the `source_uri`, for example with a trailing slash or a letter-case change the
+host resolves to the same repository. The respelled source has no trusted list, so without this rule a keyless
+publisher attestation for it would pass unprompted.)*
 
 **Hardware backing (normative).** A verifier cannot establish from this profile that an Author Key's private key
 is held in hardware. An `sk-` key type and the user-presence flag show that the signature passed through a FIDO
@@ -868,7 +904,7 @@ These items are required for conformance. A conforming registry, a conforming cl
   | TOFU signing profile acceptance required (first registry add) | Exit non-zero. A trust decision that requires human judgment MUST NOT be made silently by a pipeline. |
   | `registry_signing_profile` change detected | Exit non-zero. A signing profile change could indicate registry key compromise. |
   | Publisher revocation encountered | Exit non-zero. Non-interactive clients MUST NOT proceed past revocation warnings. |
-  | Allowed-signers confirmation required (first sight of an Author-Key source, a list change not signed by a trusted key, or a keyless `signing_profile` for a source with a trusted list) | Exit non-zero. Trusting an Author Key is a human judgment. |
+  | Allowed-signers confirmation required (first sight of an Author-Key source, a list change not signed by a trusted key, a keyless `signing_profile` for a source with a trusted list, or an update to an installed item whose `source_uri` differs from the recorded one while the recorded source has a trusted list) | Exit non-zero. Trusting an Author Key is a human judgment. |
   | Manifest staleness exceeded | Exit non-zero. A stale manifest means the pipeline is operating on potentially outdated trust data. |
 
   A conforming non-interactive client MUST NOT auto-accept any trust decision that requires human judgment. A pre-approval mechanism — so operators can authorize registries and signing-profile changes out-of-band, letting pipelines consume them without interactive prompts — is deferred work; see [ROADMAP.md](https://github.com/OpenScribbler/moat/blob/main/ROADMAP.md#non-interactive-trust-onboarding).
@@ -1045,6 +1081,7 @@ Minimum structure:
       "name": "string",
       "type": "skill|agent|rules|command",
       "registry": "https://...",
+      "source_uri": "https://github.com/owner/repo",
       "content_hash": "sha256:<hex>",
       "trust_tier": "DUAL-ATTESTED|SIGNED|UNSIGNED",
       "attested_at": "RFC 3339 UTC",
@@ -1075,6 +1112,7 @@ Minimum structure:
 | `entries[].name`               | REQUIRED | Content item name as recorded in the registry manifest                                                |
 | `entries[].type`               | REQUIRED | Content type; closed set: `skill`, `agent`, `rules`, `command`                                     |
 | `entries[].registry`           | REQUIRED | Registry manifest URL the item was installed from                                                     |
+| `entries[].source_uri`         | REQUIRED | The manifest entry's `source_uri` at install time, copied verbatim. An update whose `source_uri` differs is a first sight when the recorded source has a trusted allowed-signers list; see [Author-Key Profile](#author-key-profile) |
 | `entries[].content_hash`       | REQUIRED | `<algorithm>:<hex>` — normative identity of the installed item                                        |
 | `entries[].trust_tier`         | REQUIRED | Trust tier at install time: `DUAL-ATTESTED`, `SIGNED`, or `UNSIGNED`                                  |
 | `entries[].attested_at`        | REQUIRED | Registry's attestation timestamp (registry clock, not client clock)                                   |
@@ -1248,9 +1286,10 @@ Key-fingerprint structure ([Author-Key Profile](#author-key-profile)):
 | `allowed_signers_change` | OPTIONAL                         | The source repository's `.moat/allowed_signers.sig` file at the crawled commit, verbatim: the armored list-change signature. Absent when the source has no such file |
 
 In key-fingerprint form, `subject_regex`, `issuer_regex`, `repository_id`, and `repository_owner_id` MUST be absent.
-A registry MUST NOT emit two entries for the same `source_uri` whose key-fingerprint profiles carry different
-`allowed_signers` values in one manifest, and a conforming client that receives such a manifest MUST NOT install
-any item from that `source_uri` from it. The npm distribution channel defines only the keyless form.
+A registry MUST NOT emit, in one manifest, two entries for the same `source_uri` of which one carries a keyless
+profile and the other a key-fingerprint profile, or whose key-fingerprint profiles carry different `allowed_signers`
+values, and a conforming client that receives such a manifest MUST NOT install any item from that `source_uri` from
+it. The npm distribution channel defines only the keyless form.
 
 **Back-compatibility:** Profiles captured before versioning are treated as `profile_version: 1`. Conforming clients
 MUST accept profiles without a `profile_version` field and MUST treat them as v1. The `profile_version` field bumps
@@ -1396,20 +1435,26 @@ The Author-Key Profile moves the publisher trust decision from a CI identity to 
 confirmation is a TOFU boundary of the same kind as manually adding a registry: an attacker who controls the source
 repository or the serving registry before the End User's first install can present their own key. After first
 sight, a list change is accepted silently only when a trusted key signs it, so a stolen trusted key can rewrite the
-list. Clients report accepted changes so an End User can notice one they did not expect, and a Publisher whose key
-is compromised recovers through a registry revocation and End User re-confirmation, not through the list. The
+list, including with a sequence no later list can exceed. Clients report accepted changes so an End User can notice
+one they did not expect. Recovery from a compromised key is the End User removing the source's trusted list, which
+every conforming client allows and which its sequence refusal names; the next list is then a first sight. A registry
+revocation blocks the items the stolen key signed, but a revocation alone does not reset the trusted list. The
 profile does not prove a key is held in hardware; see the Hardware backing rule in the
 [Author-Key Profile](#author-key-profile).
 
 ### ACIF Content Item Coverage
 
-An ACIF content item's Content Hash covers exactly two things: the files ACIF's `body_hash` covers, and the
-frontmatter values ACIF observation places in `publisher_section`, which carry grants such as an agent's tools that
-`body_hash` alone excludes. It does not cover root `LICENSE*` or `README*` files beside a single-file entry, the root
-`acif-sidecar.yaml`, VCS metadata, frontmatter keys observation does not record, or the frontmatter's text apart
-from its observed values. A client installs only covered files, and refuses an item whose frontmatter carries an
-unobserved key, so nothing it installs carries meaning the signature does not cover; the
-[ACIF Content Items](#acif-content-items) installed-bytes rule requires both. A verifier that matched a signature
+An ACIF content item's Content Hash covers exactly two things: the files ACIF's `body_hash` covers, and the values
+ACIF observation places in `publisher_section` from the entry file's frontmatter and any publisher-authored root
+sidecar, which carry grants such as an agent's tools that `body_hash` alone excludes. It does not cover root
+`LICENSE*` or `README*` files beside a single-file entry, the root `acif-sidecar.yaml`'s bytes (only its observed
+values, through `metadata_hash`), VCS metadata, frontmatter keys ACIF observation does not record, or the
+frontmatter's text apart from its observed values. A client installs only covered files, never installs the root
+sidecar, and refuses an item whose frontmatter carries an unrecorded key, so nothing it installs carries a value the
+signature does not cover, as ACIF observation reads the frontmatter under the YAML 1.2 core schema; the
+[ACIF Content Items](#acif-content-items) installed-bytes rule requires both. A runtime that reads the same
+frontmatter under YAML 1.1 can read different values, which is why that rule tells a client to refuse an item whose
+scalars read differently under the two schemas. A verifier that matched a signature
 against a `body_hash` or `attestation_hash` copied from a record, instead of recomputing both hashes over the fetched
 bytes, would accept content whose grants changed after signing. The computation rule forbids that.
 

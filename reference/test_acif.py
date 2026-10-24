@@ -5,14 +5,18 @@ MOAT — ACIF reference checks
 Checks the parts of moat_hash.py's ACIF support that the test vectors do not
 pin:
 
-  1. jcs() refuses integers outside ±(2**53 - 1), where RFC 8785 would print
-     an exponent form, with the same TypeError it raises for non-integers.
+  1. jcs() refuses integers outside ±(2**53 - 1), which cannot round-trip
+     through the IEEE-754 double RFC 8785 serializes numbers as, so two
+     producers can disagree on them; it raises the same TypeError it raises
+     for non-integers.
   2. The --acif CLI requires --publisher-section <file> or an explicit
      --no-publisher-section, and a bad argument count prints usage, never a
      traceback.
   3. acif_installed_files() returns exactly the files body_hash covers: a
      single-file body installs the entry file alone, and the root sidecar and
      VCS metadata are never installed.
+  4. A malformed entry_file (not a string, empty, absolute, or with a `..`
+     segment) is refused before any file is hashed.
 
 Usage: python3 test_acif.py
 """
@@ -111,11 +115,25 @@ def test_installed_files_are_the_covered_files():
             "README.md", "SKILL.md", "scripts/acif-sidecar.yaml", "scripts/run.sh"]
 
 
+def test_malformed_entry_file_refused():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = pathlib.Path(tmpdir) / "item"
+        write(root, {"SKILL.md": SKILL, "sub/x.md": b"x\n"})
+        for bad in (None, 7, "", str(root / "SKILL.md"), "sub/../SKILL.md"):
+            try:
+                moat_hash.acif_content_hash(root, bad, None)
+            except ValueError as e:
+                assert "Malformed acif entry_file" in str(e), e
+            else:
+                raise AssertionError(f"entry_file {bad!r} was accepted")
+
+
 def main() -> int:
     tests = [
         ("jcs refuses integers outside ±(2**53 - 1)", test_jcs_integer_range),
         ("--acif requires a publisher-section choice", test_cli_requires_publisher_section_choice),
         ("installed files are the covered files", test_installed_files_are_the_covered_files),
+        ("a malformed entry_file is refused", test_malformed_entry_file_refused),
     ]
     failed = 0
     for label, fn in tests:

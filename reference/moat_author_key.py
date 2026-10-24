@@ -319,16 +319,16 @@ def _parse(list_bytes: bytes) -> tuple[dict[str, bytes], int]:
     keys: dict[str, bytes] = {}
     sequences: list[int] = []
     for raw in _canonical_text(list_bytes).decode("utf-8").split("\n"):
-        line = raw.strip()
+        line = raw.strip(" \t")
         if SEQUENCE_LINE_START.match(line):
-            m = SEQUENCE_LINE.fullmatch(line)
+            m = SEQUENCE_LINE.fullmatch(raw)
             if not m or int(m.group(1)) > MAX_SEQUENCE:
-                raise ValueError(f"malformed sequence line: {line!r}")
+                raise ValueError(f"malformed sequence line: {raw!r}")
             sequences.append(int(m.group(1)))
             continue
         if not line or line.startswith("#"):
             continue
-        fields = line.split()
+        fields = re.split(r"[ \t]+", line)
         if len(fields) != 3:
             raise ValueError(f"malformed allowed-signers line: {line!r}")
         principal, ktype, b64 = fields
@@ -351,7 +351,8 @@ def parse_allowed_signers(list_bytes: bytes) -> dict[str, bytes]:
 
     Each non-blank line is a comment beginning with '#', the one sequence
     line "# moat-sequence: <n>" (n a decimal integer without leading zeros,
-    at most 2**53 - 1), or exactly three fields:
+    at most 2**53 - 1) with nothing before the '#' or after <n>, or exactly
+    three fields separated by spaces or tabs:
     <fingerprint> <key-type> <base64 key blob>. The fingerprint MUST equal the
     blob's fingerprint, the key type MUST equal the blob's own type and be an
     accepted type. A comment that starts like a sequence line but is not one,

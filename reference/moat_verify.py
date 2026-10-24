@@ -401,10 +401,20 @@ def _online_step2(registry_url: str) -> tuple[bytes, dict]:
     return manifest_bytes, manifest
 
 
+def _reject_acif(name: str, content_hash: str) -> None:
+    """ACIF content items are not verified in this version (specs/moat-verify.md Step 3)."""
+    print("[✗] ACIF content items are not supported by this version of moat-verify")
+    print(f"    Name:     {name}")
+    print(f"    Computed: {content_hash}")
+    raise _Exit(EXIT_FAIL)
+
+
 def _online_step3(manifest: dict, content_hash: str) -> dict:
     """Look up content_hash in manifest.content[]. Returns matching item."""
     for item in manifest.get("content", []):
         if item.get("content_hash") == content_hash:
+            if "acif" in item:
+                _reject_acif(item.get("name", ""), content_hash)
             version = item.get("version") or "unset"
             print(f"[✓] Hash found in registry manifest")
             print(f"    Name:    {item.get('name', '')}")
@@ -581,6 +591,11 @@ def _online_step5(source_uri: str | None, content_hash: str) -> tuple[str | None
         print(f"    Computed: {content_hash}")
         raise _Exit(EXIT_FAIL)
 
+    if "key_fingerprint" in matching:
+        print("[✗] Author-Key publisher attestations are not supported by this version of moat-verify")
+        print(f"    Key fingerprint: {matching['key_fingerprint']}")
+        raise _Exit(EXIT_FAIL)
+
     log_index = matching.get("rekor_log_index")
     log_id    = matching.get("rekor_log_id", "")
     if log_index is None:
@@ -654,6 +669,10 @@ def _offline_step3(lockfile: dict, lockfile_path: str, content_hash: str) -> lis
         print(f"    this lockfile does not correspond to this directory.")
         print(f"    moat-verify cannot distinguish between these cases.")
         raise _Exit(EXIT_FAIL)
+
+    for e in matching:
+        if "acif" in e:
+            _reject_acif(e.get("name", ""), content_hash)
 
     # Duplicate detection: same hash AND same name → malformed lockfile
     if len(matching) > 1:

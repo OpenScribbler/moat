@@ -258,6 +258,9 @@ def _acif_body(directory: str | Path, entry_file: str) -> tuple[list[tuple[str, 
     the NFC entry path and whether the body is multi-file. A single-file body
     covers the entry file alone.
     """
+    if not isinstance(entry_file, str) or not entry_file or entry_file.startswith("/") \
+            or Path(entry_file).is_absolute() or ".." in entry_file.replace("\\", "/").split("/"):
+        raise ValueError(f"Malformed acif entry_file: {entry_file!r}")
     root = Path(directory)
     files: list[tuple[str, Path]] = []
     for path in root.rglob("*"):
@@ -333,10 +336,12 @@ JCS_MAX_SAFE_INTEGER = 2**53 - 1
 def jcs(value) -> bytes:
     """
     RFC 8785 canonical JSON for the value space ACIF records use: objects,
-    arrays, strings, booleans, null and integers within ±(2**53 - 1), the range
-    where RFC 8785's number serialization prints an integer as its plain
-    decimal digits. Non-integer numbers and integers outside that range are
-    refused with TypeError rather than serialized approximately.
+    arrays, strings, booleans, null and integers within ±(2**53 - 1).
+    RFC 8785 serializes numbers as IEEE-754 doubles, and an integer beyond
+    ±(2**53 - 1) cannot round-trip through a double, so two producers that
+    parse it differently can disagree on its digits. Non-integer numbers and
+    integers outside that range are refused with TypeError rather than
+    serialized approximately.
     """
     def enc(v) -> str:
         if isinstance(v, dict):
@@ -350,6 +355,9 @@ def jcs(value) -> bytes:
             return "null"
         if isinstance(v, int) and abs(v) <= JCS_MAX_SAFE_INTEGER:
             return str(v)
+        if isinstance(v, int):
+            raise TypeError(f"integer {v} is outside ±(2**53 - 1) and cannot round-trip through "
+                            "an IEEE-754 double")
         if isinstance(v, str):
             return enc_str(v)
         raise TypeError(f"unsupported JCS value: {type(v).__name__}")
