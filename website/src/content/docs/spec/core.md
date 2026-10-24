@@ -344,11 +344,12 @@ directory algorithm, and it applies to every content item except an ACIF content
 
 An ACIF content item is a content item in the Agent Content Interchange Format ([ACIF](https://github.com/OpenScribbler/agent-content-interchange-format/blob/main/specs/core/spec.md)) whose
 manifest entry carries the `acif` member. Its Content Hash is not computed by the directory algorithm. It is
-`sha256:` followed by the item's ACIF attestation input digest: the value ACIF publishes as
-`registry_section.attestation_hash`, whose construction ACIF defines in
-[ACIF Registry Specification §6](https://github.com/OpenScribbler/agent-content-interchange-format/blob/main/specs/registry-spec/spec.md). That digest binds the item's ACIF `body_hash` and `metadata_hash`,
-so one signature covers the item's body and the frontmatter declarations (such as an agent's tool, model, and MCP
-server grants) that `body_hash` excludes. MOAT does not restate the construction; `reference/moat_hash.py`
+`sha256:` followed by a digest with the same construction as ACIF's attestation input digest
+([ACIF Registry Specification §6](https://github.com/OpenScribbler/agent-content-interchange-format/blob/main/specs/registry-spec/spec.md)), computed over the bytes the client fetches and installs. It equals the
+`registry_section.attestation_hash` ACIF publishes only when the item's bytes are already ACIF-canonical. The
+digest binds the item's ACIF `body_hash` and `metadata_hash`, so one signature covers the files `body_hash` covers
+and the frontmatter values ACIF observation places in `publisher_section` (such as an agent's tool, model, and MCP
+server grants), which `body_hash` excludes. MOAT does not restate the construction; `reference/moat_hash.py`
 (`acif_content_hash`) implements it and the [ACIF test vectors](#attestation-payload) pin it.
 
 **Marker (normative).** A conforming client identifies an ACIF content item only by its manifest entry: the entry
@@ -361,10 +362,10 @@ the method the marker selects. A wrong marker fails closed: the attestation inpu
 `acif-attestation-input-v1`, which no directory-algorithm manifest line can equal, so the two methods agree on the
 same bytes only through a SHA-256 collision.
 
-**Computation (normative).** A conforming client MUST compute an ACIF content item's Content Hash over the bytes it
-installs:
+**Computation (normative).** A conforming client MUST compute an ACIF content item's Content Hash over the item
+bytes it fetched, before it installs any of them:
 
-1. Compute `body_hash` over the installed item directory as [ACIF Core §7](https://github.com/OpenScribbler/agent-content-interchange-format/blob/main/specs/core/spec.md) defines, with `acif.entry_file`
+1. Compute `body_hash` over the fetched item directory as [ACIF Core §7](https://github.com/OpenScribbler/agent-content-interchange-format/blob/main/specs/core/spec.md) defines, with `acif.entry_file`
    as the entry file. MOAT applies none of ACIF's canonicalization rewrites; the installed bytes are hashed as they
    are. These are the item bytes the client fetched. A client that renders the item into a provider's format before
    writing it hashes the fetched bytes, never the rendered output.
@@ -378,6 +379,21 @@ installs:
 A conforming client MUST NOT take `body_hash`, `metadata_hash`, or `attestation_hash` from an ACIF record, a
 sidecar, or a manifest field in place of recomputing them. A Content Hash matched against a record field alone
 does not verify the item.
+
+**Installed bytes (normative).** A conforming client MUST install only the bytes the Content Hash covers, which are
+the files `body_hash` covers under ACIF Core §7:
+
+- A single-file item installs its entry file alone. Root `LICENSE*` and `README*` files beside it, VCS metadata
+  directories, and the root `acif-sidecar.yaml` are not installed.
+- A multi-file item installs the files its `body_hash` manifest lists. VCS metadata directories and the root
+  `acif-sidecar.yaml` are not installed.
+
+`body_hash` excludes the entry file's frontmatter, and `metadata_hash` covers only the values ACIF observation places
+in `publisher_section`. A conforming client MUST refuse to install an ACIF content item whose entry-file frontmatter
+carries a key that observation did not place in `publisher_section`, because no signature covers that key's value.
+The entry file is installed with its frontmatter. The signature covers the observed values, not the frontmatter's
+text, so a frontmatter edit that leaves every observed value unchanged, such as a YAML comment, whitespace, or key
+order, does not move the Content Hash. `reference/moat_hash.py` (`acif_installed_files`) lists the files a client installs.
 
 *Informative — relationship to the directory algorithm:* An ACIF content item's Content Hash never equals the
 directory algorithm's output for the same bytes, because it is the digest of a different preimage. The underlying
@@ -551,7 +567,7 @@ separator line, so a signature over one kind never verifies as the other, as a b
 | Message | Bytes |
 |---|---|
 | Item message | `moat-author-item-v1` LF, then the canonical Attestation Payload for the item's Content Hash |
-| List-change message | `moat-allowed-signers-change-v1` LF, the previous list digest, LF, the new list digest, LF |
+| List-change message | `moat-allowed-signers-change-v1` LF, the `source_uri`, LF, the new list's sequence in decimal, LF, the previous list digest, LF, the new list digest, LF |
 
 **Transparency log entry (normative).** The Publisher MUST record each item signature in Rekor as a `rekord` entry
 with public-key format `ssh`, whose data is the item message, whose signature is the armored SSHSIG, and whose public
@@ -560,23 +576,31 @@ key; its fingerprint is computed from it. The public key MUST NOT carry a commen
 personal identifier, and verifiers MUST reject an entry whose public key carries a comment.
 
 **Allowed-signers list (normative).** A source repository lists its Author Keys in `.moat/allowed_signers` at the
-repository root. The file is UTF-8 text. Each line is blank, a comment beginning with `#`, or exactly three
-whitespace-separated fields: the key's fingerprint, its key type, and its base64 public-key blob. The fingerprint
-field MUST equal the fingerprint computed from the blob, and the key type MUST equal the blob's own type and be an
-accepted type. A list with any other line, or with no key, is malformed, and verifiers MUST refuse a malformed list
-as a whole. *(Informative: the format is a subset of OpenSSH's allowed-signers format with the fingerprint as the
-principal, so `ssh-keygen -Y verify -f .moat/allowed_signers -I <fingerprint> -n file` checks a signature against
-it.)* The list digest is `sha256:` followed by the lowercase hexadecimal SHA-256 of the list's canonical text: the
+repository root. The file is UTF-8 text. Each line is blank, a comment beginning with `#`, the sequence line, or
+exactly three whitespace-separated fields: the key's fingerprint, its key type, and its base64 public-key blob. The
+fingerprint field MUST equal the fingerprint computed from the blob, and the key type MUST equal the blob's own type
+and be an accepted type. The list MUST contain exactly one sequence line, `# moat-sequence: <n>`, where `<n>` is a
+decimal integer with no sign and no leading zeros, at most 2^53−1; a comment line whose text after `#` and optional
+whitespace begins with `moat-sequence` is the sequence line and MUST have exactly that form. A list with any other
+line, with no key, or without exactly one well-formed sequence line is malformed, and verifiers MUST refuse a
+malformed list as a whole. *(Informative: the format is a subset of OpenSSH's allowed-signers format with the
+fingerprint as the principal, and OpenSSH reads the sequence line as a comment, so
+`ssh-keygen -Y verify -f .moat/allowed_signers -I <fingerprint> -n file` checks a signature against it.)* The list digest is `sha256:` followed by the lowercase hexadecimal SHA-256 of the list's canonical text: the
 file bytes with a leading UTF-8 byte-order mark removed and each CRLF and lone CR replaced by LF.
 
 **List changes (normative).** A change to the list is valid only when signed by a key the previous list allows. To
-change the list, the Publisher signs the list-change message for the previous and new list digests with a key in
-the previous list, and commits the armored signature as `.moat/allowed_signers.sig` beside the new list.
+change the list, the Publisher MUST set the new list's sequence greater than the previous list's, MUST sign the
+list-change message for the repository's `source_uri` (the value registries record as `content[].source_uri`), the new sequence, and the previous and new list digests with
+a key in the previous list, and commits the armored signature as `.moat/allowed_signers.sig` beside the new list. A
+Publisher SHOULD start a new list at sequence `0` and increment it by one on each change. *(Informative: the
+`source_uri` binding stops a change signed for one repository from being replayed against another that trusts the
+same key, and the sequence stops an older signed change, such as one that added a key later removed, from being
+replayed against a newer list.)*
 
 **Client verification (normative).** To accept the publisher attestation of an item whose `signing_profile` is in
 key-fingerprint form, a conforming client MUST:
 
-1. Compute the item's Content Hash over the bytes it installs.
+1. Compute the item's Content Hash as [Content Hashing](#content-hashing) defines for the item.
 2. Resolve the trusted allowed-signers list for the item's `source_uri` (below).
 3. Locate the Publisher's Rekor entry by querying Rekor for entries whose data hash is the SHA-256 of the item
    message built from the Content Hash of step 1, and select the `rekord` entries whose public key's fingerprint
@@ -592,19 +616,32 @@ the lockfile's `allowed_signers` map. When a key-fingerprint `signing_profile` n
 list, the client MUST obtain explicit End User confirmation before installing any item from it, and MUST present:
 the `source_uri`; the registry that served the list; each listed key's fingerprint and key type; for each key,
 whether its type is a security-key (`sk-`) type; and the statement that a key type does not prove the private key is
-held in hardware. On confirmation the client MUST record the list verbatim, its digest, the confirmation time, and
-`confirmed_by: "end_user"`.
+held in hardware. On confirmation the client MUST record the list verbatim, its digest, its sequence, the
+confirmation time, and `confirmed_by: "end_user"`.
 
 **List changes on the client (normative).** When `signing_profile.allowed_signers` differs from the trusted list
-(by list digest), the client MUST accept the new list without End User confirmation only when
-`signing_profile.allowed_signers_change` is a signature that verifies over the list-change message for the trusted
-list's digest and the new list's digest, by a key in the trusted list. The client then records the new list with
-`confirmed_by: "signed_change"` and SHOULD tell the End User which fingerprints were added and removed. Any other
-change MUST be handled as a first sight: the client MUST NOT install items from that `source_uri` until the End User
+(by list digest), the client MUST refuse the new list, and MUST NOT install items from that `source_uri` under it,
+when its sequence is not greater than the trusted list's recorded sequence; this refusal is not a first sight and
+offers no confirmation. Otherwise the client MUST accept the new list without End User confirmation only when
+`signing_profile.allowed_signers_change` is a signature that verifies, by a key in the trusted list, over the
+list-change message the client builds from the item's own `source_uri`, the new list's sequence, the trusted list's
+digest, and the new list's digest. A change signed for a different `source_uri` does not verify against that
+message, and the client MUST NOT accept it as a signed change. On acceptance the client records the new list and its
+sequence with `confirmed_by: "signed_change"` and SHOULD tell the End User which fingerprints were added and
+removed. Any other change MUST be handled as a first sight: the client MUST NOT install items from that `source_uri` until the End User
 confirms the new list, and MUST warn that the change was not signed by a previously trusted key. A client that
 missed an intermediate list sees a change that does not chain from its record, which is also a first sight. The
 trusted list is keyed by `source_uri`, not by registry, so a registry serving a different list than the one
 recorded triggers this rule.
+
+**Keyless signing profile after a trusted list (normative).** When a conforming client holds a trusted
+allowed-signers list for a `source_uri` and an item from that `source_uri` carries a keyless `signing_profile`, the
+client MUST handle it as a first sight: it MUST NOT install the item until the End User confirms the change from
+Author-Key signing to keyless signing, and MUST warn that the source's publisher attestation no longer comes from a
+key in the trusted list. On confirmation the client MUST remove that `source_uri`'s entry from the lockfile's
+`allowed_signers` map. *(Informative: without this rule, an attacker with push access to a Self-Publisher's
+repository could delete `.moat/allowed_signers`, produce a keyless publisher attestation from CI, and pass a client
+that trusted the Author Key.)*
 
 **Hardware backing (normative).** A verifier cannot establish from this profile that an Author Key's private key
 is held in hardware. An `sk-` key type and the user-presence flag show that the signature passed through a FIDO
@@ -628,6 +665,9 @@ TV-ACIF-04's Content Hash. `reference/test_author_key.py` checks the vectors aga
 | TV-AK-07 | Item signed by `sk-ecdsa-sha2-nistp256@openssh.com` key E, user-presence flag set | `ok` |
 | TV-AK-08 | Item signed by key D with flags `0x00` | `signature_invalid` |
 | TV-AK-09 | List line naming key B's fingerprint beside key A's blob | `allowed_signers_malformed` |
+| TV-AK-10 | Replay of key A's signed change {A} → {A, B} (sequence 1) after A's later change removing B (sequence 2) is recorded | `sequence_not_greater` |
+| TV-AK-11 | TV-AK-05's change, checked for a different `source_uri` that trusts the same list | `signature_invalid` |
+| TV-AK-12 | List with no sequence line | `allowed_signers_malformed` |
 
 ### Trust State Error Vocabulary
 
@@ -744,9 +784,9 @@ These items are required for conformance. A conforming registry, a conforming cl
 
   A publisher signing identity takes one of two forms. The keyless form is an OIDC issuer URL and a signer
   subject — the values captured in the Fulcio certificate at signing time. The signer subject is the certificate's
-  Subject Alternative Name (SAN) URI, which Fulcio derives from provider-specific token claims (see
-  [signing_profile](#signing_profile)); it is never the OIDC token's `sub` claim, which does not appear in the
-  certificate. This form is provider-agnostic; any CI platform Fulcio supports produces these fields. The
+  Subject Alternative Name (SAN) URI, which is whatever Fulcio's issuer configuration derives from the token's claims
+  (see [signing_profile](#signing_profile)). For GitHub Actions and GitLab CI it is the workflow or CI config ref URI,
+  not the OIDC token's `sub` claim; for other issuer types the derived claim can be `sub` itself. This form is provider-agnostic; any CI platform Fulcio supports produces these fields. The
   key-fingerprint form names an Author Key by its fingerprint and is defined by the
   [Author-Key Profile](#author-key-profile). Registries populate `signing_profile` from the publisher's
   `moat-attestation.json` when indexing a Dual-Attested item. For the keyless form, conforming clients MUST verify
@@ -828,7 +868,7 @@ These items are required for conformance. A conforming registry, a conforming cl
   | TOFU signing profile acceptance required (first registry add) | Exit non-zero. A trust decision that requires human judgment MUST NOT be made silently by a pipeline. |
   | `registry_signing_profile` change detected | Exit non-zero. A signing profile change could indicate registry key compromise. |
   | Publisher revocation encountered | Exit non-zero. Non-interactive clients MUST NOT proceed past revocation warnings. |
-  | Allowed-signers confirmation required (first sight of an Author-Key source, or a list change not signed by a trusted key) | Exit non-zero. Trusting an Author Key is a human judgment. |
+  | Allowed-signers confirmation required (first sight of an Author-Key source, a list change not signed by a trusted key, or a keyless `signing_profile` for a source with a trusted list) | Exit non-zero. Trusting an Author Key is a human judgment. |
   | Manifest staleness exceeded | Exit non-zero. A stale manifest means the pipeline is operating on potentially outdated trust data. |
 
   A conforming non-interactive client MUST NOT auto-accept any trust decision that requires human judgment. A pre-approval mechanism — so operators can authorize registries and signing-profile changes out-of-band, letting pipelines consume them without interactive prompts — is deferred work; see [ROADMAP.md](https://github.com/OpenScribbler/moat/blob/main/ROADMAP.md#non-interactive-trust-onboarding).
@@ -1018,6 +1058,7 @@ Minimum structure:
     "https://github.com/owner/repo": {
       "list": "<allowed-signers file, verbatim>",
       "digest": "sha256:<hex>",
+      "sequence": 0,
       "confirmed_at": "RFC 3339 UTC",
       "confirmed_by": "end_user|signed_change"
     }
@@ -1044,6 +1085,7 @@ Minimum structure:
 | `allowed_signers`              | REQUIRED once any list is trusted | Trusted allowed-signers lists keyed by `source_uri`; see [Author-Key Profile](#author-key-profile). Absent is equivalent to empty |
 | `allowed_signers[uri].list`    | REQUIRED | The trusted list, verbatim                                                                    |
 | `allowed_signers[uri].digest`  | REQUIRED | List digest of `list`                                                                         |
+| `allowed_signers[uri].sequence` | REQUIRED | Integer: the sequence of `list`, from its `# moat-sequence:` line. A list change whose sequence is not greater is refused |
 | `allowed_signers[uri].confirmed_at` | REQUIRED | RFC 3339 UTC time the list became trusted (client clock)                                 |
 | `allowed_signers[uri].confirmed_by` | REQUIRED | `end_user` (confirmed by the End User) or `signed_change` (accepted as a signed list change) |
 | `revoked_hashes`               | REQUIRED | Array of hard-blocked content hash strings; empty array if none                                       |
@@ -1183,7 +1225,7 @@ Required keyless structure when `issuer` is `https://token.actions.githubusercon
 | Field                  | Required                          | Description                                                                                   |
 |------------------------|-----------------------------------|-----------------------------------------------------------------------------------------------|
 | `issuer`               | REQUIRED in keyless form          | OIDC issuer URL from the CI provider                                                          |
-| `subject`              | REQUIRED in keyless form          | Signer subject: the Fulcio certificate's SAN URI, in the form the known-provider table below gives. Not the OIDC token's `sub` claim |
+| `subject`              | REQUIRED in keyless form          | Signer subject: the Fulcio certificate's SAN URI, as Fulcio's issuer configuration derives it; the known-provider table below gives the form for each listed provider. For GitHub Actions and GitLab CI it is not the OIDC token's `sub` claim |
 | `repository_id`        | REQUIRED for GitHub Actions issuer; OPTIONAL for others | Decimal string matching the Fulcio cert extension at OID `1.3.6.1.4.1.57264.1.15`          |
 | `repository_owner_id`  | REQUIRED for GitHub Actions issuer; OPTIONAL for others | Decimal string matching the Fulcio cert extension at OID `1.3.6.1.4.1.57264.1.17`          |
 | `profile_version`      | OPTIONAL                          | Integer schema version for additive extensions; absent or `1` = baseline v1 shape. Current: 1 |
@@ -1195,7 +1237,7 @@ Key-fingerprint structure ([Author-Key Profile](#author-key-profile)):
 ```json
 {
   "key_fingerprint": "SHA256:c+9RtDpLaogkdIBaK4R83aEOVfIlPvftuiSpqVLOQA4",
-  "allowed_signers": "SHA256:c+9RtDpLaogkdIBaK4R83aEOVfIlPvftuiSpqVLOQA4 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII5C8Sf8CM8ca7csOPFWeq4DJeLtXJEUFJ1C6C7CZ4Ig\n"
+  "allowed_signers": "# moat-sequence: 0\nSHA256:c+9RtDpLaogkdIBaK4R83aEOVfIlPvftuiSpqVLOQA4 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII5C8Sf8CM8ca7csOPFWeq4DJeLtXJEUFJ1C6C7CZ4Ig\n"
 }
 ```
 
@@ -1361,11 +1403,15 @@ profile does not prove a key is held in hardware; see the Hardware backing rule 
 
 ### ACIF Content Item Coverage
 
-An ACIF content item's Content Hash covers its body and its declared metadata, including the frontmatter grants
-that ACIF's `body_hash` alone excludes. A verifier that matched a signature against a `body_hash` or
-`attestation_hash` copied from a record, instead of recomputing both hashes over installed bytes, would accept
-content whose grants changed after signing. The [ACIF Content Items](#acif-content-items) computation rule forbids
-that.
+An ACIF content item's Content Hash covers exactly two things: the files ACIF's `body_hash` covers, and the
+frontmatter values ACIF observation places in `publisher_section`, which carry grants such as an agent's tools that
+`body_hash` alone excludes. It does not cover root `LICENSE*` or `README*` files beside a single-file entry, the root
+`acif-sidecar.yaml`, VCS metadata, frontmatter keys observation does not record, or the frontmatter's text apart
+from its observed values. A client installs only covered files, and refuses an item whose frontmatter carries an
+unobserved key, so nothing it installs carries meaning the signature does not cover; the
+[ACIF Content Items](#acif-content-items) installed-bytes rule requires both. A verifier that matched a signature
+against a `body_hash` or `attestation_hash` copied from a record, instead of recomputing both hashes over the fetched
+bytes, would accept content whose grants changed after signing. The computation rule forbids that.
 
 ---
 

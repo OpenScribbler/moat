@@ -13,7 +13,8 @@ output to this script if this script contains a bug.
 
 Usage:
     python3 moat_hash.py <directory>
-    python3 moat_hash.py --acif <entry-file> [--publisher-section <file.json>] <directory>
+    python3 moat_hash.py --acif <entry-file> --publisher-section <file.json> <directory>
+    python3 moat_hash.py --acif <entry-file> --no-publisher-section <directory>
 """
 import hashlib
 import json
@@ -203,9 +204,10 @@ def content_hash(directory: str | Path) -> str:
 # ── ACIF content items ────────────────────────────────────────────────────────
 #
 # For an ACIF content item the MOAT Content Hash is not the directory hash
-# above. It is "sha256:" + the item's ACIF attestation input digest, the value
-# ACIF publishes as registry_section.attestation_hash ([ACIF-REGISTRY] §6).
-# That digest covers both ACIF hashes of the item:
+# above. It is "sha256:" + the item's ACIF attestation input digest
+# ([ACIF-REGISTRY] §6), computed over the installed bytes. It equals the
+# attestation_hash an ACIF record publishes only when the item's bytes are
+# already ACIF-canonical. That digest covers both ACIF hashes of the item:
 #
 #   body_hash      [ACIF-CORE] §7.2-§7.5 (frontmatter-bearing content types)
 #   metadata_hash  [ACIF-PUBLISHER] §6 (absent when no publisher_section)
@@ -250,16 +252,11 @@ def _acif_root_excluded_from_classification(name: str) -> bool:
         or name == ACIF_SIDECAR_NAME
 
 
-def acif_body_hash(directory: str | Path, entry_file: str) -> str:
+def _acif_body(directory: str | Path, entry_file: str) -> tuple[list[tuple[str, Path]], str, bool]:
     """
-    ACIF body_hash for a frontmatter-bearing item, returned as "sha256:<hex>".
-
-    entry_file is the canonical entry file's path relative to the item root
-    (SKILL.md for a skill). Single-file bodies hash the entry file's
-    frontmatter-stripped canonical text; multi-file bodies hash the §7.4
-    manifest, with the entry file's per-file hash taken over that same
-    stripped text. Root LICENSE*/README* files count only against the
-    single/multi-file classification; they are hashed in a multi-file body.
+    The files an ACIF body_hash covers, as (relative path, path) pairs, plus
+    the NFC entry path and whether the body is multi-file. A single-file body
+    covers the entry file alone.
     """
     root = Path(directory)
     files: list[tuple[str, Path]] = []
@@ -287,8 +284,36 @@ def acif_body_hash(directory: str | Path, entry_file: str) -> str:
         for rel in rels
     )
     if not multi_file:
-        entry_path = dict(files)[entry]
-        return "sha256:" + hashlib.sha256(strip_frontmatter(entry_path.read_bytes())).hexdigest()
+        files = [(rel, path) for rel, path in files if rel == entry]
+    return files, entry, multi_file
+
+
+def acif_installed_files(directory: str | Path, entry_file: str) -> list[str]:
+    """
+    The relative paths a conforming client installs for an ACIF content item:
+    exactly the files its body_hash covers (moat-spec.md §ACIF Content Items).
+    A single-file body installs the entry file alone, so root LICENSE*/README*
+    files are dropped; the root acif-sidecar.yaml and VCS metadata directories
+    are never installed.
+    """
+    files, _, _ = _acif_body(directory, entry_file)
+    return sorted(rel for rel, _ in files)
+
+
+def acif_body_hash(directory: str | Path, entry_file: str) -> str:
+    """
+    ACIF body_hash for a frontmatter-bearing item, returned as "sha256:<hex>".
+
+    entry_file is the canonical entry file's path relative to the item root
+    (SKILL.md for a skill). Single-file bodies hash the entry file's
+    frontmatter-stripped canonical text; multi-file bodies hash the §7.4
+    manifest, with the entry file's per-file hash taken over that same
+    stripped text. Root LICENSE*/README* files count only against the
+    single/multi-file classification; they are hashed in a multi-file body.
+    """
+    files, entry, multi_file = _acif_body(directory, entry_file)
+    if not multi_file:
+        return "sha256:" + hashlib.sha256(strip_frontmatter(files[0][1].read_bytes())).hexdigest()
 
     entries = []
     for rel, path in files:
@@ -302,11 +327,16 @@ def acif_body_hash(directory: str | Path, entry_file: str) -> str:
     return "sha256:" + hashlib.sha256(manifest).hexdigest()
 
 
+JCS_MAX_SAFE_INTEGER = 2**53 - 1
+
+
 def jcs(value) -> bytes:
     """
     RFC 8785 canonical JSON for the value space ACIF records use: objects,
-    arrays, strings, booleans, null and integers. Non-integer numbers are
-    refused rather than serialized approximately.
+    arrays, strings, booleans, null and integers within ±(2**53 - 1), the range
+    where RFC 8785's number serialization prints an integer as its plain
+    decimal digits. Non-integer numbers and integers outside that range are
+    refused with TypeError rather than serialized approximately.
     """
     def enc(v) -> str:
         if isinstance(v, dict):
@@ -318,7 +348,7 @@ def jcs(value) -> bytes:
             return "true" if v else "false"
         if v is None:
             return "null"
-        if isinstance(v, int):
+        if isinstance(v, int) and abs(v) <= JCS_MAX_SAFE_INTEGER:
             return str(v)
         if isinstance(v, str):
             return enc_str(v)
@@ -366,7 +396,11 @@ def content_hash_from_acif(field: dict) -> str:
 
 def acif_content_hash(directory: str | Path, entry_file: str,
                       publisher_section: dict | None) -> str:
-    """MOAT Content Hash of an ACIF content item: "sha256:" + attestation_hash.value."""
+    """
+    MOAT Content Hash of an ACIF content item: "sha256:" + the ACIF attestation
+    input digest over the installed bytes. Equals an ACIF record's
+    attestation_hash only when those bytes are already ACIF-canonical.
+    """
     body = acif_body_hash(directory, entry_file)
     meta = acif_metadata_hash(publisher_section)
     digest = hashlib.sha256(acif_attestation_input_preimage(body, meta)).hexdigest()
@@ -377,21 +411,20 @@ def acif_content_hash(directory: str | Path, entry_file: str,
 
 def _main(argv: list[str]) -> int:
     usage = (f"Usage: {argv[0]} <directory>\n"
-             f"       {argv[0]} --acif <entry-file> [--publisher-section <file.json>] <directory>")
+             f"       {argv[0]} --acif <entry-file> --publisher-section <file.json> <directory>\n"
+             f"       {argv[0]} --acif <entry-file> --no-publisher-section <directory>")
     args = argv[1:]
     try:
         if len(args) == 1 and not args[0].startswith("--"):
             print(content_hash(args[0]))
             return 0
-        if len(args) in (3, 5) and args[0] == "--acif":
-            entry, rest = args[1], args[2:]
-            section = None
-            if rest[0] == "--publisher-section":
-                section = json.loads(Path(rest[1]).read_text(encoding="utf-8"))
-                rest = rest[2:]
-            if len(rest) == 1:
-                print(acif_content_hash(rest[0], entry, section))
-                return 0
+        if len(args) == 5 and args[0] == "--acif" and args[2] == "--publisher-section":
+            section = json.loads(Path(args[3]).read_text(encoding="utf-8"))
+            print(acif_content_hash(args[4], args[1], section))
+            return 0
+        if len(args) == 4 and args[0] == "--acif" and args[2] == "--no-publisher-section":
+            print(acif_content_hash(args[3], args[1], None))
+            return 0
     except (ValueError, OSError, TypeError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

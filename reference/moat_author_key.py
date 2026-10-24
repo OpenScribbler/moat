@@ -9,7 +9,13 @@ Linux, macOS and Windows:
 
   item message          b"moat-author-item-v1\\n" || canonical attestation payload
   list-change message   b"moat-allowed-signers-change-v1\\n"
+                        || "<source_uri>\\n" || "<new list sequence>\\n"
                         || "<previous list digest>\\n" || "<new list digest>\\n"
+
+Every allowed-signers list carries exactly one sequence line,
+"# moat-sequence: <n>", which OpenSSH reads as a comment. A list change is
+accepted only when the new list's sequence is greater than the recorded
+list's, so a change signed before a key was removed cannot be replayed.
 
 Every signature uses SSHSIG namespace "file" and hash algorithm "sha512", the
 values Rekor's `rekord` entry type verifies SSH signatures with; the message
@@ -33,6 +39,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 
 ITEM_PREFIX = b"moat-author-item-v1\n"
 LIST_CHANGE_PREFIX = b"moat-allowed-signers-change-v1\n"
@@ -46,12 +53,16 @@ KT_SK_ECDSA = "sk-ecdsa-sha2-nistp256@openssh.com"
 ALLOWED_KEY_TYPES = (KT_ED25519, KT_SK_ED25519, KT_SK_ECDSA)
 SECURITY_KEY_TYPES = (KT_SK_ED25519, KT_SK_ECDSA)
 SK_FLAG_USER_PRESENT = 0x01
+SEQUENCE_LINE = re.compile(r"# moat-sequence: (0|[1-9][0-9]*)")
+SEQUENCE_LINE_START = re.compile(r"#\s*moat-sequence")
+MAX_SEQUENCE = 2**53 - 1
 
 # Verification outcomes (moat-spec.md §Author-Key Profile).
 OK = "ok"
 SIGNATURE_INVALID = "signature_invalid"
 SIGNER_NOT_ALLOWED = "signer_not_allowed"
 LIST_MALFORMED = "allowed_signers_malformed"
+SEQUENCE_NOT_GREATER = "sequence_not_greater"
 
 
 # ── SSH wire encoding ─────────────────────────────────────────────────────────
@@ -304,18 +315,17 @@ def list_digest(list_bytes: bytes) -> str:
     return "sha256:" + hashlib.sha256(_canonical_text(list_bytes)).hexdigest()
 
 
-def parse_allowed_signers(list_bytes: bytes) -> dict[str, bytes]:
-    """
-    Parse an allowed-signers list into {fingerprint: key blob}.
-
-    Each non-blank line that does not start with '#' is exactly three fields:
-    <fingerprint> <key-type> <base64 key blob>. The fingerprint MUST equal the
-    blob's fingerprint, the key type MUST equal the blob's own type and be an
-    accepted type. Any other line makes the whole list malformed.
-    """
+def _parse(list_bytes: bytes) -> tuple[dict[str, bytes], int]:
     keys: dict[str, bytes] = {}
+    sequences: list[int] = []
     for raw in _canonical_text(list_bytes).decode("utf-8").split("\n"):
         line = raw.strip()
+        if SEQUENCE_LINE_START.match(line):
+            m = SEQUENCE_LINE.fullmatch(line)
+            if not m or int(m.group(1)) > MAX_SEQUENCE:
+                raise ValueError(f"malformed sequence line: {line!r}")
+            sequences.append(int(m.group(1)))
+            continue
         if not line or line.startswith("#"):
             continue
         fields = line.split()
@@ -330,7 +340,30 @@ def parse_allowed_signers(list_bytes: bytes) -> dict[str, bytes]:
         keys[principal] = blob
     if not keys:
         raise ValueError("allowed-signers list has no keys")
-    return keys
+    if len(sequences) != 1:
+        raise ValueError(f"allowed-signers list has {len(sequences)} sequence lines, not 1")
+    return keys, sequences[0]
+
+
+def parse_allowed_signers(list_bytes: bytes) -> dict[str, bytes]:
+    """
+    Parse an allowed-signers list into {fingerprint: key blob}.
+
+    Each non-blank line is a comment beginning with '#', the one sequence
+    line "# moat-sequence: <n>" (n a decimal integer without leading zeros,
+    at most 2**53 - 1), or exactly three fields:
+    <fingerprint> <key-type> <base64 key blob>. The fingerprint MUST equal the
+    blob's fingerprint, the key type MUST equal the blob's own type and be an
+    accepted type. A comment that starts like a sequence line but is not one,
+    a missing or repeated sequence line, or any other line makes the whole
+    list malformed.
+    """
+    return _parse(list_bytes)[0]
+
+
+def list_sequence(list_bytes: bytes) -> int:
+    """The sequence number a well-formed allowed-signers list carries."""
+    return _parse(list_bytes)[1]
 
 
 # ── Messages ──────────────────────────────────────────────────────────────────
@@ -344,8 +377,17 @@ def item_message(content_hash: str) -> bytes:
     return ITEM_PREFIX + canonical_payload(content_hash)
 
 
-def list_change_message(previous_list: bytes, new_list: bytes) -> bytes:
-    return (LIST_CHANGE_PREFIX + list_digest(previous_list).encode("ascii") + b"\n"
+def list_change_message(source_uri: str, previous_list: bytes, new_list: bytes) -> bytes:
+    """
+    Binds the source the list belongs to, the new list's sequence, and both
+    list digests, so a change signature neither replays on another source nor
+    replays after a later change on the same source.
+    """
+    if not source_uri or "\n" in source_uri or "\r" in source_uri:
+        raise ValueError("source_uri must be non-empty and contain no line break")
+    return (LIST_CHANGE_PREFIX + source_uri.encode("utf-8") + b"\n"
+            + str(list_sequence(new_list)).encode("ascii") + b"\n"
+            + list_digest(previous_list).encode("ascii") + b"\n"
             + list_digest(new_list).encode("ascii") + b"\n")
 
 
@@ -478,17 +520,22 @@ def verify_item(content_hash: str, armored: str, allowed_list: bytes) -> str:
     return OK if fingerprint(blob) in allowed else SIGNER_NOT_ALLOWED
 
 
-def verify_list_change(recorded_list: bytes, new_list: bytes, armored: str) -> str:
+def verify_list_change(source_uri: str, recorded_list: bytes, new_list: bytes, armored: str) -> str:
     """
-    A new allowed-signers list replaces the recorded one only when the change
-    message binding both digests is signed by a key the RECORDED list allows.
+    A new allowed-signers list replaces the one recorded for source_uri only
+    when its sequence is greater than the recorded list's AND the change
+    message for source_uri, binding both digests, is signed by a key the
+    RECORDED list allows. A change signed for another source_uri does not
+    verify here.
     """
     try:
-        allowed = parse_allowed_signers(recorded_list)
-        parse_allowed_signers(new_list)
+        allowed, recorded_sequence = _parse(recorded_list)
+        _, new_sequence = _parse(new_list)
     except ValueError:
         return LIST_MALFORMED
-    blob = verify_sshsig(armored, list_change_message(recorded_list, new_list))
+    if new_sequence <= recorded_sequence:
+        return SEQUENCE_NOT_GREATER
+    blob = verify_sshsig(armored, list_change_message(source_uri, recorded_list, new_list))
     if blob is None:
         return SIGNATURE_INVALID
     return OK if fingerprint(blob) in allowed else SIGNER_NOT_ALLOWED

@@ -6,7 +6,7 @@ Implements the content hash algorithms from Sections 7.2, 7.3, 7.4, and 8
 of the MOAT spec, then generates the content hash vectors (TV-01 through
 TV-16) with exact byte inputs and expected SHA-256 outputs, the ACIF content
 item vectors (TV-ACIF-01 through TV-ACIF-04) and the author-key profile
-vectors (TV-AK-01 through TV-AK-09).
+vectors (TV-AK-01 through TV-AK-12).
 
 Usage: python3 generate_test_vectors.py
 """
@@ -488,15 +488,25 @@ def author_key_fixtures() -> dict:
         "E": ak.key_blob_sk_ecdsa(ak.p256_public(_p256_scalar("E"))),
     }
     line = {k: ak.allowed_signers_line(b) for k, b in keys.items()}
+
+    def seq(n: int) -> str:
+        return f"# moat-sequence: {n}\n"
+
     lists = {
-        "L1": f"# allowed signers for the test source\n{line['A']}\n".encode(),
-        "L2": f"{line['A']}\n{line['C']}\n".encode(),
-        "L1+B": f"{line['A']}\n{line['B']}\n".encode(),
-        "LD": f"{line['D']}\n".encode(),
-        "LE": f"{line['E']}\n".encode(),
-        "LBAD": f"{ak.fingerprint(keys['B'])} {line['A'].split(' ', 1)[1]}\n".encode(),
+        "L1": f"# allowed signers for the test source\n{seq(0)}{line['A']}\n".encode(),
+        "L2": f"{seq(1)}{line['A']}\n{line['C']}\n".encode(),
+        "L1+B": f"{seq(1)}{line['A']}\n{line['B']}\n".encode(),
+        "L3": f"{seq(2)}{line['A']}\n".encode(),
+        "LD": f"{seq(0)}{line['D']}\n".encode(),
+        "LE": f"{seq(0)}{line['E']}\n".encode(),
+        "LBAD": f"{seq(0)}{ak.fingerprint(keys['B'])} {line['A'].split(' ', 1)[1]}\n".encode(),
+        "LNOSEQ": f"{line['A']}\n".encode(),
     }
     return {"keys": keys, "lines": line, "lists": lists}
+
+
+AK_SOURCE_URI = "https://github.com/owner/repo"
+AK_OTHER_SOURCE_URI = "https://github.com/owner/other-repo"
 
 
 def author_key_vectors() -> list[dict]:
@@ -518,8 +528,14 @@ def author_key_vectors() -> list[dict]:
     sig_d = ak.sign_sk_ed25519_emulated(_seed("D"), msg)
     sig_e = ak.sign_sk_ecdsa_emulated(_p256_scalar("E"), msg)
     sig_d_noup = ak.sign_sk_ed25519_emulated(_seed("D"), msg, flags=0x00)
-    chg_b = ak.sign_ed25519(_seed("B"), ak.list_change_message(lists["L1"], lists["L1+B"]))
-    chg_a = ak.sign_ed25519(_seed("A"), ak.list_change_message(lists["L1"], lists["L2"]))
+    src = AK_SOURCE_URI
+    chg_b = ak.sign_ed25519(_seed("B"), ak.list_change_message(src, lists["L1"], lists["L1+B"]))
+    chg_a = ak.sign_ed25519(_seed("A"), ak.list_change_message(src, lists["L1"], lists["L2"]))
+    # A adds B (L1 -> L1+B), then removes B (L1+B -> L3); TV-AK-10 replays the addition.
+    chg_a_add_b = ak.sign_ed25519(_seed("A"), ak.list_change_message(src, lists["L1"], lists["L1+B"]))
+    chg_a_remove_b = ak.sign_ed25519(_seed("A"), ak.list_change_message(src, lists["L1+B"], lists["L3"]))
+    assert ak.verify_list_change(src, lists["L1"], lists["L1+B"], chg_a_add_b) == ak.OK
+    assert ak.verify_list_change(src, lists["L1+B"], lists["L3"], chg_a_remove_b) == ak.OK
 
     def item_vec(vid, title, signer, sig, list_name, content_hash, expected, note=""):
         got = ak.verify_item(content_hash, sig, lists[list_name])
@@ -528,12 +544,12 @@ def author_key_vectors() -> list[dict]:
                 "content_hash": content_hash, "message": ak.item_message(content_hash),
                 "signature": sig, "expected": expected, "note": note}
 
-    def change_vec(vid, title, signer, sig, old, new, expected, note=""):
-        got = ak.verify_list_change(lists[old], lists[new], sig)
+    def change_vec(vid, title, signer, sig, old, new, expected, note="", source_uri=src):
+        got = ak.verify_list_change(source_uri, lists[old], lists[new], sig)
         assert got == expected, f"{vid}: expected {expected}, got {got}"
         return {"id": vid, "kind": "list_change", "title": title, "signer": signer,
-                "previous_list": old, "new_list": new,
-                "message": ak.list_change_message(lists[old], lists[new]),
+                "source_uri": source_uri, "previous_list": old, "new_list": new,
+                "message": ak.list_change_message(source_uri, lists[old], lists[new]),
                 "signature": sig, "expected": expected, "note": note}
 
     vectors = [
@@ -558,6 +574,18 @@ def author_key_vectors() -> list[dict]:
         item_vec("TV-AK-09", "Allowed-signers line whose principal is not the key's fingerprint", "A", sig_a,
                  "LBAD", ch, ak.LIST_MALFORMED,
                  "The line names B's fingerprint beside A's key; the whole list is refused."),
+        change_vec("TV-AK-10", "Replay of an earlier list change after the key it added was removed", "A",
+                   chg_a_add_b, "L3", "L1+B", ak.SEQUENCE_NOT_GREATER,
+                   "A added B (L1 -> L1+B, sequence 1) and later removed it (L1+B -> L3, sequence 2). "
+                   "Replaying L1+B and its signed change against the recorded L3 is refused: 1 is not "
+                   "greater than 2."),
+        change_vec("TV-AK-11", "List change signed for another source_uri", "A", chg_a, "L1", "L2",
+                   ak.SIGNATURE_INVALID,
+                   f"TV-AK-05's signature binds {src}; checked for {AK_OTHER_SOURCE_URI}, which "
+                   "records the same L1, the message differs and the signature does not verify.",
+                   source_uri=AK_OTHER_SOURCE_URI),
+        item_vec("TV-AK-12", "Allowed-signers list without a sequence line", "A", sig_a, "LNOSEQ", ch,
+                 ak.LIST_MALFORMED, "Every list carries exactly one `# moat-sequence: <n>` line."),
     ]
     assert ak.verify_item(ch, sig_c, lists["L1"]) == ak.SIGNER_NOT_ALLOWED
     return vectors
@@ -600,6 +628,7 @@ def _print_ak(v: dict) -> None:
         print(f"  allowed-signers list: {v['list']}")
         print(f"  verifier's recomputed content_hash: {v['content_hash']}")
     else:
+        print(f"  source_uri: {v['source_uri']}")
         print(f"  recorded list: {v['previous_list']}  ->  new list: {v['new_list']}")
     print(f"  message checked: {v['message']!r}")
     for ln in v["signature"].rstrip("\n").splitlines():

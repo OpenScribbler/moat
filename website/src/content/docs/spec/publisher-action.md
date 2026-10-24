@@ -193,18 +193,21 @@ rekor-cli upload --type rekord --pki-format ssh \
   --artifact item.msg --signature item.msg.sig --public-key author.pub
 ```
 
-The key's `.moat/allowed_signers` line is its fingerprint followed by the comment-free public key:
+A new list starts with its sequence line, `# moat-sequence: 0`. Each key's `.moat/allowed_signers` line is its fingerprint followed by the comment-free public key:
 
 ```sh
+printf '# moat-sequence: 0\n' > .moat/allowed_signers
 printf '%s %s\n' "$(ssh-keygen -l -f author.pub | cut -d' ' -f2)" "$(cat author.pub)" >> .moat/allowed_signers
 ```
 
-To change the list, sign the list-change message with a key in the previous list and commit the signature with the new list. For lists with LF line endings and no byte-order mark, the list digest is `sha256:` plus the file's `sha256sum`:
+To change the list, edit it, raise its sequence line by one, sign the list-change message with a key in the previous list, and commit the signature with the new list. The message binds the source repository's URI exactly as registries record it in `content[].source_uri` (for GitHub, `https://github.com/{owner}/{repo}`) and the new sequence. For lists with LF line endings and no byte-order mark, the list digest is `sha256:` plus the file's `sha256sum`:
 
 ```sh
+source_uri=https://github.com/owner/repo
+seq=$(sed -n 's/^# moat-sequence: //p' .moat/allowed_signers)
 prev=$(git show HEAD:.moat/allowed_signers | sha256sum | cut -c1-64)
 new=$(sha256sum < .moat/allowed_signers | cut -c1-64)
-printf 'moat-allowed-signers-change-v1\nsha256:%s\nsha256:%s\n' "$prev" "$new" > change.msg
+printf 'moat-allowed-signers-change-v1\n%s\n%s\nsha256:%s\nsha256:%s\n' "$source_uri" "$seq" "$prev" "$new" > change.msg
 ssh-keygen -Y sign -f ~/.ssh/id_ed25519_sk -n file change.msg
 mv change.msg.sig .moat/allowed_signers.sig
 ```

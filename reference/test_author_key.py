@@ -15,6 +15,12 @@ moat_author_key.py:
   2. Every test key's fingerprint equals `ssh-keygen -l`'s SHA256 fingerprint.
   3. A signature made by `ssh-keygen -Y sign -n file` with a freshly generated
      ssh-ed25519 key verifies under moat_author_key.verify_item.
+  4. `ssh-keygen -Y verify` reads a list carrying the `# moat-sequence: <n>`
+     line, so the sequence line does not break stock tooling.
+  5. List changes signed by `ssh-keygen -Y sign`: a change verifies for the
+     source_uri it was signed for and is `signature_invalid` for any other,
+     and replaying an earlier change after a later one was recorded is
+     `sequence_not_greater`.
 
 Requires ssh-keygen from OpenSSH 8.2 or later on PATH.
 
@@ -42,6 +48,14 @@ def ssh_verify(tmp: pathlib.Path, list_bytes: bytes, principal: str, sig: str, m
          "-I", principal, "-n", "file", "-s", str(tmp / "msg.sig")],
         input=message, capture_output=True)
     return r.returncode == 0
+
+
+def ssh_sign(tmp: pathlib.Path, key: str, message: bytes) -> str:
+    (tmp / "msg").write_bytes(message)
+    (tmp / "msg.sig").unlink(missing_ok=True)
+    subprocess.run(["ssh-keygen", "-Y", "sign", "-q", "-f", str(tmp / key),
+                    "-n", "file", str(tmp / "msg")], check=True)
+    return (tmp / "msg.sig").read_text()
 
 
 def main() -> int:
@@ -90,11 +104,39 @@ def main() -> int:
         subprocess.run(["ssh-keygen", "-Y", "sign", "-q", "-f", str(tmp / "real"),
                         "-n", "file", str(tmp / "item")], check=True)
         blob = base64.b64decode((tmp / "real.pub").read_text().split()[1])
-        real_list = (ak.allowed_signers_line(blob) + "\n").encode()
+        real_line = ak.allowed_signers_line(blob)
+        real_list = f"# moat-sequence: 0\n{real_line}\n".encode()
         got = ak.verify_item(content_hash, (tmp / "item.sig").read_text(), real_list)
         print(f"  ssh-keygen -Y sign -> verify_item: {got}")
         if got != ak.OK:
             failures.append("ssh-keygen signature")
+
+        accepted = ssh_verify(tmp, real_list, ak.fingerprint(blob),
+                              (tmp / "item.sig").read_text(), ak.item_message(content_hash))
+        print(f"  ssh-keygen -Y verify reads a list with a sequence line: {'OK' if accepted else 'MISMATCH'}")
+        if not accepted:
+            failures.append("sequence line breaks ssh-keygen")
+
+        subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "",
+                        "-f", str(tmp / "real2")], check=True)
+        line2 = ak.allowed_signers_line(base64.b64decode((tmp / "real2.pub").read_text().split()[1]))
+        r1 = f"# moat-sequence: 1\n{real_line}\n{line2}\n".encode()
+        r2 = f"# moat-sequence: 2\n{real_line}\n".encode()
+        src, other = gtv.AK_SOURCE_URI, gtv.AK_OTHER_SOURCE_URI
+        add = ssh_sign(tmp, "real", ak.list_change_message(src, real_list, r1))
+        remove = ssh_sign(tmp, "real", ak.list_change_message(src, r1, r2))
+        checks = [
+            ("change verifies for its source_uri", ak.verify_list_change(src, real_list, r1, add), ak.OK),
+            ("removal verifies", ak.verify_list_change(src, r1, r2, remove), ak.OK),
+            ("change checked for another source_uri",
+             ak.verify_list_change(other, real_list, r1, add), ak.SIGNATURE_INVALID),
+            ("replay of the addition after the removal",
+             ak.verify_list_change(src, r2, r1, add), ak.SEQUENCE_NOT_GREATER),
+        ]
+        for label, got, want in checks:
+            print(f"  ssh-keygen list change, {label}: {got}")
+            if got != want:
+                failures.append(f"{label}: expected {want}, got {got}")
 
     if failures:
         print(f"FAIL: {', '.join(failures)}")

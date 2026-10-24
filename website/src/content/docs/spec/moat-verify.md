@@ -81,8 +81,17 @@ empty after VCS directory exclusion.
 
 **ACIF content items:** This version of `moat-verify` computes the directory algorithm only and does not verify
 [ACIF content items](/spec/core#acif-content-items) (manifest entries carrying `acif`). An ACIF item's Content Hash is not
-found in Step 3, so the run fails there. `reference/moat_hash.py --acif <entry_file> <directory>` computes an ACIF
-item's Content Hash for manual comparison.
+found in Step 3, so the run fails there. `reference/moat_hash.py` computes an ACIF item's Content Hash for manual
+comparison, and requires the caller to state whether the item has a `publisher_section`:
+
+```
+python3 reference/moat_hash.py --acif <entry_file> --publisher-section <publisher_section.json> <directory>
+python3 reference/moat_hash.py --acif <entry_file> --no-publisher-section <directory>
+```
+
+`<publisher_section.json>` holds the item's ACIF `publisher_section` as a JSON object, derived by an ACIF
+implementation's observation rules. Use `--no-publisher-section` only for an item that declares no metadata; for an
+item with frontmatter it yields a different Content Hash.
 
 Output:
 ```
