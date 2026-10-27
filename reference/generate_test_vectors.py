@@ -4,9 +4,10 @@ MOAT Specification — Test Vector Generator
 
 Implements the content hash algorithms from Sections 7.2, 7.3, 7.4, and 8
 of the MOAT spec, then generates the content hash vectors (TV-01 through
-TV-16) with exact byte inputs and expected SHA-256 outputs, the ACIF content
-item vectors (TV-ACIF-01 through TV-ACIF-04) and the author-key profile
-vectors (TV-AK-01 through TV-AK-12).
+TV-16, and the path-reject vectors TV-23 through TV-29) with exact byte inputs
+and expected SHA-256 outputs, the ACIF content item vectors (TV-ACIF-01
+through TV-ACIF-04) and the author-key profile vectors (TV-AK-01 through
+TV-AK-14).
 
 Usage: python3 generate_test_vectors.py
 """
@@ -39,16 +40,29 @@ def content_hash_directory(file_map: dict[str, bytes]) -> str:
     Section 7.3: Directory tree content hash.
 
     file_map: {relative_path: file_bytes} — moat-attestation.json already excluded.
-    Paths use forward slashes, no leading ./ or trailing /.
+    Paths use forward slashes, no leading ./ or trailing /. A path given as
+    bytes is the raw name as the filesystem stores it; a str path is its UTF-8.
 
     Manifest format: sha256sum — "{hash}  {path}\n" per entry.
     This matches moat_hash.py (the normative reference) and POSIX sha256sum output,
     making individual manifest entries verifiable with standard Unix tools.
     """
+    # Path rejects, on the raw bytes and before NFC: every path is checked for
+    # valid UTF-8 first, then every path for a C0 control or DEL.
+    raw = {(p if isinstance(p, bytes) else p.encode("utf-8")): data for p, data in file_map.items()}
+    for path in raw:
+        try:
+            path.decode("utf-8")
+        except UnicodeDecodeError:
+            raise ValueError("Path is not valid UTF-8 — content is unpublishable")
+    for path in raw:
+        if any(b < 0x20 or b == 0x7F for b in path):
+            raise ValueError("Path contains a control character — content is unpublishable")
+
     entries = []
-    for path, data in file_map.items():
+    for path, data in raw.items():
         # Step 3: NFC-normalize paths
-        nfc_path = unicodedata.normalize("NFC", path)
+        nfc_path = unicodedata.normalize("NFC", path.decode("utf-8"))
         # Step 4: per-file hash
         file_hash = sha256_hex(data)
         entries.append((nfc_path, file_hash))
@@ -346,6 +360,126 @@ def vector_16():
     }
 
 
+# ─── Path rejects (moat-spec.md §Content Hashing) ──────────────────────────
+#
+# Paths are given as raw bytes. Not every platform can create every name:
+# Windows forbids U+0001-U+001F in a file name (it permits U+007F) and stores
+# names as UTF-16, and macOS refuses a name that is not valid UTF-8. A verifier on such a platform never meets
+# the input; one that can create it MUST refuse it as the vector says.
+
+PATH_REJECT_KINDS = {
+    "not_utf8": "Path is not valid UTF-8",
+    "control_char": "Path contains a control character",
+    "collision": "NFC collision",
+}
+
+
+def _path_kind(err: ValueError) -> str:
+    msg = str(err)
+    for kind, keyword in (("not_utf8", "not valid UTF-8"), ("control_char", "control character"),
+                          ("collision", "collision")):
+        if keyword in msg:
+            return kind
+    return "other"
+
+
+def _show_path(p: bytes) -> str:
+    """A raw path for display: invalid bytes and C0/DEL/C1 characters as \\xNN."""
+    return "".join(f"\\x{ord(c):02x}" if ord(c) < 0x20 or 0x7F <= ord(c) <= 0x9F else c
+                   for c in p.decode("utf-8", "backslashreplace"))
+
+
+def _path_vector(vid: int, title: str, files: dict[bytes, bytes], platforms: str, note: str,
+                 reject: str | None) -> dict:
+    v = {
+        "id": vid,
+        "title": title,
+        "section": "Content Hashing",
+        "input_description": "; ".join(f"`{p.hex()}` ({_show_path(p)})" for p in files),
+        "raw_files": files,
+        "files": {_show_path(p): {"path_hex": p.hex(), "hex": d.hex(), "display": d.decode(), "hash": sha256_hex(d)}
+                  for p, d in files.items()},
+        "platforms": platforms,
+        "note": note,
+    }
+    try:
+        h = content_hash_directory(files)
+        kind = None
+    except ValueError as err:
+        kind = _path_kind(err)
+    assert kind == reject, f"TV-{vid}: expected {reject}, got {kind}"
+    if reject is None:
+        v["content_hash"] = h
+    else:
+        v["must_error"] = True
+        v["reject"] = reject
+        v["content_hash"] = f"ERROR: {PATH_REJECT_KINDS[reject]} — content MUST be rejected as unpublishable"
+    return v
+
+
+_NO_WINDOWS = "Not creatable on Windows, which forbids U+0001-U+001F in file names."
+_NO_MACOS = "Not creatable on macOS, which refuses file names that are not valid UTF-8."
+_NO_WINDOWS_BYTES = ("Not creatable on Windows, whose file names are UTF-16; there the counterpart is a "
+                     "name holding an unpaired surrogate.")
+
+
+def vector_23():
+    return _path_vector(23, "Line feed in a file name — MUST error",
+                        {b"SKILL.md": b"# Skill\n", b"notes\n.md": b"x\n"}, _NO_WINDOWS,
+                        "A newline in a path would split its sha256sum manifest line in two.",
+                        "control_char")
+
+
+def vector_24():
+    return _path_vector(24, "Carriage return in a directory name — MUST error",
+                        {b"SKILL.md": b"# Skill\n", b"lib\r/a.py": b"x\n"}, _NO_WINDOWS,
+                        "The scan covers every path component, not only the final name.",
+                        "control_char")
+
+
+def vector_25():
+    return _path_vector(25, "DEL (U+007F) in a file name — MUST error",
+                        {b"SKILL.md": b"# Skill\n", b"a\x7fb.md": b"x\n"},
+                        "Creatable on Linux, macOS and Windows.",
+                        "U+007F is refused along with U+0000-U+001F.",
+                        "control_char")
+
+
+def vector_26():
+    return _path_vector(26, "C1 control (U+0080) in a file name — accepted",
+                        {b"SKILL.md": b"# Skill\n", "a\u0080b.md".encode(): b"x\n"},
+                        "Creatable on Linux, macOS and Windows.",
+                        "U+0080-U+009F are not refused; the path is hashed like any other.",
+                        None)
+
+
+def vector_27():
+    return _path_vector(27, "File name that is not valid UTF-8 — MUST error",
+                        {b"SKILL.md": b"# Skill\n", b"notes\xff.md": b"x\n"}, f"{_NO_MACOS} {_NO_WINDOWS_BYTES}",
+                        "Byte 0xFF never occurs in UTF-8.",
+                        "not_utf8")
+
+
+def vector_28():
+    return _path_vector(28, "Control character and NFC collision together — control character reported",
+                        {"café.md".encode(): b"nfc\n", "café.md".encode(): b"nfd\n",
+                         b"z\x01.md": b"x\n"}, _NO_WINDOWS,
+                        "Both path scans finish before collision detection, so the control "
+                        "character is the reported reject.",
+                        "control_char")
+
+
+def vector_29():
+    return _path_vector(29, "Invalid UTF-8 and control character together — invalid UTF-8 reported",
+                        {b"a\nb.md": b"x\n", b"c\xff.md": b"y\n"}, f"{_NO_WINDOWS} {_NO_MACOS}",
+                        "Every path is checked for valid UTF-8 before any is checked for control "
+                        "characters, so the reported reject does not depend on enumeration order.",
+                        "not_utf8")
+
+
+PATH_REJECT_VECTORS = [vector_23, vector_24, vector_25, vector_26, vector_27, vector_28, vector_29]
+
+
 # ─── ACIF content items (moat-spec.md §ACIF Content Items) ─────────────────
 #
 # The Content Hash of an ACIF content item is "sha256:" + the ACIF attestation
@@ -479,6 +613,10 @@ def _p256_scalar(label: str) -> int:
     return int.from_bytes(_seed(label), "big") % ak._EN
 
 
+# The Ed25519 identity point's encoding (y = 1, x = 0).
+ED25519_IDENTITY = b"\x01" + b"\x00" * 31
+
+
 def author_key_fixtures() -> dict:
     keys = {
         "A": _ed_blob("A"),
@@ -486,6 +624,8 @@ def author_key_fixtures() -> dict:
         "C": _ed_blob("C"),
         "D": ak.key_blob_sk_ed25519(ak.ed25519_public(_seed("D"))),
         "E": ak.key_blob_sk_ecdsa(ak.p256_public(_p256_scalar("E"))),
+        # Z is the identity point, a small-order key with no secret behind it.
+        "Z": ak.key_blob_ed25519(ED25519_IDENTITY),
     }
     line = {k: ak.allowed_signers_line(b) for k, b in keys.items()}
 
@@ -501,6 +641,7 @@ def author_key_fixtures() -> dict:
         "LE": f"{seq(0)}{line['E']}\n".encode(),
         "LBAD": f"{seq(0)}{ak.fingerprint(keys['B'])} {line['A'].split(' ', 1)[1]}\n".encode(),
         "LNOSEQ": f"{line['A']}\n".encode(),
+        "LZ": f"{seq(0)}{line['Z']}\n".encode(),
     }
     return {"keys": keys, "lines": line, "lists": lists}
 
@@ -528,6 +669,10 @@ def author_key_vectors() -> list[dict]:
     sig_d = ak.sign_sk_ed25519_emulated(_seed("D"), msg)
     sig_e = ak.sign_sk_ecdsa_emulated(_p256_scalar("E"), msg)
     sig_d_noup = ak.sign_sk_ed25519_emulated(_seed("D"), msg, flags=0x00)
+    # A = R = identity and S = 0 satisfy [S]B = R + [k]A for every message.
+    sig_z = ak._sshsig(keys["Z"], ak._string(ak.KT_ED25519) + ak._string(ED25519_IDENTITY + bytes(32)))
+    pad = ak.MAX_ARMOR_BYTES + 1 - len(sig_a.encode())
+    sig_a_over_cap = sig_a + "\n" * pad
     src = AK_SOURCE_URI
     chg_b = ak.sign_ed25519(_seed("B"), ak.list_change_message(src, lists["L1"], lists["L1+B"]))
     chg_a = ak.sign_ed25519(_seed("A"), ak.list_change_message(src, lists["L1"], lists["L2"]))
@@ -586,6 +731,15 @@ def author_key_vectors() -> list[dict]:
                    source_uri=AK_OTHER_SOURCE_URI),
         item_vec("TV-AK-12", "Allowed-signers list without a sequence line", "A", sig_a, "LNOSEQ", ch,
                  ak.LIST_MALFORMED, "Every list carries exactly one `# moat-sequence: <n>` line."),
+        item_vec("TV-AK-13", "Small-order key: identity A and R with S = 0", "Z", sig_z, "LZ", ch,
+                 ak.SIGNATURE_INVALID,
+                 "Z is the identity point. A = R = identity and S = 0 satisfy the cofactorless equation "
+                 "for any message, so a list naming Z would accept anything; A and R of small order "
+                 "are refused."),
+        item_vec("TV-AK-14", "Armored signature over 16384 bytes", "A", sig_a_over_cap, "L1", ch,
+                 ak.SIGNATURE_INVALID,
+                 f"TV-AK-01's signature followed by {pad} LF bytes, 16385 bytes in all. Stripped, it "
+                 "is TV-AK-01's valid signature; the cap refuses it before any decoding."),
     ]
     assert ak.verify_item(ch, sig_c, lists["L1"]) == ak.SIGNER_NOT_ALLOWED
     return vectors
@@ -650,7 +804,7 @@ def main():
         vector_01, vector_02, vector_03, vector_04, vector_05,
         vector_06, vector_07, vector_08, vector_09, vector_10,
         vector_11, vector_12, vector_13, vector_14, vector_15,
-        vector_16,
+        vector_16, *PATH_REJECT_VECTORS,
     ]
 
     print("MOAT Test Vectors — Generated Output")
@@ -667,6 +821,8 @@ def main():
             for path, info in sorted(v["files"].items()):
                 display = info.get("display", "<binary>").rstrip("\n")
                 print(f"    {path}: {info['hash']}")
+                if "path_hex" in info:
+                    print(f"      path hex: {info['path_hex']}")
                 print(f"      content: {display!r}")
 
         if "input_hex" in v:
@@ -690,6 +846,8 @@ def main():
 
         if "note" in v:
             print(f"  Note: {v['note']}")
+        if "platforms" in v:
+            print(f"  Platforms: {v['platforms']}")
         print()
 
     print_separator()
@@ -714,7 +872,7 @@ def main():
         for key in ("content_hash", "per_file_hash", "directory_hash"):
             if key in v1 and key in v2:
                 assert v1[key] == v2[key], f"TV-{v1['id']} non-deterministic on {key}!"
-    print("  All 16 content hash vectors are deterministic. ✓")
+    print(f"  All {len(generators)} content hash vectors are deterministic. ✓")
     assert acif_vectors() == acif_vectors(), "ACIF vectors non-deterministic"
     assert author_key_vectors() == author_key_vectors(), "author-key vectors non-deterministic"
     print("  ACIF and author-key vectors are deterministic. ✓")
@@ -755,6 +913,31 @@ def main():
             print(f"  {label}: MISMATCH")
             print(f"    generate_test_vectors: {expected}")
             print(f"    moat_hash.py:          {got}")
+            all_ok = False
+
+    for gen in PATH_REJECT_VECTORS:
+        v = gen()
+        label = f"TV-{v['id']} ({v['title']})"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            try:
+                for rel, data in v["raw_files"].items():
+                    p = root / os.fsdecode(rel)
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                    p.write_bytes(data)
+            except (OSError, UnicodeError) as err:
+                print(f"  {label}: SKIPPED, this platform cannot create the input ({err.__class__.__name__})")
+                continue
+            try:
+                got, got_kind = moat_hash.content_hash(root), None
+            except ValueError as err:
+                got, got_kind = None, _path_kind(err)
+        want_kind = v.get("reject")
+        if got_kind == want_kind and (want_kind is not None or got == v["content_hash"]):
+            print(f"  {label}: OK ({want_kind or got})")
+        else:
+            print(f"  {label}: MISMATCH (expected {want_kind or v['content_hash']}, "
+                  f"moat_hash {got_kind or got})")
             all_ok = False
 
     for body_hash, metadata_hash, expected in ACIF_ATTESTATION_INPUT_PINNED:

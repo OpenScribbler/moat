@@ -27,8 +27,9 @@ Accepted key types:
   sk-ecdsa-sha2-nistp256@openssh.com     (FIDO2 security key, ECDSA P-256)
 
 The Ed25519 and P-256 arithmetic below is a dependency-free transcription of
-RFC 8032 §6 and SEC 1, written for clarity and test-vector generation. It is
-not constant-time and MUST NOT sign with real keys.
+RFC 8032 §6 and SEC 1, written for clarity and test-vector generation, with
+Ed25519 verification narrowed to the profile's strict checks. It is not
+constant-time and MUST NOT sign with real keys.
 
 The test-vector suite in generate_test_vectors.py is the normative authority;
 where this script and a vector disagree, the vector is correct.
@@ -112,6 +113,7 @@ _P = 2**255 - 19
 _Q = 2**252 + 27742317777372353535851937790883648493
 _D = -121665 * pow(121666, _P - 2, _P) % _P
 _SQRT_M1 = pow(2, (_P - 1) // 4, _P)
+_ED_IDENTITY = (0, 1, 1, 0)
 
 
 def _ed_add(a, b):
@@ -124,7 +126,7 @@ def _ed_add(a, b):
 
 
 def _ed_mul(s: int, pt):
-    acc = (0, 1, 1, 0)
+    acc = _ED_IDENTITY
     while s > 0:
         if s & 1:
             acc = _ed_add(acc, pt)
@@ -195,11 +197,20 @@ def ed25519_sign(seed: bytes, msg: bytes) -> bytes:
     return rs + ((r + h * a) % _Q).to_bytes(32, "little")
 
 
+def _ed_small_order(pt) -> bool:
+    return _ed_equal(_ed_mul(8, pt), _ED_IDENTITY)
+
+
 def ed25519_verify(pub: bytes, msg: bytes, sig: bytes) -> bool:
+    """
+    Strict RFC 8032 verification: A and R must decode with y < p, neither may
+    be of small order ([8]P is the identity), S must be below L, and the
+    cofactorless equation [S]B = R + [k]A must hold.
+    """
     if len(sig) != 64:
         return False
     A, R = _ed_decompress(pub), _ed_decompress(sig[:32])
-    if A is None or R is None:
+    if A is None or R is None or _ed_small_order(A) or _ed_small_order(R):
         return False
     s = int.from_bytes(sig[32:], "little")
     if s >= _Q:
@@ -405,7 +416,15 @@ def _armor(blob: bytes) -> str:
     return "-----BEGIN SSH SIGNATURE-----\n" + "\n".join(lines) + "\n-----END SSH SIGNATURE-----\n"
 
 
+# The longest armored signature read, in UTF-8 bytes. Real armor for the
+# profile's key types is under 1 KiB; the cap bounds the work done before any
+# check on text an attacker controls.
+MAX_ARMOR_BYTES = 16 * 1024
+
+
 def _unarmor(text: str) -> bytes:
+    if len(text.encode("utf-8")) > MAX_ARMOR_BYTES:
+        raise ValueError("armored signature exceeds 16384 bytes")
     lines = [ln.strip() for ln in text.strip().splitlines()]
     if not lines or lines[0] != "-----BEGIN SSH SIGNATURE-----" \
             or lines[-1] != "-----END SSH SIGNATURE-----":
