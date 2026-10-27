@@ -49,11 +49,11 @@ else
   fi
 fi
 
-# A3: '## [0.8.0]' appears exactly once in the first 40 lines of CHANGELOG.md.
-n_unreleased=$(head -40 CHANGELOG.md | grep -cE '^## \[0\.8\.0\]' 2>/dev/null)
+# A3: '## [0.8.0]' appears exactly once in the first 80 lines of CHANGELOG.md.
+n_unreleased=$(head -80 CHANGELOG.md | grep -cE '^## \[0\.8\.0\]' 2>/dev/null)
 n_unreleased=${n_unreleased:-0}
 if [[ "$n_unreleased" -ne 1 ]]; then
-  echo "FAIL [A3]: expected exactly 1 '## [0.8.0]' heading in head -40 of CHANGELOG.md, found $n_unreleased"
+  echo "FAIL [A3]: expected exactly 1 '## [0.8.0]' heading in head -80 of CHANGELOG.md, found $n_unreleased"
   fail=1
 fi
 

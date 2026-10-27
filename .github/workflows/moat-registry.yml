@@ -193,10 +193,18 @@ jobs:
               return h.hexdigest()
 
 
+          def _not_utf8(rel):
+              try:
+                  os.fsencode(rel).decode("utf-8")
+              except UnicodeError:
+                  return True
+              return False
+
+
           def moat_content_hash(directory):
               """Compute the MOAT content hash for a directory."""
               root = Path(directory)
-              entries = []
+              found = []
               for path in root.rglob("*"):
                   if any(part in VCS_DIRS for part in path.parts):
                       continue
@@ -206,7 +214,22 @@ jobs:
                       raise ValueError(f"Symlink rejected: {path.relative_to(root).as_posix()}")
                   if not path.is_file():
                       continue
-                  rel = unicodedata.normalize("NFC", path.relative_to(root).as_posix())
+                  found.append((path.relative_to(root).as_posix(), path))
+              # Path rejects run on the raw paths, before NFC: every path is checked
+              # for UTF-8, then every path for control characters, then for collisions.
+              for rel, _ in found:
+                  if _not_utf8(rel):
+                      raise ValueError(f"Path is not valid UTF-8: {ascii(rel)} — content is unpublishable")
+              for rel, _ in found:
+                  if any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in rel):
+                      raise ValueError(f"Path contains a control character: {rel!r} — content is unpublishable")
+              entries = []
+              seen = set()
+              for rel, path in found:
+                  rel = unicodedata.normalize("NFC", rel)
+                  if rel in seen:
+                      raise ValueError(f"NFC path collision: {rel!r} — content is unpublishable")
+                  seen.add(rel)
                   file_hash = _hash_text(path) if _is_text(path) else _hash_binary(path)
                   entries.append((rel, file_hash))
               if not entries:

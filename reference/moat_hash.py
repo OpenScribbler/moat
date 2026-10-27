@@ -18,6 +18,7 @@ Usage:
 """
 import hashlib
 import json
+import os
 import sys
 import unicodedata
 from pathlib import Path
@@ -164,17 +165,75 @@ def _hash_text(path: Path) -> str:
     return h.hexdigest()
 
 
+# ── Path rejects ──────────────────────────────────────────────────────────────
+#
+# A manifest line is "<hash>  <path>" plus LF, so a path holding LF or CR could
+# forge or blur a line boundary, and a path that is not UTF-8 has no manifest
+# spelling. Both checks read the raw relative paths, before NFC, and each covers
+# every path before the next begins; both finish before the NFC collision check
+# ([ACIF-CORE] §7.4 step 3).
+
+def _not_utf8(rel: str) -> bool:
+    """
+    A name read from the filesystem decodes with surrogateescape, so a byte
+    that is not UTF-8 arrives as a lone surrogate. os.fsencode restores the
+    raw bytes, and a strict decode refuses them.
+    """
+    try:
+        os.fsencode(rel).decode("utf-8")
+    except UnicodeError:
+        return True
+    return False
+
+
+def _has_control_char(rel: str) -> bool:
+    """U+0000-U+001F or U+007F. U+0080-U+009F are not control characters here."""
+    return any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in rel)
+
+
+def _escaped(rel: str) -> str:
+    try:
+        return repr(os.fsencode(rel))[1:]
+    except UnicodeError:
+        return ascii(rel)
+
+
+def check_raw_paths(rels: list[str]) -> None:
+    """Refuse a relative path that is not UTF-8, then one holding a control character."""
+    for rel in rels:
+        if _not_utf8(rel):
+            raise ValueError(f"Path is not valid UTF-8: {_escaped(rel)} — content is unpublishable")
+    for rel in rels:
+        if _has_control_char(rel):
+            raise ValueError(f"Path contains a control character: {rel!r} — content is unpublishable")
+
+
+def nfc_paths(rels: list[str]) -> list[str]:
+    """NFC form of each path; two distinct paths with one NFC form are refused."""
+    seen: set[str] = set()
+    out = []
+    for rel in rels:
+        nfc = unicodedata.normalize("NFC", rel)
+        if nfc in seen:
+            raise ValueError(f"NFC path collision: {nfc!r} — content is unpublishable")
+        seen.add(nfc)
+        out.append(nfc)
+    return out
+
+
 # ── Directory hash ────────────────────────────────────────────────────────────
 
 def content_hash(directory: str | Path) -> str:
     """
     Compute the MOAT content hash for a directory.
 
-    Raises ValueError if any symlinks are present (rejected at ingestion)
-    or if the directory contains no files.
+    Raises ValueError if any symlinks are present (rejected at ingestion), if
+    a relative path is not valid UTF-8 or contains a control character, if
+    two paths collide after NFC normalization, or if the directory contains
+    no files.
     """
-    root    = Path(directory)
-    entries: list[tuple[str, str]] = []
+    root  = Path(directory)
+    found: list[tuple[str, Path]] = []
 
     for path in root.rglob("*"):
         if any(part in VCS_DIRS for part in path.parts):
@@ -185,10 +244,12 @@ def content_hash(directory: str | Path) -> str:
             raise ValueError(f"Symlink rejected: {path.relative_to(root).as_posix()}")
         if not path.is_file():
             continue
+        found.append((path.relative_to(root).as_posix(), path))
 
-        rel       = unicodedata.normalize("NFC", path.relative_to(root).as_posix())
-        file_hash = _hash_text(path) if is_text(path) else _hash_binary(path)
-        entries.append((rel, file_hash))
+    check_raw_paths([rel for rel, _ in found])
+    rels = nfc_paths([rel for rel, _ in found])
+    entries = [(rel, _hash_text(path) if is_text(path) else _hash_binary(path))
+               for rel, (_, path) in zip(rels, found)]
 
     if not entries:
         raise ValueError("No files found — content is unpublishable")
@@ -252,17 +313,35 @@ def _acif_root_excluded_from_classification(name: str) -> bool:
         or name == ACIF_SIDECAR_NAME
 
 
-def _acif_body(directory: str | Path, entry_file: str) -> tuple[list[tuple[str, Path]], str, bool]:
+def _is_unicode_text(s: str) -> bool:
+    """False for a str holding a lone surrogate, which no UTF-8 text encodes."""
+    try:
+        s.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+def _acif_body(directory: str | Path, entry_file: str) -> tuple[list[tuple[str, Path, bool]], bool]:
     """
-    The files an ACIF body_hash covers, as (relative path, path) pairs, plus
-    the NFC entry path and whether the body is multi-file. A single-file body
+    The files an ACIF body_hash covers, as (NFC relative path, path, is entry
+    file) triples, plus whether the body is multi-file. A single-file body
     covers the entry file alone.
+
+    Follows [ACIF-CORE] §7.2 and §7.4 as ACIF's reference does. Classification
+    and entry matching compare raw relative paths, before NFC. Only a root
+    file equal to entry_file is excused from classification; a file equal to
+    it at any depth is the entry file. The step 3 path rejects run only for a
+    multi-file body, whose manifest spells the paths, and both finish before
+    the NFC collision check, which covers every enumerated path. A body
+    without its entry file is empty.
     """
     if not isinstance(entry_file, str) or not entry_file or entry_file.startswith("/") \
-            or Path(entry_file).is_absolute() or ".." in entry_file.replace("\\", "/").split("/"):
+            or Path(entry_file).is_absolute() or ".." in entry_file.replace("\\", "/").split("/") \
+            or not _is_unicode_text(entry_file):
         raise ValueError(f"Malformed acif entry_file: {entry_file!r}")
     root = Path(directory)
-    files: list[tuple[str, Path]] = []
+    found: list[tuple[str, Path]] = []
     for path in root.rglob("*"):
         if any(part in VCS_DIRS for part in path.relative_to(root).parts):
             continue
@@ -270,25 +349,28 @@ def _acif_body(directory: str | Path, entry_file: str) -> tuple[list[tuple[str, 
             raise ValueError(f"Symlink rejected: {path.relative_to(root).as_posix()}")
         if not path.is_file():
             continue
-        if path.parent == root and path.name == ACIF_SIDECAR_NAME:
-            continue
-        rel = unicodedata.normalize("NFC", path.relative_to(root).as_posix())
-        files.append((rel, path))
+        found.append((path.relative_to(root).as_posix(), path))
 
-    entry = unicodedata.normalize("NFC", entry_file)
-    rels = [rel for rel, _ in files]
-    if len(rels) != len(set(rels)):
-        raise ValueError("NFC path collision — content is unpublishable")
-    if entry not in rels:
-        raise ValueError(f"Entry file not found: {entry_file}")
+    rels = [rel for rel, _ in found]
+
+    def at_root_and_excluded(rel: str) -> bool:
+        return "/" not in rel and _acif_root_excluded_from_classification(rel)
 
     multi_file = any(
-        rel != entry and not ("/" not in rel and _acif_root_excluded_from_classification(rel))
+        not (at_root_and_excluded(rel) or ("/" not in rel and rel == entry_file))
         for rel in rels
     )
+    if multi_file:
+        check_raw_paths(rels)
+    nfc = nfc_paths(rels)
+    if all(at_root_and_excluded(rel) for rel in rels) or entry_file not in rels:
+        raise ValueError(f"Empty ACIF body: no entry file {entry_file!r} — content is unpublishable")
+
+    files = [(n, path, rel == entry_file)
+             for n, (rel, path) in zip(nfc, found) if rel != ACIF_SIDECAR_NAME]
     if not multi_file:
-        files = [(rel, path) for rel, path in files if rel == entry]
-    return files, entry, multi_file
+        files = [f for f in files if f[2]]
+    return files, multi_file
 
 
 def acif_installed_files(directory: str | Path, entry_file: str) -> list[str]:
@@ -299,8 +381,8 @@ def acif_installed_files(directory: str | Path, entry_file: str) -> list[str]:
     files are dropped; the root acif-sidecar.yaml and VCS metadata directories
     are never installed.
     """
-    files, _, _ = _acif_body(directory, entry_file)
-    return sorted(rel for rel, _ in files)
+    files, _ = _acif_body(directory, entry_file)
+    return sorted(rel for rel, _, _ in files)
 
 
 def acif_body_hash(directory: str | Path, entry_file: str) -> str:
@@ -314,13 +396,13 @@ def acif_body_hash(directory: str | Path, entry_file: str) -> str:
     stripped text. Root LICENSE*/README* files count only against the
     single/multi-file classification; they are hashed in a multi-file body.
     """
-    files, entry, multi_file = _acif_body(directory, entry_file)
+    files, multi_file = _acif_body(directory, entry_file)
     if not multi_file:
         return "sha256:" + hashlib.sha256(strip_frontmatter(files[0][1].read_bytes())).hexdigest()
 
     entries = []
-    for rel, path in files:
-        if rel == entry:
+    for rel, path, is_entry in files:
+        if is_entry:
             h = hashlib.sha256(strip_frontmatter(path.read_bytes())).hexdigest()
         else:
             h = _hash_text(path) if is_text(path) else _hash_binary(path)

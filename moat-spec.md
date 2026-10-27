@@ -340,6 +340,25 @@ The content hash identifies a content directory by canonical byte sequence using
 rules, and conformance expectations are defined by the reference implementation and its test vectors. This is the
 directory algorithm, and it applies to every content item except an ACIF content item.
 
+**Path rejects (normative).** The directory algorithm checks the path of each file it hashes, that is, each file left
+after the VCS-directory and root `moat-attestation.json` exclusions, relative to the content directory in POSIX form
+(`/` separators), as the filesystem stores it and before NFC normalization, in two scans, each over every such path
+before the next begins:
+
+1. A path that is not valid UTF-8 (on a platform whose file names are UTF-16, such as Windows, one that is not valid
+   UTF-16) MUST be refused.
+2. A path any of whose components (file or directory name) contains a control character, U+0000 through U+001F or
+   U+007F, MUST be refused. U+0080 through U+009F are not control characters for this rule.
+
+Both scans complete before collision detection, so content holding a control-character path and an NFC collision is
+refused for the control character. Two distinct paths that normalize to the same NFC path MUST be refused. Content
+refused by any of these checks is unpublishable, and a conforming client MUST treat the refusal as a hard failure.
+TV-04 and TV-23 through TV-29 pin these rules. *(Informative: a manifest line is LF-terminated, so a path holding LF
+or CR could forge or blur a line boundary, and a path that is not UTF-8 has no manifest spelling. The checks remove
+inputs only, so no previously computable Content Hash changes. Some platforms cannot create some of the inputs of
+TV-23 through TV-29: Windows forbids U+0001 through U+001F in file names, though not U+007F, and stores names as
+UTF-16, so it cannot hold a name that is not valid UTF-8; macOS refuses names that are not valid UTF-8.)*
+
 #### ACIF Content Items
 
 An ACIF content item is a content item in the Agent Content Interchange Format ([ACIF](https://github.com/OpenScribbler/agent-content-interchange-format/blob/main/specs/core/spec.md)) whose
@@ -363,8 +382,8 @@ or `command`, which correspond to ACIF's frontmatter-bearing content types `skil
 a conforming client MUST treat `acif` on an item of any other type as a hard failure. *(Informative: ACIF's
 sidecar-only content types carry executable wiring in the sidecar, which MOAT does not install, so they are not ACIF
 content items until MOAT defines them normatively.)* An `acif` member that is not an object (including `null`), that
-has no `entry_file`, or whose `entry_file` is not a non-empty string, is an absolute path, or contains a `..` path
-segment, is malformed; a conforming client MUST treat a malformed `acif` member as a hard failure and MUST refuse the
+has no `entry_file`, or whose `entry_file` is not a non-empty string, is not valid Unicode text (such as a JSON
+string holding an unpaired surrogate escape), is an absolute path, or contains a `..` path segment, is malformed; a conforming client MUST treat a malformed `acif` member as a hard failure and MUST refuse the
 item before it hashes any of the item's files. A wrong marker fails closed: the attestation input preimage begins with the line
 `acif-attestation-input-v1`, which no directory-algorithm manifest line can equal, so the two methods agree on the
 same bytes only through a SHA-256 collision.
@@ -374,7 +393,14 @@ bytes it fetched, before it installs any of them:
 
 1. Compute `body_hash` over the fetched item directory as [ACIF Core §7](https://github.com/OpenScribbler/agent-content-interchange-format/blob/main/specs/core/spec.md) defines, with `acif.entry_file`
    as the entry file. MOAT applies none of ACIF's canonicalization rewrites; the installed bytes are hashed as they
-   are. These are the item bytes the client fetched. A client that renders the item into a provider's format before
+   are. MOAT inherits the path rejects and NFC collision check of ACIF Core §7.4 step 3: the path rejects run only
+   for a multi-file body, and the NFC collision check covers every enumerated path in either classification. The
+   single-file or multi-file classification of ACIF Core §7.2 and the entry file match compare each relative path as
+   the filesystem stores it, before NFC normalization. For classification, only a file at the item root whose path
+   equals `acif.entry_file` is excused as the entry file; a file at any depth whose path equals `acif.entry_file` is
+   the entry file for the frontmatter strip. A body that holds no file whose path equals `acif.entry_file` is empty
+   under ACIF Core §7.4. A conforming client MUST treat each of these refusals as a hard failure. These are the item
+   bytes the client fetched. A client that renders the item into a provider's format before
    writing it hashes the fetched bytes, never the rendered output.
 2. Derive the item's `publisher_section` from the fetched item, including a publisher-authored root
    `acif-sidecar.yaml`, as [ACIF Publisher Specification §5](https://github.com/OpenScribbler/agent-content-interchange-format/blob/main/specs/publisher-spec/spec.md) defines, and compute `metadata_hash` from
@@ -572,6 +598,16 @@ reject any other key type, namespace, or hash algorithm. For the `sk-` types, ve
 flags byte lacks the user-presence bit (`0x01`). `ssh-keygen -Y verify` does not check that bit, so a verifier that
 delegates signature checking to it MUST check the flag itself.
 
+**Ed25519 verification (normative).** For `ssh-ed25519` and `sk-ssh-ed25519@openssh.com` signatures, verifiers MUST
+reject a public key A or signature point R whose encoding has a y coordinate not less than p = 2^255 − 19 or that
+does not decode to a curve point, a scalar S not less than the group order L, and an A or R of small order, one whose
+product with 8 is the identity point. Verifiers MUST then accept the signature only if [S]B = R + [k]A, checked
+without multiplying by the cofactor, where B is the base point and k is SHA-512(R ‖ A ‖ M) reduced mod L as RFC 8032
+§5.1.7 defines. *(Informative: with a small-order key, one signature can verify for every message, as TV-AK-13
+shows.)* Verifiers MUST refuse armored signature text longer than 16384 bytes, counted in UTF-8, before decoding
+it. `ssh-keygen -Y verify` accepts a small-order A and R (TV-AK-13) and armored text over that length (TV-AK-14), so
+a verifier that delegates signature checking to it MUST make these checks itself.
+
 **Key fingerprint (normative).** An Author Key's fingerprint is `SHA256:` followed by the unpadded standard base64
 encoding of the SHA-256 digest of the key's SSH public-key blob — the form `ssh-keygen -l` prints.
 
@@ -704,6 +740,8 @@ TV-ACIF-04's Content Hash. `reference/test_author_key.py` checks the vectors aga
 | TV-AK-10 | Replay of key A's signed change {A} → {A, B} (sequence 1) after A's later change removing B (sequence 2) is recorded | `sequence_not_greater` |
 | TV-AK-11 | TV-AK-05's change, checked for a different `source_uri` that trusts the same list | `signature_invalid` |
 | TV-AK-12 | List with no sequence line | `allowed_signers_malformed` |
+| TV-AK-13 | Item signature forged for small-order `ssh-ed25519` key Z (the identity point): R is the identity and S = 0; trusted list {Z} | `signature_invalid` |
+| TV-AK-14 | TV-AK-01's signature followed by LF bytes to 16385 bytes; trusted list {A} | `signature_invalid` |
 
 ### Trust State Error Vocabulary
 
