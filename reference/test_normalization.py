@@ -414,6 +414,8 @@ def test_vcs_named_ancestor_ignored():
         base = pathlib.Path(tmpdir)
         build_tree(base / "plain" / "item", files)
         want = moat_hash.content_hash(base / "plain" / "item")
+        build_tree(base / "nogit" / "item", {k: v for k, v in files.items() if k != b".git/HEAD"})
+        assert want == moat_hash.content_hash(base / "nogit" / "item"), "inner .git/HEAD was not excluded"
         for ancestor in (".git", "_darcs"):
             root = base / ancestor / "item"
             build_tree(root, files)
@@ -441,7 +443,7 @@ def main():
         ("TV-29: Invalid UTF-8 reported before control",   test_path_not_utf8_before_control),
         ("TV-04: NFC collision refused",                   test_path_nfc_collision),
         ("Embedded workflow hashes agree with moat_hash.py", test_embedded_workflow_hashes_agree),
-        ("VCS-named ancestor directory ignored",       test_vcs_named_ancestor_ignored),
+        ("VCS-named ancestor directory ignored",         test_vcs_named_ancestor_ignored),
     ]
 
     print("MOAT Text Normalization and Path Reject Tests (TV-17 through TV-29)")
