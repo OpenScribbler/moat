@@ -175,7 +175,7 @@ jobs:
               root = Path(directory)
               found = []
               for path in root.rglob("*"):
-                  if any(part in VCS_DIRS for part in path.parts):
+                  if any(part in VCS_DIRS for part in path.relative_to(root).parts):
                       continue
                   if path.parent == root and path.name in EXCLUDED_FILES:
                       continue
@@ -239,7 +239,7 @@ jobs:
               for path in directory.rglob("*"):
                   if not path.is_file():
                       continue
-                  if any(part in VCS_DIRS or part in TOOLING_DIRS for part in path.parts):
+                  if any(part in VCS_DIRS or part in TOOLING_DIRS for part in path.relative_to(directory).parts):
                       continue
                   if _final_ext(path.name) in TEXT_EXTENSIONS:
                       return True

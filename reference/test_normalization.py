@@ -405,6 +405,23 @@ def test_embedded_workflow_hashes_agree():
             assert got == want, f"{rel}, {label}: moat_hash.py gives {want}, the embedded copy gives {got}"
 
 
+def test_vcs_named_ancestor_ignored():
+    """A content directory under an ancestor named like a VCS directory hashes as it does elsewhere."""
+    files = {b"SKILL.md": b"# Skill\n", b"lib/a.py": b"x = 1\n", b".git/HEAD": b"ref\n"}
+    fns = [("moat_hash.py", moat_hash.content_hash)]
+    fns += [(rel, load_embedded_content_hash(rel)) for rel in WORKFLOW_COPIES]
+    with tempfile.TemporaryDirectory() as tmpdir:
+        base = pathlib.Path(tmpdir)
+        build_tree(base / "plain" / "item", files)
+        want = moat_hash.content_hash(base / "plain" / "item")
+        for ancestor in (".git", "_darcs"):
+            root = base / ancestor / "item"
+            build_tree(root, files)
+            for name, fn in fns:
+                got = outcome(fn, root)
+                assert got == want, f"{name}, under {ancestor}/: got {got}, want {want}"
+
+
 # -- Main ----------------------------------------------------------------------
 
 def main():
@@ -424,6 +441,7 @@ def main():
         ("TV-29: Invalid UTF-8 reported before control",   test_path_not_utf8_before_control),
         ("TV-04: NFC collision refused",                   test_path_nfc_collision),
         ("Embedded workflow hashes agree with moat_hash.py", test_embedded_workflow_hashes_agree),
+        ("VCS-named ancestor directory ignored",       test_vcs_named_ancestor_ignored),
     ]
 
     print("MOAT Text Normalization and Path Reject Tests (TV-17 through TV-29)")

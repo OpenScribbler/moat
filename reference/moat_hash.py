@@ -236,7 +236,7 @@ def content_hash(directory: str | Path) -> str:
     found: list[tuple[str, Path]] = []
 
     for path in root.rglob("*"):
-        if any(part in VCS_DIRS for part in path.parts):
+        if any(part in VCS_DIRS for part in path.relative_to(root).parts):
             continue
         if path.parent == root and path.name in EXCLUDED_FILES:
             continue
