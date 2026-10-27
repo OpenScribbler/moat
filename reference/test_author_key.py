@@ -78,7 +78,28 @@ def strict_ed25519_checks() -> list[tuple[str, str, str]]:
 
     sig_a = ak.sign_ed25519(gtv._seed("A"), ak.item_message(ch))
     at_cap = sig_a + "\n" * (ak.MAX_ARMOR_BYTES - len(sig_a.encode()))
+    # S + L: the same signature with S replaced by S + L. [S + L]B = [S]B, so the
+    # equation still holds and only the S < L check refuses it.
+    seed_a = gtv._seed("A")
+    raw = ak.ed25519_sign(seed_a, data)
+    s_plus_l = (int.from_bytes(raw[32:], "little") + ak._Q).to_bytes(32, "little")
+    blob_a = ak.key_blob_ed25519(pub)
+
+    # Non-canonical A or R: y encoded as y + p, still below 2^255. y = 3 is on the
+    # curve and not of small order, so `y >= p` is the only condition that refuses
+    # it. A and R decode through the same function, so one decode check covers both,
+    # and verification is also refused with the bad encoding in either position.
+    y = 3
+    canonical = y.to_bytes(32, "little")
+    non_canonical = (y + ak._P).to_bytes(32, "little")
+    refuse = lambda ok: "refused" if not ok else "accepted"
     return [
+        ("canonical y = 3 decodes (control)", refuse(ak._ed_decompress(canonical) is not None), "accepted"),
+        ("non-canonical A or R (y + p) does not decode", refuse(ak._ed_decompress(non_canonical) is not None), "refused"),
+        ("non-canonical A (y + p) in verification", refuse(ak.ed25519_verify(non_canonical, data, raw)), "refused"),
+        ("non-canonical R (y + p) in verification", refuse(ak.ed25519_verify(pub, data, non_canonical + raw[32:])), "refused"),
+        ("S < L (control)", ak.verify_item(ch, sshsig(blob_a, raw), lists["L1"]), ak.OK),
+        ("S + L", ak.verify_item(ch, sshsig(blob_a, raw[:32] + s_plus_l), lists["L1"]), ak.SIGNATURE_INVALID),
         ("small-order A, ordinary R", ak.verify_item(ch, small_a, lists["LZ"]), ak.SIGNATURE_INVALID),
         ("small-order R, real key", ak.verify_item(ch, small_r, lists["L1"]), ak.SIGNATURE_INVALID),
         ("armor of exactly 16384 bytes", ak.verify_item(ch, at_cap, lists["L1"]), ak.OK),

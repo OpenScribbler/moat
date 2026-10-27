@@ -77,7 +77,8 @@ Verifies against the stored install snapshot. Proves "this content was valid whe
 Apply the MOAT content hashing algorithm ([`reference/moat_hash.py`](../reference/moat_hash.py)`::content_hash()`) to `<directory>`.
 
 Fail with exit code 2 if: directory does not exist or is not a directory; directory contains symlinks; directory is
-empty after VCS directory exclusion.
+empty after VCS directory exclusion; a file path is not valid UTF-8 or has a component with a control character; two
+file paths collide after NFC normalization (see [Content Hashing](../moat-spec.md#content-hashing) path rejects).
 
 **ACIF content items:** This version of `moat-verify` computes the directory algorithm only and does not verify
 [ACIF content items](../moat-spec.md#acif-content-items) (manifest entries carrying `acif`). Step 3 fails a

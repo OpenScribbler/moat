@@ -340,9 +340,10 @@ The content hash identifies a content directory by canonical byte sequence using
 rules, and conformance expectations are defined by the reference implementation and its test vectors. This is the
 directory algorithm, and it applies to every content item except an ACIF content item.
 
-**Path rejects (normative).** The directory algorithm checks each file's path relative to the content directory in
-POSIX form (`/` separators), as the filesystem stores it and before NFC normalization, in two scans, each over every
-path before the next begins:
+**Path rejects (normative).** The directory algorithm checks the path of each file it hashes, that is, each file left
+after the VCS-directory and root `moat-attestation.json` exclusions, relative to the content directory in POSIX form
+(`/` separators), as the filesystem stores it and before NFC normalization, in two scans, each over every such path
+before the next begins:
 
 1. A path that is not valid UTF-8 (on a platform whose file names are UTF-16, such as Windows, one that is not valid
    UTF-16) MUST be refused.

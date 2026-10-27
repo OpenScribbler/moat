@@ -146,6 +146,9 @@ def write_raw(root: pathlib.Path, files: dict[bytes, bytes]) -> None:
         write(root, {os.fsdecode(rel): data for rel, data in files.items()})
     except (OSError, UnicodeError) as err:
         raise Skip(f"this platform cannot create the input ({err.__class__.__name__})")
+    # A normalization-insensitive filesystem (APFS) folds an NFD name onto its NFC twin.
+    if sum(len(names) for _, _, names in os.walk(root)) != len(files):
+        raise Skip("this filesystem folds distinct names together (normalization-insensitive)")
 
 
 def refusal(files: dict[bytes, bytes], entry_file: str = "SKILL.md") -> str:

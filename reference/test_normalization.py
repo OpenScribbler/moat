@@ -21,8 +21,11 @@ import os
 import pathlib
 import sys
 import tempfile
+import textwrap
+import unicodedata
 
 sys.path.insert(0, os.path.dirname(__file__))
+import generate_test_vectors as gtv
 import moat_hash
 
 
@@ -261,17 +264,25 @@ class Skip(Exception):
     pass
 
 
+def build_tree(root: pathlib.Path, files: dict[bytes, bytes]) -> None:
+    """Write raw-named files under root; skips when the platform cannot create them."""
+    try:
+        for rel, data in files.items():
+            p = root / os.fsdecode(rel)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(data)
+    except (OSError, UnicodeError) as err:
+        raise Skip(f"this platform cannot create the input ({err.__class__.__name__})")
+    # A normalization-insensitive filesystem (APFS) folds an NFD name onto its NFC twin.
+    if sum(1 for q in root.rglob("*") if q.is_file()) != len(files):
+        raise Skip("this filesystem folds distinct names together (normalization-insensitive)")
+
+
 def run_tree(files: dict[bytes, bytes]) -> str:
     """Write raw-named files to a temp dir and return moat_hash.content_hash()."""
     with tempfile.TemporaryDirectory() as tmpdir:
         root = pathlib.Path(tmpdir)
-        try:
-            for rel, data in files.items():
-                p = root / os.fsdecode(rel)
-                p.parent.mkdir(parents=True, exist_ok=True)
-                p.write_bytes(data)
-        except (OSError, UnicodeError) as err:
-            raise Skip(f"this platform cannot create the input ({err.__class__.__name__})")
+        build_tree(root, files)
         return moat_hash.content_hash(root)
 
 
@@ -337,6 +348,63 @@ def test_path_nfc_collision():
     expect_reject({"café.md".encode(): b"nfc\n", "café.md".encode(): b"nfd\n"}, "collision")
 
 
+# -- Embedded workflow copies --------------------------------------------------
+#
+# The publisher and registry workflows each embed their own copy of the content
+# hash. Pull `moat_content_hash` and the constants and helpers it uses out of
+# each copy and check it agrees with moat_hash.content_hash(): the same hash, or
+# the same kind of refusal, on the path-reject vectors and a plain directory.
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+WORKFLOW_COPIES = [
+    ".github/workflows/moat-publisher.yml",
+    ".github/workflows/moat-registry.yml",
+    "reference/moat-publisher.yml",
+    "reference/moat-registry.yml",
+]
+
+
+def load_embedded_content_hash(rel: str):
+    lines = textwrap.dedent("\n".join(
+        (REPO_ROOT / rel).read_text(encoding="utf-8").split("python3 << 'PYEOF'\n", 1)[1]
+        .split("\n          PYEOF", 1)[0].splitlines())).splitlines()
+    start = next(i for i, ln in enumerate(lines) if ln.startswith("# ─── Embedded MOAT content hash"))
+    fn = next(i for i, ln in enumerate(lines) if ln.startswith("def moat_content_hash("))
+    end = fn + 1
+    while end < len(lines) and (not lines[end].strip() or lines[end][0].isspace()):
+        end += 1
+    ns = {"hashlib": hashlib, "os": os, "unicodedata": unicodedata, "Path": pathlib.Path}
+    exec("\n".join(lines[start:end]), ns)
+    return ns["moat_content_hash"]
+
+
+def outcome(fn, root: pathlib.Path) -> str:
+    try:
+        return fn(root)
+    except ValueError as err:
+        return "refused: " + gtv._path_kind(err)
+
+
+def test_embedded_workflow_hashes_agree():
+    """Each workflow's embedded content hash matches moat_hash.py on TV-04, TV-23..TV-29 and a plain directory."""
+    cases = [("plain directory", {b"SKILL.md": b"# Skill\n", b"lib/a.py": b"x = 1\r\n", b"img.png": b"\x89PNG\x00"}),
+             ("TV-04", {"café.md".encode(): b"nfc\n", "café.md".encode(): b"nfd\n"})]
+    for gen in gtv.PATH_REJECT_VECTORS:
+        v = gen()
+        cases.append((f"TV-{v['id']}", v["raw_files"]))
+    for rel in WORKFLOW_COPIES:
+        embedded = load_embedded_content_hash(rel)
+        for label, files in cases:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                root = pathlib.Path(tmpdir)
+                try:
+                    build_tree(root, files)
+                except Skip:
+                    continue  # this platform cannot create the vector, as in the other tests
+                want, got = outcome(moat_hash.content_hash, root), outcome(embedded, root)
+            assert got == want, f"{rel}, {label}: moat_hash.py gives {want}, the embedded copy gives {got}"
+
+
 # -- Main ----------------------------------------------------------------------
 
 def main():
@@ -355,6 +423,7 @@ def main():
         ("TV-28: Control character reported before collision", test_path_control_before_collision),
         ("TV-29: Invalid UTF-8 reported before control",   test_path_not_utf8_before_control),
         ("TV-04: NFC collision refused",                   test_path_nfc_collision),
+        ("Embedded workflow hashes agree with moat_hash.py", test_embedded_workflow_hashes_agree),
     ]
 
     print("MOAT Text Normalization and Path Reject Tests (TV-17 through TV-29)")
