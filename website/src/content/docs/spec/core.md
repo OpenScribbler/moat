@@ -611,9 +611,9 @@ a verifier that delegates signature checking to it MUST make these checks itself
 **Key fingerprint (normative).** An Author Key's fingerprint is `SHA256:` followed by the unpadded standard base64
 encoding of the SHA-256 digest of the key's SSH public-key blob — the form `ssh-keygen -l` prints.
 
-**Signed messages (normative).** This profile defines the two kinds of message below. An Author Key MAY sign other messages under namespace `file` only when each begins with a domain separator line, terminated by LF, that differs from `moat-author-item-v1` and `moat-allowed-signers-change-v1`; a Publisher MUST NOT sign with an Author Key, under namespace `file`, any other message that begins with either of those lines.
-A verifier builds the message it checks, so a signature verifies only for the exact bytes signed: a signature over one
-kind never verifies as the other, as a bare [Attestation Payload](#attestation-payload), or as any other message signed under these rules:
+**Signed messages (normative).** This profile defines the two kinds of message below. An Author Key MAY sign other messages under namespace `file`; each such message MUST begin with a domain separator line, terminated by LF, other than `moat-author-item-v1` and `moat-allowed-signers-change-v1`, and that line SHOULD name the tool and a version, such as `example-tool-config-v1`.
+A Publisher MUST NOT sign with an Author Key, under namespace `file`, any other message whose first line is either of those two lines. A verifier builds the message it
+checks rather than taking it from the signer, so a signature over one kind never verifies as the other, as a bare [Attestation Payload](#attestation-payload), or as any other message signed under these rules. The two kinds:
 
 | Message | Bytes |
 |---|---|
