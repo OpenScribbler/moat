@@ -153,4 +153,4 @@ After completing all checks, list findings by severity:
 - **Major**: deviates from conventions in ways that harm clarity or implementability
 - **Minor**: polish that improves quality but does not block publication
 
-For each finding, give the `<path>:<line>`, what is wrong, which convention it violates, and a suggested fix. A fix that later edits a spec file needs a `CHANGELOG.md` entry and the same edit to its website mirror, in the same commit.
+For each finding, give the `<path>:<line>`, what is wrong, which convention it violates, and a suggested fix. A fix that later edits a spec file needs a `CHANGELOG.md` entry and the matching edit to its website mirror (see `SKILL.md` convention 5), in the same commit.
