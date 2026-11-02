@@ -125,7 +125,7 @@ If a behavior is only shown in an example but not stated in normative text, it i
 
 ### 4. Implementation mapping tables are informative
 
-Tables that map spec fields to native agent mechanisms (e.g., "Convention Field X → Claude Code's Y, Cursor's Z") are implementation guidance, not requirements. They should be in appendices marked "(Informative)".
+Tables that map spec fields to native agent mechanisms (e.g., "Convention Field X → Claude Code's Y, Cursor's Z") are implementation guidance, not requirements. In MOAT they sit in the section they map, under an `(informative)` label, such as `**Mapping to common npm-client architectures (informative):**` in `specs/npm-distribution.md`.
 
 If these tables contain SHOULD or MUST language, that language is not binding. But readers may not realize that — so don't use RFC 2119 keywords in them.
 
@@ -133,7 +133,7 @@ If these tables contain SHOULD or MUST language, that language is not binding. B
 
 A well-structured spec passes this test:
 
-1. Extract every sentence containing a MUST, SHOULD, or MAY keyword
+1. Extract every sentence containing a MUST, SHOULD, or MAY keyword, plus every rule under a `(normative)` label that has no keyword (a list of serialization rules, for example)
 2. Read them in order, without surrounding prose
 3. Can you build a conformant implementation from just these statements?
 

@@ -6,10 +6,10 @@ Checklist-driven workflow for reviewing `moat-spec.md`, a sub-spec, or one secti
 
 An audit is read-only: it changes no spec file. Collect every finding before recommending fixes, because auditing and fixing are separate phases.
 
-1. **Pick the scope.** A whole document, or one section. For a section, find its line range from the headings:
+1. **Pick the scope.** A whole document, or one section. `<spec>` below is the file you are auditing, such as `moat-spec.md` or `specs/npm-distribution.md`. For a section, find its line range from the headings:
 
    ```bash
-   grep -n '^#' moat-spec.md
+   grep -n '^#' <spec>
    ```
 
    The section runs from its heading to the line before the next heading of the same or higher level.
@@ -52,7 +52,7 @@ An audit is read-only: it changes no spec file. Collect every finding before rec
 List every keyword in scope, with line numbers, to drive this check:
 
 ```bash
-sed -n '<start>,<end>p' moat-spec.md | grep -nE '\b(MUST|SHALL|SHOULD|MAY|REQUIRED|RECOMMENDED|OPTIONAL)\b'
+sed -n '<start>,<end>p' <spec> | grep -nE '\b(MUST|SHALL|SHOULD|MAY|REQUIRED|RECOMMENDED|OPTIONAL)\b'
 ```
 
 Add `<start> - 1` to each printed line number to get the line in the file. The spec wraps prose, so read each hit's whole sentence, which can continue onto the next line.
@@ -86,7 +86,7 @@ To check a cited line: `sed -n '<line>p' <path>`.
 | No persuasive or marketing language in normative content | | |
 | No first-person voice ("we designed...") | | |
 | Examples illustrate but do not define (normative text stands alone) | | |
-| Implementation mapping tables are in informative content | | |
+| Implementation mapping tables and rationale sit in labeled `(informative)` blocks in the section they explain | | |
 
 **Reference:** `references/normative-vs-informative.md`
 
@@ -115,7 +115,7 @@ To check a cited line: `sed -n '<line>p' <path>`.
 |-------|-----------|-------|
 | Version and stage label match actual maturity | | |
 | No "Stable" labels in a 0.x spec without a disclaimer | | |
-| No MUST requirements on content marked as draft or experimental | | |
+| No MUST requirements on content a spec labels with a per-field or per-item draft or experimental stability (the document's `(Draft)` stage does not count) | | |
 | Every spec edit since the last release tag has a `CHANGELOG.md` entry under `[Unreleased]` | | |
 
 To list spec edits since the last tag: `git log --oneline "$(git describe --tags --abbrev=0)"..HEAD -- moat-spec.md specs/`.
@@ -139,11 +139,11 @@ Skip for `moat-spec.md` itself.
 
 As a final validation:
 
-1. Extract every sentence in scope containing MUST, MUST NOT, SHOULD, SHOULD NOT, MAY, or OPTIONAL (the `grep` from check 2 finds the lines).
+1. Extract every sentence in scope containing MUST, MUST NOT, SHOULD, SHOULD NOT, MAY, or OPTIONAL (the `grep` from check 2 finds the lines), plus every rule under a `(normative)` label that states a requirement without a keyword, such as the list after `Serialization rules (normative):` in `moat-spec.md` §Attestation Payload.
 2. Read them in sequence without surrounding prose.
 3. Ask: can a competent implementer build a conformant implementation from ONLY these statements?
 
-If yes, the normative content is self-contained. If no, identify which statements need surrounding context and either make each statement self-sufficient or promote the context to normative.
+If yes, the normative content is self-contained. If no, record a finding for each statement that needs surrounding context, with a suggested fix: make the statement self-sufficient, or promote the context to normative. The audit itself edits nothing.
 
 ## Reporting
 

@@ -120,7 +120,7 @@ If fields have stability levels but no defined path from Draft to Stable, "Draft
 
 ### Draft Fields with MUST Requirements
 
-If a field can change (Draft), requiring implementations to support it (MUST) creates tension. Use SHOULD or MAY for Draft fields.
+If a field carries a Draft stability label (it can change), requiring implementations to support it (MUST) creates tension. Use SHOULD or MAY for such fields. This is about per-field labels; a document whose header stage is `(Draft)`, as every MOAT spec is today, still has binding MUSTs.
 
 ## The Audit Shortcut
 

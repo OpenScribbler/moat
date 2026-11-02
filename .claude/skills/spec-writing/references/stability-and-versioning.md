@@ -117,4 +117,6 @@ Without criteria, "Draft" becomes permanent. There's no incentive or mechanism t
 
 ### Draft fields with MUST requirements
 
+This applies to per-field or per-item stability labels only. A document-level stage such as MOAT's `(Draft)` header does not make the document's MUSTs non-binding.
+
 If a field is Draft (meaning it may change), but the spec says "implementations MUST support field X," that creates tension. If the field changes, all implementations must change too — but they were told the field was unstable. Use SHOULD or MAY for Draft fields. Reserve MUST for Stable fields.

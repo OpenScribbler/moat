@@ -35,7 +35,7 @@ The following order is conventional. Not every spec needs every section, but whe
 
 ### Back Matter (Unnumbered)
 
-9. **Appendices** — Label each "(Informative)" or "(Normative)" in the heading. Most appendices are informative. Informative appendices MUST NOT contain RFC 2119 keywords.
+9. **Appendices** — MOAT specs have none; informative content stays inline under `(informative)` labels. Elsewhere, label each "(Informative)" or "(Normative)" in the heading. Most appendices are informative. Informative appendices MUST NOT contain RFC 2119 keywords.
 
 10. **Acknowledgements** *(optional)* — Contributors, reviewers, influences.
 

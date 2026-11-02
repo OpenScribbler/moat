@@ -42,11 +42,6 @@ Create the document with this section structure. Do NOT fill in content yet — 
 
 ### Informative References
 
----
-
-## Appendix A: [Title] (Informative)
-
-## Acknowledgements
 ```
 
 Add after Introduction:
@@ -132,19 +127,16 @@ Go through the entire document and, for every external document cited:
 3. For each entry: Author, Title, Date, Stable URL
 4. Verify no orphans (every citation has an entry, every entry is cited)
 
-## Step 9: Appendices
+## Step 9: Informative content
 
-Move informative content here:
-- Implementation mapping tables
-- Design rationale that's too long for inline notes
-- Compatibility matrices
-- Migration guides
-
-Label every appendix "(Informative)" or "(Normative)" in the heading.
+MOAT keeps informative content in the section it explains, under an `(informative)` label, and has no appendices:
+- Implementation mapping tables, such as `**Mapping to common npm-client architectures (informative):**` in `specs/npm-distribution.md`
+- Rationale, in a `**Rationale (informative):**` paragraph after the requirement it explains
+- Design reasoning too long to sit inline, with the alternatives rejected, goes in an ADR under `docs/adr/` rather than in the spec
 
 ## Step 10: Changelog and final audit
 
-Add a `CHANGELOG.md` entry under `[Unreleased]` per `.claude/rules/changelog.md`, stating whether the change is normative or editorial, and pick the bump level from `RELEASING.md`. Then run the audit workflow (`workflows/audit-spec.md`) on your own draft and fix what it finds.
+Add a `CHANGELOG.md` entry under `[Unreleased]` per `.claude/rules/changelog.md`, stating whether the change is normative or editorial, and pick the bump level from `RELEASING.md`, whose pre-1.0 notice makes a breaking change a MINOR bump while the version is `0.x.y`. Then run the audit workflow (`workflows/audit-spec.md`) on your own draft and fix what it finds.
 
 ## Sub-spec additions
 

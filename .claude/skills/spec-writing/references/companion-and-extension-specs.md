@@ -20,9 +20,10 @@ A companion or extension spec documents the following near the top of the docume
 Is the parent aware of this spec? Does the parent need to change?
 
 ```markdown
-This sub-spec is a companion to the MOAT Specification. It does not
-change any rule in moat-spec.md. The core spec lists it on its
-Sub-specs line and does not depend on it.
+This sub-spec is a companion to the MOAT Specification. The core
+spec lists it on its Sub-specs line and does not depend on it.
+Where this sub-spec narrows or departs from a core rule, it says so
+at that rule.
 ```
 
 ### 2. Conformance relationship
@@ -32,8 +33,10 @@ Can you conform to this spec without conforming to the parent?
 ```markdown
 A Conforming Client of this sub-spec is also a Conforming Client of
 moat-spec.md. This sub-spec adds requirements for npm-distributed
-Content Items and relaxes none of the core requirements.
+Content Items.
 ```
+
+A sub-spec that makes an exception to a core requirement states it where the exception applies and names the core rule. `specs/npm-distribution.md` does this for `source_uri`: the core spec requires it on every Registry Manifest entry, and the sub-spec's backfill rule omits it when no upstream Source Repository is known, citing the core rule. Never claim a sub-spec relaxes nothing without checking for such exceptions.
 
 ### 3. Version compatibility
 
