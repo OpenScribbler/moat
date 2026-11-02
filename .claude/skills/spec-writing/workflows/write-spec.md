@@ -1,6 +1,6 @@
 # Write a Specification
 
-Step-by-step workflow for writing a new MOAT sub-spec or a new section of `moat-spec.md`. For a new section of an existing spec, skip Steps 1, 2, 4, and 5, and run Step 3 and Steps 6 to 10 on the section.
+Step-by-step workflow for writing a new MOAT sub-spec or a new section of `moat-spec.md`. For a new section of an existing spec, skip Steps 1, 2, 4, and 5, and run Step 3 and Steps 6 to 10 on the section only: Step 7 adds the section's security implications to the document's existing Security Considerations section, and Step 8 checks only the external documents the section cites.
 
 ## Pre-flight
 
@@ -121,11 +121,13 @@ This section is REQUIRED. "Security was not considered" is not acceptable.
 
 ## Step 8: References
 
-Go through the entire document and, for every external document cited:
+Go through the document (or, for a new section, the section) and, for every external document cited:
 1. List every document cited → add to References
 2. Classify each as Normative or Informative
 3. For each entry: Author, Title, Date, Stable URL
 4. Verify no orphans (every citation has an entry, every entry is cited)
+
+If the document has no References section, as `moat-spec.md` does not today, cite external documents with an inline link to a stable URL and report the missing section rather than creating one as a side effect of a section edit.
 
 ## Step 9: Informative content
 
@@ -134,9 +136,9 @@ MOAT keeps informative content in the section it explains, under an `(informativ
 - Rationale, in a `**Rationale (informative):**` paragraph after the requirement it explains
 - Design reasoning too long to sit inline, with the alternatives rejected, goes in an ADR under `docs/adr/` rather than in the spec
 
-## Step 10: Changelog and final audit
+## Step 10: Mirror, changelog, and final audit
 
-Add a `CHANGELOG.md` entry under `[Unreleased]` per `.claude/rules/changelog.md`, stating whether the change is normative or editorial, and pick the bump level from `RELEASING.md`, whose pre-1.0 notice makes a breaking change a MINOR bump while the version is `0.x.y`. Then run the audit workflow (`workflows/audit-spec.md`) on your own draft and fix what it finds.
+Apply the same edit to the spec's website mirror under `website/src/content/docs/spec/` (`core.md` for `moat-spec.md`), in the same commit. For a new sub-spec, add a mirror page with Starlight frontmatter and a sidebar entry in `website/astro.config.mjs`, and add it to the `Sub-specs` line in `core.md` too. Add a `CHANGELOG.md` entry under `[Unreleased]` per `.claude/rules/changelog.md`, stating whether the change is normative or editorial, and pick the bump level from `RELEASING.md`, whose pre-1.0 notice makes a breaking change a MINOR bump while the version is `0.x.y`. Then run the audit workflow (`workflows/audit-spec.md`) on your own draft and fix what it finds.
 
 ## Sub-spec additions
 

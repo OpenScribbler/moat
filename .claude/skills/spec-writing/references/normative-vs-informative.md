@@ -26,11 +26,11 @@ Label sections explicitly in headings:
 
 ### Inline marking
 
-For rationale within a normative section, use a clear marker:
+For rationale within a normative section, use a clear marker. The examples below describe a generic record format; MOAT's own hashing rules are in `moat-spec.md` §Content Hashing.
 
 ```markdown
 Implementations MUST normalize line endings to LF before computing
-content_hash.
+a record's checksum.
 
 > **Rationale (informative):** Different platforms use different line
 > endings (CRLF on Windows, LF on Unix). Without normalization,
@@ -42,7 +42,7 @@ Or use a simple label:
 
 ```markdown
 Implementations MUST normalize line endings to LF before computing
-content_hash.
+a record's checksum.
 
 *Note (informative):* This ensures identical hashes across platforms
 regardless of git `core.autocrlf` settings.
@@ -133,7 +133,7 @@ If these tables contain SHOULD or MUST language, that language is not binding. B
 
 A well-structured spec passes this test:
 
-1. Extract every sentence containing a MUST, SHOULD, or MAY keyword, plus every rule under a `(normative)` label that has no keyword (a list of serialization rules, for example)
+1. Extract every sentence containing an RFC 2119 keyword (REQUIRED, SHALL, and RECOMMENDED included), plus normative content with no keyword: rules under a `(normative)` label and the definitions or tables a normative section declares
 2. Read them in order, without surrounding prose
 3. Can you build a conformant implementation from just these statements?
 

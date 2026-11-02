@@ -13,6 +13,7 @@ Guidelines and workflows for writing MOAT's specifications so they follow standa
 |----------|------|
 | `moat-spec.md` | The core specification. Its header carries the version and stage, such as `0.8.0 (Draft)`. |
 | `specs/*.md`, `specs/github/*.md` | Sub-specs. Each is a companion to the core spec, versioned on its own, with `**Requires:** moat-spec.md ≥ x.y.z` and `**Part of:**` lines in its header. |
+| `website/src/content/docs/spec/` | Website mirrors of each spec: `core.md` for `moat-spec.md`, and one page per sub-spec under the sub-spec's file name. |
 | `lexicon.md` | Canonical vocabulary. Bold canonical names are used verbatim; listed aliases are avoided. |
 | `CHANGELOG.md` | Public change record. Every spec edit gets an entry in the same commit. |
 | `RELEASING.md` | Version bump levels, maturity stages, sub-spec versioning. |
@@ -23,13 +24,14 @@ Guidelines and workflows for writing MOAT's specifications so they follow standa
 The references describe IETF and W3C norms. Where this repo has its own rule, the repo wins:
 
 1. **Repo-relative paths are allowed.** The repository is where the spec is published, so links from a spec to other published files in it (`specs/`, `lexicon.md`, `reference/`, `docs/`) are stable references. A path outside the repo, to an unmerged branch, or to working notes that never ship (such as `panel/`) is still never acceptable.
-2. **Normative cross-references use `<path>:<line>`.** When a spec, ADR, or the conformance table cites a normative rule, it cites the line of the MUST sentence, such as `specs/npm-distribution.md:145`. `.claude/rules/spec-citations.md` has the full rule. A citation that no longer lands on a `MUST` or `MUST NOT` line is stale and is fixed in the same commit as the edit that moved it.
+2. **Normative cross-references use `<path>:<line>`.** A citation names the line of the normative sentence it anchors on, such as `specs/npm-distribution.md:145`. In the `## Conformance (normative)` error-code table that line must hold `MUST` or `MUST NOT`; elsewhere in a spec body it may also hold `SHOULD`, which is what CI's `slice-8-error-codes.sh` accepts. `.claude/rules/spec-citations.md` has the full rule. A citation that no longer lands on such a line is stale and is fixed in the same commit as the edit that moved it.
 3. **Normative and informative content is marked inline, not in appendices.** MOAT labels headings, such as `### Registry Index Format (normative)`, and paragraph leads, such as `**Signature scheme (normative).**` or `**No separate revocation endpoint (informative):**`. Sub-specs also use `(normative — MUST)`. Rationale and implementation mapping stay in the section they explain, under an `(informative)` label; no MOAT spec has an appendix. Where the generic references say to move content into an informative appendix, use an inline `(informative)` block instead.
 4. **`lexicon.md` is the terminology source.** Check every defined term against it. A term the spec uses normatively that the lexicon lacks, or an alias the lexicon lists to avoid, is a finding.
-5. **Every spec edit gets a changelog entry.** `.claude/rules/changelog.md` governs: log the edit under `[Unreleased]`, say whether it is normative or editorial, and keep internal process metadata out.
-6. **Version bumps follow `RELEASING.md`.** Its table rates a normative inversion (MUST to SHOULD) MAJOR, a new SHOULD or optional field MINOR, and a clarification with no normative change PATCH. Its pre-1.0 notice overrides the table while the version is `0.x.y`: any minor version may break compatibility, so a breaking change ships as a MINOR bump (0.8.0 to 0.9.0), and 1.0.0 comes only with the Stable stage. When a sub-spec starts depending on a newer core rule, its `Requires:` line moves.
-7. **`(Draft)` in a header is the document's stage, not a field's stability.** Every MOAT spec is `(Draft)` today, and its MUSTs are binding. The generic rule against MUST on draft content applies only to content a spec labels with a per-field or per-item stability level, never to the document stage.
-8. **npm error codes carry citations.** Each `NPM-<SECTION>-<NN>` code in the `## Conformance (normative)` table of `specs/npm-distribution.md` cites the line of its MUST. CI checks these with the scripts in `specs/conformance/npm-distribution/`.
+5. **Every spec edit lands in its website mirror in the same commit.** Apply the same edit to the mirror page under `website/src/content/docs/spec/`. A mirror differs from its source only in its frontmatter and header block; `specs/npm-distribution.md`'s mirror must be byte-identical below the frontmatter, and CI checks that with `specs/conformance/npm-distribution/slice-12-mirror.sh`. A new sub-spec needs a new mirror page and a sidebar entry in `website/astro.config.mjs`.
+6. **Every spec edit gets a changelog entry.** `.claude/rules/changelog.md` governs: log the edit under `[Unreleased]`, say whether it is normative or editorial, and keep internal process metadata out.
+7. **Version bumps follow `RELEASING.md`.** Its table rates a normative inversion (MUST to SHOULD) MAJOR, a new SHOULD or optional field MINOR, and a clarification with no normative change PATCH. Its pre-1.0 notice overrides the table while the version is `0.x.y`: any minor version may break compatibility, so a breaking change ships as a MINOR bump (0.8.0 to 0.9.0), and 1.0.0 comes only with the Stable stage. When a sub-spec starts depending on a newer core rule, its `Requires:` line moves.
+8. **`(Draft)` in a header is the document's stage, not a field's stability.** Every MOAT spec is `(Draft)` today, and its MUSTs are binding. The generic rule against MUST on draft content applies only to content a spec labels with a per-field or per-item stability level, never to the document stage.
+9. **npm error codes carry citations.** Each `NPM-<SECTION>-<NN>` code in the `## Conformance (normative)` table of `specs/npm-distribution.md` cites the line of its MUST. CI checks these with the scripts in `specs/conformance/npm-distribution/`.
 
 ## Workflow routing
 
@@ -74,7 +76,7 @@ A fast pass on any spec draft. Each item has a reference file with details.
 
 ### References
 - [ ] No paths outside the repo, to unmerged branches, or to working notes
-- [ ] Normative cross-references cite `<path>:<line>` on a MUST line
+- [ ] Normative cross-references cite `<path>:<line>` on a MUST, MUST NOT, or (outside the error-code table) SHOULD line
 - [ ] Every in-text citation has a corresponding entry, and every entry is cited
 - [ ] Data sources are published and verifiable, or findings are summarized inline
 
@@ -88,6 +90,7 @@ A fast pass on any spec draft. Each item has a reference file with details.
 - [ ] No contradiction between "Stable" labels and a 0.x version
 - [ ] The edit's bump level matches `RELEASING.md`, pre-1.0 notice included
 - [ ] The edit has a `CHANGELOG.md` entry stating normative or editorial
+- [ ] The edit is applied to the spec's mirror under `website/src/content/docs/spec/`
 
 ### Sub-specs
 - [ ] `Requires:` and `Part of:` lines are present and current

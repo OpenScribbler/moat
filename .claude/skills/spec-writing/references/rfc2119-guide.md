@@ -126,11 +126,11 @@ verification critical.
 ### Hedging in normative text
 
 ```markdown
-Implementations probably should normalize line endings.
+Implementations probably should reject duplicate keys.
 ```
 
 Fix: Pick a keyword and commit:
 
 ```markdown
-Implementations SHOULD normalize line endings to LF before hashing.
+Implementations SHOULD reject a record with duplicate keys.
 ```

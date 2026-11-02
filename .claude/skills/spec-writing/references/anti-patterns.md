@@ -128,7 +128,7 @@ For a quick audit, run these checks in order:
 
 1. **Structure**: Abstract? Terminology? Conformance? Security? References (split)?
 2. **Boilerplate**: RFC 2119+8174 cited? Correct boilerplate text?
-3. **Self-containment**: Any paths outside the published repo? Any unnamed sources? Any dead links? Any `<path>:<line>` citation off its MUST line?
+3. **Self-containment**: Any paths outside the published repo? Any unnamed sources? Any dead links? Any `<path>:<line>` citation off its normative line (MUST, MUST NOT, or SHOULD outside the error-code table)?
 4. **Separation**: Any RFC 2119 keywords in informative sections? Any "because X, MUST Y" patterns?
 5. **Defaults**: Every optional field has a stated default?
 6. **Versioning**: Version matches maturity? Stability labels consistent with version?

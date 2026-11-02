@@ -9,10 +9,10 @@ An audit is read-only: it changes no spec file. Collect every finding before rec
 1. **Pick the scope.** A whole document, or one section. `<spec>` below is the file you are auditing, such as `moat-spec.md` or `specs/npm-distribution.md`. For a section, find its line range from the headings:
 
    ```bash
-   grep -n '^#' <spec>
+   awk '/^ *```/{f=!f} !f && /^#/{print NR": "$0}' <spec>
    ```
 
-   The section runs from its heading to the line before the next heading of the same or higher level.
+   The command skips fenced code blocks, whose shell comments also start with `#`. The section runs from its heading to the line before the next heading of the same or higher level.
 
 2. **Read for context.** Read the scope once in full. For a section, also read the document header (version, stage, `Requires:`) and skim the headings around it.
 
@@ -65,7 +65,7 @@ Add `<start> - 1` to each printed line number to get the line in the file. The s
 |-------|-----------|-------|
 | No paths outside the repo, to unmerged branches, or to working notes such as `panel/` | | |
 | Repo-relative links resolve to files that exist | | |
-| Normative cross-references cite `<path>:<line>`, and the cited line holds `MUST` or `MUST NOT` | | |
+| Normative cross-references cite `<path>:<line>`, and the cited line holds `MUST` or `MUST NOT` (or `SHOULD`, for a citation outside the `## Conformance (normative)` error-code table) | | |
 | Every in-text citation of an external document has a reference entry, and every entry is cited | | |
 | Normative references point only to stable, published, accessible documents | | |
 | No unnamed data sources ("Behavior matrix Q1", etc.) | | |
@@ -118,7 +118,7 @@ To check a cited line: `sed -n '<line>p' <path>`.
 | No MUST requirements on content a spec labels with a per-field or per-item draft or experimental stability (the document's `(Draft)` stage does not count) | | |
 | Every spec edit since the last release tag has a `CHANGELOG.md` entry under `[Unreleased]` | | |
 
-To list spec edits since the last tag: `git log --oneline "$(git describe --tags --abbrev=0)"..HEAD -- moat-spec.md specs/`.
+To list spec edits since the last tag, committed and not: `git log --oneline "$(git describe --tags --abbrev=0)"..HEAD -- moat-spec.md 'specs/*.md' 'specs/github/*.md'`, then `git status --short -- moat-spec.md specs/` for uncommitted and untracked spec files. Files under `specs/conformance/` are tooling and need no entry.
 
 **Reference:** `references/stability-and-versioning.md`, `RELEASING.md`
 
@@ -139,7 +139,7 @@ Skip for `moat-spec.md` itself.
 
 As a final validation:
 
-1. Extract every sentence in scope containing MUST, MUST NOT, SHOULD, SHOULD NOT, MAY, or OPTIONAL (the `grep` from check 2 finds the lines), plus every rule under a `(normative)` label that states a requirement without a keyword, such as the list after `Serialization rules (normative):` in `moat-spec.md` §Attestation Payload.
+1. Extract every sentence in scope containing an RFC 2119 keyword (MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, SHOULD, SHOULD NOT, RECOMMENDED, NOT RECOMMENDED, MAY, OPTIONAL; the `grep` from check 2 finds the lines). Add the normative content that carries no keyword: every rule under a `(normative)` label, such as the list after `Serialization rules (normative):` in `moat-spec.md` §Attestation Payload, and every definition or table a normative section declares, such as the terminal-state table in `moat-spec.md` §Trust State Error Vocabulary.
 2. Read them in sequence without surrounding prose.
 3. Ask: can a competent implementer build a conformant implementation from ONLY these statements?
 
@@ -153,4 +153,4 @@ After completing all checks, list findings by severity:
 - **Major**: deviates from conventions in ways that harm clarity or implementability
 - **Minor**: polish that improves quality but does not block publication
 
-For each finding, give the `<path>:<line>`, what is wrong, which convention it violates, and a suggested fix. A fix that later edits a spec file needs a `CHANGELOG.md` entry in the same commit.
+For each finding, give the `<path>:<line>`, what is wrong, which convention it violates, and a suggested fix. A fix that later edits a spec file needs a `CHANGELOG.md` entry and the same edit to its website mirror, in the same commit.
