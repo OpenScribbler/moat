@@ -64,9 +64,10 @@ This specification defines three conformance classes:
 content and attestations satisfy every MUST requirement in the
 sections that name the Publisher.
 
-**Conforming Registry.** A Registry conforms if its Registry
-Manifest, signatures, and revocations satisfy every MUST
-requirement in the sections that name the Registry.
+**Conforming Registry Operator.** A Registry Operator conforms if
+the Registry Manifest, signatures, and revocations it publishes
+satisfy every MUST requirement in the sections that name the
+Registry Operator.
 
 **Conforming Client.** A client conforms if it satisfies every
 MUST requirement in the sections that name the Conforming Client.
@@ -98,6 +99,6 @@ contain executable files.
 
 ## What NOT to Include in Structure
 
-- **No unlabeled "Motivation" or "Why" section in normative body.** Rationale belongs in an informative appendix, in a section or paragraph labeled `(informative)`, or in an ADR under `docs/adr/`. See `normative-vs-informative.md`.
+- **No unlabeled "Motivation" or "Why" section in normative body.** Rationale belongs in a section or paragraph labeled `(informative)`, or in an ADR under `docs/adr/`. See `normative-vs-informative.md`.
 - **No marketing or ecosystem-building language.** "To enable a vibrant ecosystem..." is not spec language. State what the spec defines, not what it hopes to achieve.
 - **No changelog in the abstract.** The abstract describes what the spec IS, not what changed.

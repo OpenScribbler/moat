@@ -82,7 +82,7 @@ Use lowercase or rephrase:
 
 | Instead of | Write |
 |------------|-------|
-| "Agents SHOULD cache..." (in informative appendix) | "Caching is recommended..." |
+| "Agents SHOULD cache..." (in an informative block) | "Caching is recommended..." |
 | "Registries MUST validate..." (in informative note) | "Registries are expected to validate..." |
 
 ### 2. Rationale does not belong inline with requirements

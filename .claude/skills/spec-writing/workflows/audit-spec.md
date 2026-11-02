@@ -47,7 +47,7 @@ An audit is read-only: it changes no spec file. Collect every finding before rec
 | Every SHOULD has identifiable legitimate exceptions | | |
 | Every MAY has been analyzed for interop (with and without must work together) | | |
 | No "wishy-washy SHOULD" (SHOULD used where MUST was intended) | | |
-| Each requirement names who it binds (a conformance class from the spec, such as Conforming Client or Registry) | | |
+| Each requirement names who it binds (a conformance class from the spec, such as Conforming Client or Registry Operator) | | |
 
 List every keyword in scope, with line numbers, to drive this check:
 
@@ -80,7 +80,7 @@ To check a cited line: `sed -n '<line>p' <path>`.
 | Check | Pass/Fail | Notes |
 |-------|-----------|-------|
 | Every section and labeled paragraph is identifiable as normative or informative | | |
-| Labels use MOAT's forms: `(normative)` or `(informative)` in headings and paragraph leads, `(normative — MUST)` in sub-specs | | |
+| Labels use MOAT's forms: `(normative)` or `(informative)` in headings and paragraph leads, `(normative — MUST)`, `(normative — MUST NOT)`, or `(normative — SHOULD)` in sub-specs; `(Informative)` capitalized is also in use | | |
 | No RFC 2119 keywords in content labeled informative | | |
 | No "because X, MUST Y" patterns (rationale mixed with requirements) | | |
 | No persuasive or marketing language in normative content | | |

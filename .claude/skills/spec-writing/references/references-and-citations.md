@@ -84,7 +84,7 @@ This is a broken link for every reader who doesn't have your local repository.
 
 **Fix options:**
 1. **Inline the content** — Summarize the key rationale in 2-4 sentences within the spec
-2. **Appendix** — Move the full analysis to an informative appendix
+2. **Informative block** — Move the full analysis into an `(informative)` block in the section it explains (MOAT specs have no appendices)
 3. **Publish and link** — If it's substantial enough, publish it as a standalone document with a stable URL
 
 ### Unnamed internal artifacts
@@ -96,7 +96,7 @@ This is a broken link for every reader who doesn't have your local repository.
 "Behavior matrix Q1" is meaningless to readers outside your team. They can't verify, reproduce, or even understand what this references.
 
 **Fix options:**
-1. **Summarize inline** — "Based on analysis of 12 agents' discovery mechanisms (conducted March 2026), we found that..."
+1. **Summarize inline** — "An analysis of 12 agents' discovery mechanisms (conducted March 2026) found that..."
 2. **Publish the data** — Put the behavior matrix in a public repo and cite it formally
 3. **Remove the citation** — If the data informed the design but isn't needed to understand the spec, just state the conclusion without citing the source
 

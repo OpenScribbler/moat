@@ -59,7 +59,7 @@ Every MUST in your spec is a burden on implementers. If something is a good idea
 ### 2. Only in normative sections
 
 RFC 2119 keywords MUST NOT appear in:
-- Informative appendices
+- Content labeled informative (an informative appendix elsewhere; an `(informative)` block in MOAT)
 - Examples
 - Rationale/motivation text
 - Abstracts
@@ -91,7 +91,7 @@ When you write "implementations MAY support X," you're saying: implementations t
 ### Normative language in informative content
 
 ```markdown
-## Appendix A: Implementation Notes (Informative)
+**Implementation notes (informative):**
 
 Agents SHOULD cache the sidecar file to avoid repeated disk reads.
                                         ← WRONG: keyword in informative section
@@ -100,7 +100,7 @@ Agents SHOULD cache the sidecar file to avoid repeated disk reads.
 Fix: Use lowercase "should" or rephrase:
 
 ```markdown
-## Appendix A: Implementation Notes (Informative)
+**Implementation notes (informative):**
 
 Caching the sidecar file avoids repeated disk reads and is
 recommended for performance.

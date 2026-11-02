@@ -7,7 +7,7 @@ Step-by-step workflow for writing a new MOAT sub-spec or a new section of `moat-
 Before writing, answer these questions:
 
 1. **What does this spec define?** (One sentence. If you need two, the scope is too broad.)
-2. **Who are the conformance classes?** (Which MOAT actors must follow it: Publisher, Registry, Conforming Client, End User? The core spec's Actors section and `lexicon.md` name them.)
+2. **Who are the conformance classes?** (Which MOAT actors must follow it: Publisher, Registry Operator, Conforming Client, End User? The core spec's Actors section and `lexicon.md` name them.)
 3. **Is it a sub-spec of `moat-spec.md`?** (Almost always yes. Read `references/companion-and-extension-specs.md` first.)
 4. **Which core version does it require?** (The lowest `moat-spec.md` version that has every core rule it depends on.)
 

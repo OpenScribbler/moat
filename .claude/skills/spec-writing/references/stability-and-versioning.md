@@ -13,7 +13,7 @@ Most community specs use Semantic Versioning for the spec document itself:
 | 1.x.y (minor) | Backward-compatible additions | New fields, new optional features. Nothing breaks. |
 | x.0.0 (major) | Breaking changes | Removed fields, changed semantics, incompatible changes. |
 
-**0.1.0 is correct for a draft.** It signals "this is early, expect changes." Move to 1.0.0 when: the spec is implemented in production, you have a surface you're committing to, or you need to promise backward compatibility.
+**0.1.0 is correct for a draft.** It signals "this is early, expect changes." Move to 1.0.0 when: the spec is implemented in production, you have a surface you're committing to, or you need to promise backward compatibility. MOAT sets its own path: `RELEASING.md` reaches 1.0.0 only through Draft, Release Candidate, and Stable, with the advancement criteria it lists.
 
 ## Document-Level Maturity
 
@@ -71,7 +71,7 @@ If your spec truly needs per-field stability (most don't), you MUST define:
    ```
    Stable: Semantics will not change in minor versions. Field may be
    removed only in a major version with a deprecation period.
-   
+
    Draft: May change or be removed in any version. Implementers should
    expect possible breaking changes.
    ```
@@ -88,13 +88,13 @@ If your spec truly needs per-field stability (most don't), you MUST define:
    ```
    Stable fields: semantics frozen. Removal requires major version bump
    plus 12-month deprecation notice.
-   
+
    Draft fields: may change in minor versions. Removal requires release
    notes but no deprecation period.
    ```
 
 4. **Interaction with spec version**
-   
+
    If the overall spec is 0.x, per-field "Stable" labels are aspirational, not binding:
    ```
    Until this specification reaches 1.0.0, all fields remain subject
