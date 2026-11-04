@@ -11,6 +11,7 @@ CLAUDE.md
 !/CLAUDE.md
 .claude/*
 !.claude/rules/
+!.claude/skills/
 .wolf/
 
 # Generated test artifacts (cosign bundles, blobs, identity metadata)

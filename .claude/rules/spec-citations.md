@@ -6,9 +6,9 @@ Normative claims in MOAT specs are anchored on `<path>:<line>` citations. This i
 
 Use `<path>:<line>` where `<path>` is a repo-relative path to a spec file and `<line>` is the line number of the normative sentence the citation anchors on.
 
-Canonical example: `specs/npm-distribution.md:117` — the line where §Publisher Verification states the single normative Rekor query MUST.
+Canonical example: `specs/npm-distribution.md:145` — the line where §Publisher Verification states the single normative Rekor query MUST.
 
-Cross-spec citations follow the same form: `moat-spec.md:790`, `specs/github/publisher-action.md:42`.
+Cross-spec citations follow the same form: `moat-spec.md:797`, `specs/github/publisher-action.md:29`.
 
 ## Where citations live
 
